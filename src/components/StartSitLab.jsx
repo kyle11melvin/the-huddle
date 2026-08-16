@@ -6,9 +6,14 @@ import {
   pointDistribution,
   floorCeiling,
 } from "../analytics.js";
-import { lineupDistributions, simulateMatchup, simulateSwap, strategyAdvice } from "../simulate.js";
+import {
+  lineupDistributions,
+  simulateMatchup,
+  simulateSwap,
+  strategyAdvice,
+  opponentDistributions,
+} from "../simulate.js";
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
-import { espnTeamRoster } from "../espnSync.js";
 import { findLocation } from "../lineup.js";
 import { weekLabel } from "../lineup.js";
 
@@ -56,41 +61,10 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
     return { p, a, disp, agree, dist, fc: floorCeiling(dist) };
   });
 
-  // Opponent side of the simulation. Their roster is known; their projections
-  // are not until ESPN sync lands, so this stays honest about what's missing.
-  const oppRoster = useMemo(
-    () => LEAGUE_ROSTERS.find((t) => t.team === oppTeam),
-    [oppTeam]
-  );
-
-  const oppDists = useMemo(() => {
-    const CVS = { QB: 0.32, RB: 0.5, WR: 0.58, TE: 0.6, K: 0.42, "D/ST": 0.72 };
-    // Real ESPN projections for their current starters, when synced.
-    const live = espnTeamRoster(state, oppTeam);
-    if (live) {
-      return live
-        .filter((e) => e.slot !== "BE" && e.slot !== "IR" && Number.isFinite(e.proj) && e.proj > 0)
-        .map((e) => ({
-          id: e.name.toLowerCase().replace(/[^a-z]/g, ""),
-          name: e.name,
-          mean: e.proj,
-          sd: e.proj * (CVS[e.pos] ?? 0.55),
-        }));
-    }
-    if (!oppRoster) return [];
-    const out = [];
-    for (const [name, , pos] of oppRoster.starters) {
-      const k = name.toLowerCase().replace(/[^a-z]/g, "");
-      const rank = state.ecrIndex ? state.ecrIndex[k] : null;
-      if (rank == null) continue;
-      // Rough points-from-rank curve, only used to give the simulation an
-      // opponent at all. Flagged as an estimate everywhere it surfaces.
-      const mean = Math.max(4, 22 - Math.log2(Math.max(1, rank)) * 3.1);
-      const cv = CVS[pos] ?? 0.55;
-      out.push({ id: k, name, mean, sd: mean * cv });
-    }
-    return out;
-  }, [state, oppTeam, oppRoster]);
+  // Opponent side of the simulation — the one canonical builder shared with
+  // the optimizer and Gameday (live ESPN starters, injury-priced; static
+  // roster + rank curve as the offline fallback).
+  const oppDists = useMemo(() => opponentDistributions(state, week, oppTeam), [state, week, oppTeam]);
 
   const mine = useMemo(() => lineupDistributions(state, state.lineup, week), [state, week]);
   const sim = useMemo(
@@ -170,13 +144,19 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
                   </div>
                 )}
                 <div className="lab-stat">
-                  <span>Matchup</span>
-                  <strong>{a && a.matchupRating != null ? `${a.matchupRating}/10` : "—"}</strong>
+                  <span>Vegas team total</span>
+                  <strong>
+                    {state.espn && Number.isFinite(state.espn.impliedTotals?.[p.team])
+                      ? state.espn.impliedTotals[p.team]
+                      : "—"}
+                  </strong>
                 </div>
-                <div className="lab-stat">
-                  <span>Game O/U</span>
-                  <strong>{a && a.ou && a.ou.gameTotal != null ? a.ou.gameTotal : "—"}</strong>
-                </div>
+                {dist && dist.playProb != null && dist.playProb < 1 && (
+                  <div className="lab-stat">
+                    <span>Chance he plays</span>
+                    <strong>{Math.round(dist.playProb * 100)}%</strong>
+                  </div>
+                )}
 
                 {!disp && agree && (
                   <div className="lab-consensus" title={`Vegas ${a.propsProj} vs ESPN ${a.proj}`}>

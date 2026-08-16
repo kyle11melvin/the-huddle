@@ -50,8 +50,11 @@ export default async function handler(req, res) {
     return send(res, 400, { ok: false, error: "Bad request body" });
   }
   const items = Array.isArray(body && body.items) ? body.items : [];
-  if (!items.length || items.length > 2) {
-    return send(res, 400, { ok: false, error: "Expected 1–2 lineup items (one swap)." });
+  // Up to a full lineup's worth of moves in ONE atomic transaction — the
+  // win-prob optimizer's "apply all" ships every swap together so ESPN can
+  // never end up holding half a lineup change.
+  if (!items.length || items.length > 10) {
+    return send(res, 400, { ok: false, error: "Expected 1–10 lineup items." });
   }
   for (const it of items) {
     if (!Number.isFinite(Number(it.playerId)) || !Number.isFinite(it.fromSlot) || !Number.isFinite(it.toSlot)) {
@@ -61,6 +64,21 @@ export default async function handler(req, res) {
 
   const cookie = `SWID=${swid}; espn_s2=${s2}`;
   const headers = { Accept: "application/json", Cookie: cookie };
+
+  // Structured audit trail: one JSON line per attempt (accepted OR rejected),
+  // greppable in `vercel logs` — who moved, from/to, and how it ended.
+  let auditCtx = { teamId: null, players: [] };
+  const audit = (result, extra) =>
+    console.log(
+      "espn-write-audit " +
+        JSON.stringify({
+          at: new Date().toISOString(),
+          result,
+          teamId: auditCtx.teamId,
+          items: auditCtx.players.length ? auditCtx.players : items,
+          ...extra,
+        })
+    );
 
   try {
     // ---- fresh state: roster + team id ----
@@ -92,6 +110,7 @@ export default async function handler(req, res) {
     // only be executed in the current scoring period").
     const scoringPeriodId = league.scoringPeriodId;
     if (body.scoringPeriodId && body.scoringPeriodId !== scoringPeriodId) {
+      audit("rejected-wrong-period", { requested: body.scoringPeriodId, current: scoringPeriodId });
       return send(res, 409, {
         ok: false,
         error: `ESPN only accepts live lineup changes for the current week (week ${scoringPeriodId}). Flip the week selector back to make real moves — future weeks are local planning only.`,
@@ -111,21 +130,33 @@ export default async function handler(req, res) {
     const PRO = { 1:"ATL",2:"BUF",3:"CHI",4:"CIN",5:"CLE",6:"DAL",7:"DEN",8:"DET",9:"GB",10:"TEN",11:"IND",12:"KC",13:"LV",14:"LAR",15:"MIA",16:"MIN",17:"NE",18:"NO",19:"NYG",20:"NYJ",21:"PHI",22:"ARI",23:"PIT",24:"LAC",25:"SF",26:"SEA",27:"TB",28:"WSH",29:"CAR",30:"JAX",33:"BAL",34:"HOU" };
 
     // ---- guardrails ----
+    auditCtx.teamId = me.id;
     for (const it of items) {
       const pid = Number(it.playerId);
       const entry = entries.find((e) => e.playerId === pid || (e.playerPoolEntry && e.playerPoolEntry.player && e.playerPoolEntry.player.id === pid));
-      if (!entry) return send(res, 409, { ok: false, error: `Player ${pid} is not on your ESPN roster — roster drifted, refresh and retry.` });
+      if (!entry) {
+        audit("rejected-not-on-roster", { playerId: pid });
+        return send(res, 409, { ok: false, error: `Player ${pid} is not on your ESPN roster — roster drifted, refresh and retry.` });
+      }
+      const p = entry.playerPoolEntry && entry.playerPoolEntry.player;
+      auditCtx.players.push({
+        playerId: pid,
+        name: (p && p.fullName) || String(pid),
+        from: it.fromSlot,
+        to: it.toSlot,
+      });
       if (entry.lineupSlotId !== it.fromSlot) {
+        audit("rejected-drift", { playerId: pid, expectedSlot: it.fromSlot, actualSlot: entry.lineupSlotId });
         return send(res, 409, {
           ok: false,
           error: "Roster changed on ESPN since this screen loaded — refresh and retry.",
           drift: { playerId: pid, expectedSlot: it.fromSlot, actualSlot: entry.lineupSlotId },
         });
       }
-      const p = entry.playerPoolEntry && entry.playerPoolEntry.player;
       const abbr = p && PRO[p.proTeamId];
       const st = abbr && gameState[abbr];
       if (st === "in" || st === "post") {
+        audit("rejected-locked", { playerId: pid, gameState: st });
         return send(res, 423, { ok: false, error: `${(p && p.fullName) || "That player"} is locked — his game has ${st === "in" ? "started" : "finished"}.` });
       }
     }
@@ -158,7 +189,6 @@ export default async function handler(req, res) {
     if (!w.ok && w.status !== 409) w = await post(`?platformVersion=${PLATFORM_VERSION}`);
 
     const text = await w.text().catch(() => "");
-    console.log("espn-write", JSON.stringify({ ok: w.ok, status: w.status, payload, resp: text.slice(0, 300) }));
 
     if (!w.ok) {
       let espnMsg = "";
@@ -167,14 +197,17 @@ export default async function handler(req, res) {
       } catch {
         /* non-JSON */
       }
+      audit(`espn-rejected-${w.status}`, { scoringPeriodId, espnMessage: espnMsg || text.slice(0, 200) });
       return send(res, 502, {
         ok: false,
         error: espnMsg ? `ESPN: ${espnMsg}` : `ESPN rejected the move (${w.status}).`,
         detail: text.slice(0, 200),
       });
     }
+    audit("success", { scoringPeriodId });
     return send(res, 200, { ok: true, teamId: me.id, scoringPeriodId });
   } catch (err) {
+    audit("error", { message: String(err && err.message) });
     return send(res, 502, { ok: false, error: String(err && err.message) });
   }
 }

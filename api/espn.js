@@ -29,10 +29,40 @@ const SLOT = {
 };
 const POS = { 1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "D/ST" };
 
-function send(res, status, body) {
+function send(res, status, body, cacheSeconds) {
   res.setHeader("Content-Type", "application/json");
-  res.setHeader("Cache-Control", "no-store");
+  // Short edge cache on successful league reads: Gameday polls every 2 min,
+  // and multiple open tabs shouldn't each hammer ESPN. Post-write resyncs
+  // bypass it with a ?fresh= cache-buster so drift checks never see stale.
+  res.setHeader(
+    "Cache-Control",
+    cacheSeconds ? `s-maxage=${cacheSeconds}, stale-while-revalidate=${cacheSeconds * 2}` : "no-store"
+  );
   res.status(status).send(JSON.stringify(body));
+}
+
+// ESPN scoringItems statId → our scoring key. Only the stats the projection
+// and props engines actually price; kicking/defense stay on ESPN's own math.
+const STAT_KEY = {
+  3: "passYd", 4: "passTd", 19: "passTwoPt", 20: "int",
+  23: "rushAtt", 24: "rushYd", 25: "rushTd", 26: "rushTwoPt",
+  42: "recYd", 43: "recTd", 44: "recTwoPt", 53: "reception",
+  72: "fumble",
+};
+
+/** League's real per-stat points from mSettings — the app should never guess. */
+function extractScoring(settings) {
+  const items = (settings && settings.scoringSettings && settings.scoringSettings.scoringItems) || [];
+  const out = {};
+  for (const it of items) {
+    const k = STAT_KEY[it.statId];
+    if (!k) continue;
+    // Some leagues store the live value in pointsOverrides["16"] (PPR slot).
+    const override = it.pointsOverrides && Number(it.pointsOverrides["16"]);
+    const pts = Number.isFinite(override) && override !== 0 ? override : it.points;
+    if (Number.isFinite(pts)) out[k] = pts;
+  }
+  return out;
 }
 
 export default async function handler(req, res) {
@@ -227,13 +257,34 @@ export default async function handler(req, res) {
         data.settings && data.settings.acquisitionSettings && Number.isFinite(data.settings.acquisitionSettings.acquisitionBudget)
           ? data.settings.acquisitionSettings.acquisitionBudget
           : 100,
-      scoring: data.settings && data.settings.scoringSettings
-        ? { type: data.settings.scoringSettings.scoringType }
-        : null,
+      scoring: extractScoring(data.settings),
+      // raw scoringItems on demand, for auditing the extraction
+      ...(req.query.debugScoring
+        ? {
+            scoringRaw: ((data.settings || {}).scoringSettings || {}).scoringItems,
+            // per-stat applied points for a QB and an RB projection — the
+            // empirical ground truth for yardage/attempt rates
+            statSamples: ((poolData && poolData.players) || [])
+              .filter((e) => {
+                const pid = e.player && e.player.defaultPositionId;
+                return pid === 1 || pid === 2;
+              })
+              .slice(0, 6)
+              .map((e) => {
+                const p = e.player || {};
+                const wk = (p.stats || []).find((s) => s.statSourceId === 1 && s.statSplitTypeId === 1);
+                return wk
+                  ? { name: p.fullName, pos: POS[p.defaultPositionId], total: wk.appliedTotal, stats: wk.stats, applied: wk.appliedStats }
+                  : null;
+              })
+              .filter(Boolean),
+          }
+        : {}),
+      scoringType: data.settings && data.settings.scoringSettings ? data.settings.scoringSettings.scoringType : null,
       teams,
       matchups,
       fetchedAt: Date.now(),
-    });
+    }, 30);
   } catch (err) {
     return send(res, 502, { configured: true, error: String(err && err.message) });
   }

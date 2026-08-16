@@ -49,7 +49,7 @@ export function watchIntel(state, entry, owner) {
   const hasNflTeam = !!team;
   const week = state.week;
   const schedule = hasNflTeam ? nextOpponents(state, team, week, 3) : null;
-  const byeWk = hasNflTeam ? state.byes?.[team] || null : null;
+  const byeWk = hasNflTeam ? Number(state.byes?.[team]) || null : null;
 
   // Does he play through a week where my roster craters?
   const cliffs = byeCliffs(state).filter((c) => c.cliff);
@@ -65,23 +65,34 @@ export function watchIntel(state, entry, owner) {
   const isUpgrade = upgradeRanks != null && upgradeRanks > 0;
 
   const rivals = pos ? rosterCompetition(state, pos) || [] : [];
+  // Only rivals who can still pay count as competition. Unknown budget
+  // (pre-sync) is treated as live — conservative beats wrong.
+  const liveRivals = rivals.filter((r) => r.faabLeft == null || r.faabLeft >= 3);
+  const richestRival = liveRivals.reduce(
+    (max, r) => (r.faabLeft != null && (max == null || r.faabLeft > max) ? r.faabLeft : max),
+    null
+  );
 
   // ---- verdict ----
   let tier;
   if (owner) tier = "rostered";
   else if (!hasNflTeam) tier = "noteam";
-  else if (isUpgrade && rivals.length > 0) tier = "priority";
+  else if (isUpgrade && liveRivals.length > 0) tier = "priority";
   else if (isUpgrade) tier = "upgrade";
   else if ((owned != null && owned < 60 && coveredCliffs.length > 0) || (upgradeRanks != null && upgradeRanks > -8))
     tier = "stash";
   else tier = "monitor";
 
   // ---- suggested opening bid (heuristic, shown as such) ----
-  // Upgrade size sets the base, live rivals raise the price, your remaining
-  // FAAB caps it. Zero for anything you shouldn't pay for.
+  // Upgrade size sets the base, FUNDED rivals raise the price, and when every
+  // rival's budget is known you never bid more than beats the richest one by
+  // a dollar. Your own remaining FAAB caps everything.
   let bid = null;
   if (!owner && hasNflTeam && (tier === "priority" || tier === "upgrade")) {
-    const base = 3 + Math.max(0, upgradeRanks) * 1.2 + rivals.length * 6;
+    let base = 3 + Math.max(0, upgradeRanks) * 1.2 + liveRivals.length * 6;
+    if (richestRival != null && liveRivals.every((r) => r.faabLeft != null)) {
+      base = Math.min(base, richestRival + 1);
+    }
     bid = Math.max(1, Math.min(Math.round(base), Math.round((state.faab || 0) * 0.45)));
   } else if (tier === "stash") {
     bid = Math.min(3, state.faab || 0);
@@ -101,6 +112,7 @@ export function watchIntel(state, entry, owner) {
     coveredCliffs,
     collidingCliffs,
     rivals,
+    liveRivals,
     bid,
     synced: !!poolRec,
   };

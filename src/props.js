@@ -19,16 +19,43 @@
 
 import { matchPlayer } from "./importer.js";
 
-// Full PPR scoring (league-confirmed)
+// Default scoring — fallback ONLY. The live numbers come from the league's
+// own ESPN settings (mSettings → state.espn.scoring) via leagueScoring().
+// Every rate below was verified 2026-08-16 by decomposing ESPN's own weekly
+// projections for this league (Josh Allen's line reproduces to the penny:
+// 223.77×0.04 + 32.23×0.1 + 6.75×0.2 + TDs×6 − INTs×3 = 22.08). The old
+// hardcoded table had passTd 4 and int −2 — both wrong for this league.
 export const SCORING = {
   reception: 1,
   recYd: 0.1,
   rushYd: 0.1,
+  rushAtt: 0.2, // 1 pt per 5 attempts — league-confirmed
   passYd: 0.04,
-  passTd: 4,
-  int: -2,
+  passTd: 6,
+  int: -3,
   rushRecTd: 6,
 };
+
+/**
+ * The league's actual scoring: ESPN mSettings values layered over the
+ * defaults. ESPN keys: passTd/int/rushAtt/rushYd/recYd/reception/rushTd/recTd.
+ */
+export function leagueScoring(state) {
+  const live = (state && state.espn && state.espn.scoring) || {};
+  const pick = (k, fb) => (Number.isFinite(live[k]) ? live[k] : fb);
+  return {
+    reception: pick("reception", SCORING.reception),
+    recYd: pick("recYd", SCORING.recYd),
+    rushYd: pick("rushYd", SCORING.rushYd),
+    rushAtt: pick("rushAtt", SCORING.rushAtt),
+    passYd: pick("passYd", SCORING.passYd),
+    passTd: pick("passTd", SCORING.passTd),
+    int: pick("int", SCORING.int),
+    // rushing and receiving TDs score identically in this league; prefer
+    // whichever ESPN reports, defaulting to 6
+    rushRecTd: pick("rushTd", pick("recTd", SCORING.rushRecTd)),
+  };
+}
 
 /** American odds → implied probability (vig still in). */
 export function impliedProb(american) {
@@ -53,26 +80,27 @@ export const expectedTds = (p) => (p == null || p <= 0 ? 0 : -Math.log(1 - Math.
  * Any subset of markets works; missing markets contribute nothing.
  * @returns {{points:number, parts:Array<[string, number]>}}
  */
-export function propsToPoints(props) {
+export function propsToPoints(props, scoring = SCORING) {
   const parts = [];
   const add = (label, pts) => {
     if (Number.isFinite(pts) && Math.abs(pts) > 0.001) parts.push([label, Math.round(pts * 100) / 100]);
   };
 
-  add(`${props.receptions ?? 0} rec`, (props.receptions || 0) * SCORING.reception);
-  add(`${props.recYds ?? 0} rec yds`, (props.recYds || 0) * SCORING.recYd);
-  add(`${props.rushYds ?? 0} rush yds`, (props.rushYds || 0) * SCORING.rushYd);
-  add(`${props.passYds ?? 0} pass yds`, (props.passYds || 0) * SCORING.passYd);
-  add(`${props.passTds ?? 0} pass TD`, (props.passTds || 0) * SCORING.passTd);
-  add(`${props.ints ?? 0} INT`, (props.ints || 0) * SCORING.int);
+  add(`${props.receptions ?? 0} rec`, (props.receptions || 0) * scoring.reception);
+  add(`${props.recYds ?? 0} rec yds`, (props.recYds || 0) * scoring.recYd);
+  add(`${props.rushYds ?? 0} rush yds`, (props.rushYds || 0) * scoring.rushYd);
+  add(`${props.rushAtt ?? 0} rush att`, (props.rushAtt || 0) * (scoring.rushAtt || 0));
+  add(`${props.passYds ?? 0} pass yds`, (props.passYds || 0) * scoring.passYd);
+  add(`${props.passTds ?? 0} pass TD`, (props.passTds || 0) * scoring.passTd);
+  add(`${props.ints ?? 0} INT`, (props.ints || 0) * scoring.int);
 
   if (props.anytimeTdOdds != null) {
     const p = deVig(impliedProb(props.anytimeTdOdds));
     const eTds = expectedTds(p);
-    add(`TD ${props.anytimeTdOdds > 0 ? "+" : ""}${props.anytimeTdOdds} (${Math.round((p || 0) * 100)}%)`, eTds * SCORING.rushRecTd);
+    add(`TD ${props.anytimeTdOdds > 0 ? "+" : ""}${props.anytimeTdOdds} (${Math.round((p || 0) * 100)}%)`, eTds * scoring.rushRecTd);
   } else if (Number.isFinite(props.tds)) {
     // some books post an O/U on total TDs directly
-    add(`${props.tds} TDs`, props.tds * SCORING.rushRecTd);
+    add(`${props.tds} TDs`, props.tds * scoring.rushRecTd);
   }
 
   const points = parts.reduce((n, [, v]) => n + v, 0);
@@ -84,6 +112,7 @@ export function propsToPoints(props) {
 // market patterns → prop key. Ordered: more specific first.
 const MARKETS = [
   [/rec(?:eiving)?\s*(?:yards|yds)/i, "recYds"],
+  [/rush(?:ing)?\s*att(?:empts)?/i, "rushAtt"],
   [/rush(?:ing)?\s*(?:yards|yds)/i, "rushYds"],
   [/pass(?:ing)?\s*(?:yards|yds)/i, "passYds"],
   [/pass(?:ing)?\s*(?:touchdowns|tds?)/i, "passTds"],
@@ -103,7 +132,7 @@ const ODDS_RE = /([+\-−–]\d{3,4})\b/;
  *
  * @returns {{players: Array<{player, props, computed}>, unmatchedLines:number}}
  */
-export function parseProps(text, rosterPlayers) {
+export function parseProps(text, rosterPlayers, scoring = SCORING) {
   const lines = (text || "").split(/\r?\n/).map((l) => l.replace(/ /g, " ").trim());
   const blocks = [];
   let current = null;
@@ -170,7 +199,7 @@ export function parseProps(text, rosterPlayers) {
   for (const b of blocks) byId.set(b.player.id, b);
   const players = [...byId.values()]
     .filter((b) => Object.keys(b.props).length > 0)
-    .map((b) => ({ ...b, computed: propsToPoints(b.props) }));
+    .map((b) => ({ ...b, computed: propsToPoints(b.props, scoring) }));
 
   return { players, unmatchedLines };
 }

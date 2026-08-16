@@ -10,11 +10,12 @@
 // ============================================================================
 
 const BASE = "https://api.the-odds-api.com/v4/sports/americanfootball_nfl";
-const MARKETS = "player_reception_yds,player_receptions,player_rush_yds,player_pass_yds,player_pass_tds,player_anytime_td";
+const MARKETS = "player_reception_yds,player_receptions,player_rush_yds,player_rush_attempts,player_pass_yds,player_pass_tds,player_anytime_td";
 const MARKET_KEY = {
   player_reception_yds: "recYds",
   player_receptions: "receptions",
   player_rush_yds: "rushYds",
+  player_rush_attempts: "rushAtt", // league scores 1 pt / 5 attempts
   player_pass_yds: "passYds",
   player_pass_tds: "passTds",
 };

@@ -186,7 +186,7 @@ export function migrate(raw) {
       calls: Array.isArray(raw.calls) ? raw.calls : [],
       faab: typeof raw.faab === "number" ? raw.faab : 100,
       claims: Array.isArray(raw.claims) ? raw.claims : [],
-      byes: raw.byes && typeof raw.byes === "object" ? raw.byes : {},
+      byes: normalizeByes(raw.byes && typeof raw.byes === "object" ? raw.byes : {}),
       ecrIndex: raw.ecrIndex && typeof raw.ecrIndex === "object" ? raw.ecrIndex : {},
       analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
       matchups: raw.matchups && typeof raw.matchups === "object" ? raw.matchups : {},
@@ -252,7 +252,7 @@ export function migrate(raw) {
     calls: Array.isArray(raw.calls) ? raw.calls : [],
     faab: typeof raw.faab === "number" ? raw.faab : 100,
     claims: Array.isArray(raw.claims) ? raw.claims : [],
-    byes: raw.byes && typeof raw.byes === "object" ? raw.byes : {},
+    byes: normalizeByes(raw.byes && typeof raw.byes === "object" ? raw.byes : {}),
     ecrIndex: raw.ecrIndex && typeof raw.ecrIndex === "object" ? raw.ecrIndex : {},
     analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
     matchups: raw.matchups && typeof raw.matchups === "object" ? raw.matchups : {},
@@ -689,7 +689,19 @@ export function setBye(state, team, week) {
 }
 
 export function mergeByes(state, incoming) {
-  return { ...state, byes: { ...(state.byes || {}), ...incoming } };
+  return { ...state, byes: normalizeByes({ ...(state.byes || {}), ...incoming }) };
+}
+
+/** Byes are numbers, enforced at every storage boundary — analysis.js once
+ *  compared them as strings while scheduleSync compared numbers, and whether
+ *  "on bye" worked depended on which module asked. */
+export function normalizeByes(raw) {
+  const byes = {};
+  for (const [team, w] of Object.entries(raw || {})) {
+    const n = parseInt(w, 10);
+    if (n >= 1 && n <= 18) byes[team] = n;
+  }
+  return byes;
 }
 
 // ------------------------------------------------------------------ weeks ---

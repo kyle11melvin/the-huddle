@@ -2,7 +2,7 @@
 // Per-player, per-week analytics — the inputs a projection needs.
 //
 // Stored at state.analytics[playerId][week]:
-//   { proj, seasonAvg, matchupRating, dvp{}, ou{}, weather, expertRanks[] }
+//   { proj, seasonAvg, propsProj, props{}, expertRanks[] }
 //
 // Everything here is either pasted in or derived from what was pasted. Where a
 // number is a heuristic rather than a measurement, it says so — the point of
@@ -80,8 +80,23 @@ export function consensusLabel(disp) {
 const BASE_CV = { QB: 0.32, RB: 0.5, WR: 0.58, TE: 0.6, K: 0.42, "D/ST": 0.72 };
 
 /**
- * Turn what we know about a player into a mean and a spread of fantasy points.
- * @returns {{mean:number, sd:number, source:string, confident:boolean}|null}
+ * Injury designations as play probabilities. Q/D outcomes are BIMODAL — the
+ * player either suits up and produces a roughly normal game, or sits and
+ * scores exactly zero. A flat points penalty models neither branch; a mixture
+ * does. Rates are the long-run league-wide rates for each tag.
+ */
+export const PLAY_PROB = { Q: 0.77, D: 0.25, O: 0, IR: 0 };
+
+export const playProbFor = (player) =>
+  player && player.status in PLAY_PROB ? PLAY_PROB[player.status] : 1;
+
+/**
+ * Turn what we know about a player into a distribution of fantasy points.
+ * @returns {{mean:number, condMean:number, sd:number, playProb:number,
+ *            source:string, confident:boolean}|null}
+ * `mean` is the EXPECTED points (playProb × conditional mean) — the honest
+ * headline number. `condMean`/`sd` describe the if-he-plays branch, which is
+ * what the simulator samples from (with prob playProb, else 0).
  */
 export function pointDistribution(player, week, state) {
   if (!player) return null;
@@ -132,9 +147,15 @@ export function pointDistribution(player, week, state) {
   }
   const sd = mu * cv * uncertainty;
 
+  // Injury risk prices in here, not as a points penalty downstream.
+  const playProb = playProbFor(player);
+  if (playProb < 1) source = `${source} × ${player.status} risk`;
+
   return {
-    mean: Math.round(mu * 10) / 10,
+    mean: Math.round(mu * playProb * 10) / 10,
+    condMean: Math.round(mu * 10) / 10,
     sd: Math.round(sd * 10) / 10,
+    playProb,
     source,
     confident: !!(disp && disp.spread < 0.4),
     dispersion: disp,
@@ -144,9 +165,14 @@ export function pointDistribution(player, week, state) {
 /** Floor/ceiling as ~10th and ~90th percentile of that distribution. */
 export function floorCeiling(dist) {
   if (!dist) return null;
+  // With a real chance of not playing, the floor IS zero — that's the point
+  // of modelling Q/D as bimodal instead of shaving the projection.
+  const floor = dist.playProb != null && dist.playProb < 0.9
+    ? 0
+    : Math.max(0, Math.round(((dist.condMean ?? dist.mean) - 1.28 * dist.sd) * 10) / 10);
   return {
-    floor: Math.max(0, Math.round((dist.mean - 1.28 * dist.sd) * 10) / 10),
-    ceiling: Math.round((dist.mean + 1.28 * dist.sd) * 10) / 10,
+    floor,
+    ceiling: Math.round(((dist.condMean ?? dist.mean) + 1.28 * dist.sd) * 10) / 10,
   };
 }
 

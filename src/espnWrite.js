@@ -17,8 +17,9 @@ export function espnSlotId(loc) {
 }
 
 /**
- * Write a move (and its swap partner, if any) to ESPN as one atomic
- * transaction. Items: [{espnId, from(loc), to(loc)}].
+ * Write a set of moves (a single swap or a whole optimized lineup) to ESPN as
+ * one atomic transaction — up to 10 items; all land or none do.
+ * Items: [{espnId, from(loc), to(loc)}].
  * @returns {{ok:boolean, error?:string}}
  */
 export async function writeLineupMove(state, moves) {
@@ -35,6 +36,7 @@ export async function writeLineupMove(state, moves) {
     items.push({ playerId, fromSlot, toSlot });
   }
   if (!items.length) return { ok: true, noop: true };
+  if (items.length > 10) return { ok: false, error: "Too many moves for one ESPN transaction (max 10)." };
 
   const base = import.meta.env.DEV ? "https://the-huddle-hq.vercel.app" : "";
   try {

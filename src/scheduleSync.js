@@ -21,7 +21,13 @@ export function applySchedule(state, data) {
     // than no schedule; keep whatever exists and say nothing.
     return { state, skipped: true };
   }
-  const byes = { ...data.byes, ...(state.byes || {}) };
+  // Numeric byes only (storage-boundary rule); manual entries still win.
+  const clean = {};
+  for (const [team, w] of Object.entries(data.byes || {})) {
+    const n = parseInt(w, 10);
+    if (n >= 1 && n <= 18) clean[team] = n;
+  }
+  const byes = { ...clean, ...(state.byes || {}) };
   return {
     state: {
       ...state,
@@ -71,7 +77,7 @@ export function rosWeeks(state, team) {
   const cw = Math.max(1, parseInt(state.week, 10) || 1);
   let n = 0;
   for (let w = cw; w <= 17; w++) {
-    if (state.byes && state.byes[team] === w) continue;
+    if (state.byes && Number(state.byes[team]) === w) continue;
     if (state.schedule && !scheduleOpp(state, team, w)) continue;
     n++;
   }
@@ -99,11 +105,17 @@ const THIN_AT = { QB: 2, RB: 5, WR: 5, TE: 2, "D/ST": 1, K: 1 };
 export function rosterCompetition(state, pos) {
   if (!state.espn) return null;
   const need = THIN_AT[pos] ?? 3;
+  const budget = Number.isFinite(state.espn.leagueFaab) ? state.espn.leagueFaab : 100;
   const out = [];
   for (const t of state.espn.teams) {
     if (t.id === state.espn.myTeamId) continue;
     const count = t.roster.filter((e) => e.pos === pos).length;
-    if (count < need) out.push({ team: t.mapped, count });
+    if (count < need) {
+      // A thin rival with no budget left isn't a rival — remaining FAAB is
+      // what turns "they need a WR" into "they can actually outbid you".
+      const faabLeft = Number.isFinite(t.faabSpent) ? Math.max(0, budget - t.faabSpent) : null;
+      out.push({ team: t.mapped, count, faabLeft });
+    }
   }
   return out.sort((a, b) => a.count - b.count);
 }

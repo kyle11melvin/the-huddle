@@ -16,7 +16,8 @@ import DataPanel from "./components/DataPanel.jsx";
 import LeagueBrowser from "./components/LeagueBrowser.jsx";
 import StartSitLab from "./components/StartSitLab.jsx";
 import { setPlayerAnalytics, playerAnalytics, pointDistribution } from "./analytics.js";
-import { propsToPoints } from "./props.js";
+import { opponentDistributions } from "./simulate.js";
+import { propsToPoints, leagueScoring } from "./props.js";
 import { writeLineupMove } from "./espnWrite.js";
 import {
   effectiveStatus,
@@ -1020,9 +1021,13 @@ function CallForm({ state, week, onAdd }) {
 
 function LineupCheck({ state, week, onApply, onApplyAll }) {
   const warnings = useMemo(() => lineupWarnings(state, week), [state, week]);
-  const moves = useMemo(() => suggestLineup(state, week), [state, week]);
+  // With this week's opponent known, suggestions rank by WIN PROBABILITY —
+  // the optimizer executes the ceiling/floor strategy, not just raw points.
+  const oppDists = useMemo(() => opponentDistributions(state, week), [state, week]);
+  const moves = useMemo(() => suggestLineup(state, week, oppDists), [state, week, oppDists]);
   const errors = warnings.filter((w) => w.level === "error");
   const soft = warnings.filter((w) => w.level !== "error");
+  const winMode = oppDists.length > 0;
 
   if (!errors.length && !moves.length) {
     return (
@@ -1031,7 +1036,9 @@ function LineupCheck({ state, week, onApply, onApplyAll }) {
         <div>
           <div className="check-title">Lineup looks optimal</div>
           <div className="check-sub">
-            Nobody out or on bye, and no bench player outranks a starter for {weekLabel(week)}.
+            {winMode
+              ? `No available swap improves your win probability this week — checked every bench player against your actual matchup.`
+              : `Nobody out or on bye, and no bench player outranks a starter for ${weekLabel(week)}.`}
             {soft.length > 0 && ` ${soft.length} minor note${soft.length === 1 ? "" : "s"}.`}
           </div>
         </div>
@@ -1489,6 +1496,10 @@ export default function App() {
     [state.players]
   );
 
+  // Set on every successful ESPN write; syncs inside the next 90s bypass the
+  // 30s edge cache so a cached pre-write snapshot can never revert the app.
+  const lastWriteRef = useRef(0);
+
   // -- roster ops (all synchronous against current state so errors surface now) --
   const doMove = useCallback(
     async (id, dest) => {
@@ -1519,11 +1530,12 @@ export default function App() {
         if (!w.ok) {
           flash(`❌ ${w.error} — nothing changed. Re-syncing so the next try works.`);
           // A failed write usually means our picture drifted from ESPN's —
-          // realign immediately instead of leaving the user stuck retrying.
-          syncEspn(true);
+          // realign immediately (cache-busted) instead of leaving the user stuck.
+          syncEspn(true, true);
           setMoveId(null);
           return;
         }
+        lastWriteRef.current = Date.now();
         setState(res.state);
         flash(`✓ Lineup updated on ESPN — ${state.players[id]?.name} moved.`);
       } else {
@@ -1571,38 +1583,44 @@ export default function App() {
     [doMove]
   );
 
-  /** Sequential write-through: each step re-plans on the post-move lineup. */
+  /** Plan the full set of moves locally, then ship them to ESPN as ONE atomic
+   *  transaction — either the whole optimized lineup lands or nothing does. */
   const applyAllMoves = useCallback(async () => {
+    const oppDists = opponentDistributions(state, state.week);
     let cur = state;
+    const wireMoves = [];
     let applied = 0;
     for (let pass = 0; pass < 12; pass++) {
-      const moves = suggestLineup(cur, cur.week);
+      if (wireMoves.length >= 8) break; // ESPN transaction cap is 10 items
+      const moves = suggestLineup(cur, cur.week, oppDists);
       if (!moves.length) break;
       const m = moves[0];
       const dest = { zone: "lineup", slotKey: m.slotKey, index: m.index };
+      const here = findLocation(cur, m.inId);
+      const occ = cur.lineup[m.slotKey][m.index];
       const res = movePlayer(cur, m.inId, dest);
       if (res.error) break;
-      if (cur.espn) {
-        const here = findLocation(cur, m.inId);
-        const occ = cur.lineup[m.slotKey][m.index];
-        const mv = [{ espnId: cur.players[m.inId]?.espnId, name: cur.players[m.inId]?.name, from: here, to: dest }];
-        if (occ) mv.push({ espnId: cur.players[occ]?.espnId, name: cur.players[occ]?.name, from: dest, to: here });
-        // eslint-disable-next-line no-await-in-loop
-        const w = await writeLineupMove(cur, mv);
-        if (!w.ok) {
-          flash(`❌ ${w.error} — stopped after ${applied} change${applied === 1 ? "" : "s"}.`);
-          break;
-        }
-      }
+      wireMoves.push({ espnId: cur.players[m.inId]?.espnId, name: cur.players[m.inId]?.name, from: here, to: dest });
+      if (occ) wireMoves.push({ espnId: cur.players[occ]?.espnId, name: cur.players[occ]?.name, from: dest, to: here });
       cur = res.state;
       applied++;
     }
-    if (applied) {
-      setState(cur);
-      flash(`✓ ${applied} lineup change${applied === 1 ? "" : "s"} applied${state.espn ? " on ESPN" : ""}.`);
-    } else {
+    if (!applied) {
       flash("Nothing to change.");
+      return;
     }
+    if (state.espn) {
+      flash("Writing lineup to ESPN…");
+      const w = await writeLineupMove(state, wireMoves);
+      if (!w.ok) {
+        flash(`❌ ${w.error} — nothing changed. Re-syncing so the next try works.`);
+        syncEspn(true, true);
+        return;
+      }
+      lastWriteRef.current = Date.now();
+    }
+    setState(cur);
+    flash(`✓ ${applied} lineup change${applied === 1 ? "" : "s"} applied${state.espn ? " on ESPN in one transaction" : ""}.`);
   }, [state, flash]);
 
   // -- watch list --
@@ -1662,11 +1680,13 @@ export default function App() {
   // -- ESPN sync --
   const [espnBusy, setEspnBusy] = useState(false);
   const syncEspn = useCallback(
-    async (silent = false) => {
+    async (silent = false, fresh = false) => {
       if (espnBusy) return;
       setEspnBusy(true);
       try {
-        const data = await fetchLeague();
+        // Recent write → always bypass the edge cache; a cached pre-write
+        // snapshot would revert the lineup we just changed.
+        const data = await fetchLeague(fresh || Date.now() - lastWriteRef.current < 90 * 1000);
         if (data.configured === false) {
           if (!silent) flash(data.reason || "ESPN sync isn't configured yet.");
           return;
@@ -1769,7 +1789,7 @@ export default function App() {
           for (const pl of Object.values(s.players)) {
             const hit = byName.get(pl.name.toLowerCase().replace(/[^a-z]/g, ""));
             if (!hit) continue;
-            const computed = propsToPoints(hit.props);
+            const computed = propsToPoints(hit.props, leagueScoring(s));
             if (!(computed.points > 0)) continue;
             next = setPlayerAnalytics(next, pl.id, s.week, {
               propsProj: computed.points,

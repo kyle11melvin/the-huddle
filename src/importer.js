@@ -307,22 +307,16 @@ export function startSitToAnalytics(parsed) {
     const expertRanks = parsed.experts
       .map((e) => ({ expert: e.expert, record: e.record, rank: e.ranks[i] }))
       .filter((e) => Number.isFinite(e.rank));
+    // Only fields the projection engine actually consumes. The old
+    // matchupRating/dvp/weather/ou captures were stored but never read —
+    // game environment now comes live from Vegas lines, and a real
+    // schedule-adjusted DvP model needs actual game logs (season-start build).
     const patch = {
       opponent: pick("opponent"),
-      matchupRating: pick("matchupRating"),
       proj: pick("proj"),
       seasonAvg: pick("seasonAvg"),
       seasonTotal: pick("seasonTotal"),
       injury: pick("injury"),
-      weather: pick("weather"),
-      rzOpportunity: pick("rzOpportunity"),
-      dvp: {
-        receptions: pick("dvpReceptions"),
-        attempts: pick("dvpAttempts"),
-        yards: pick("dvpYards"),
-        tds: pick("dvpTds"),
-      },
-      ou: { gameTotal: pick("ouGameTotal"), yards: pick("ouYards") },
       expertRanks,
     };
     Object.keys(patch).forEach((k) => {

@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { TEAMS } from "../data/teams.js";
 import { parseRankings, parseByes, planEcrUpdates, buildEcrIndex } from "../importer.js";
-import { parseProps } from "../props.js";
+import { parseProps, leagueScoring } from "../props.js";
 import { shareUrl, decodeShare } from "../share.js";
 import { POSITIONS } from "../lineup.js";
 
@@ -102,8 +102,8 @@ export default function DataPanel({
   const [propsText, setPropsText] = useState("");
   const propsPreview = useMemo(() => {
     if (!propsText.trim()) return null;
-    return parseProps(propsText, Object.values(state.players));
-  }, [propsText, state.players]);
+    return parseProps(propsText, Object.values(state.players), leagueScoring(state));
+  }, [propsText, state]);
 
   // ---- byes ----
   const [byeText, setByeText] = useState("");

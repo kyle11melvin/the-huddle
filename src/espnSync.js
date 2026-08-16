@@ -43,10 +43,14 @@ export function matchLeagueTeamName(espnName) {
   return hit ? hit.team : espnName;
 }
 
-export async function fetchLeague() {
+export async function fetchLeague(fresh = false) {
   // Vite's dev server has no /api routes — hit production directly there.
   const base = import.meta.env.DEV ? "https://the-huddle-hq.vercel.app" : "";
-  const r = await fetch(`${base}/api/espn`, { cache: "no-store" });
+  // /api/espn sits behind a 30s edge cache. `fresh` busts it — required right
+  // after a lineup write, when a cached pre-write snapshot would revert the
+  // app's picture and re-trigger the drift guard.
+  const buster = fresh ? `?fresh=${Date.now()}` : "";
+  const r = await fetch(`${base}/api/espn${buster}`, { cache: "no-store" });
   if (!r.ok) throw new Error(`ESPN endpoint returned ${r.status}`);
   return r.json();
 }
@@ -172,11 +176,16 @@ export function applyEspnSync(state, data, myTeamName) {
     currentWeek: data.currentWeek,
     leagueName: data.leagueName,
     myTeamId: me.id,
+    // League's real per-stat scoring from mSettings — projections and props
+    // conversion read this instead of guessing (6-pt pass TDs, rush attempts).
+    scoring: data.scoring || null,
+    leagueFaab: Number.isFinite(data.leagueFaab) ? data.leagueFaab : 100,
     teams: (data.teams || []).map((t) => ({
       id: t.id,
       name: t.name,
       mapped: matchLeagueTeamName(t.name),
       record: t.record,
+      faabSpent: Number.isFinite(t.faabSpent) ? t.faabSpent : null,
       roster: t.roster.map((e) => ({
         name: e.name,
         pos: e.pos,

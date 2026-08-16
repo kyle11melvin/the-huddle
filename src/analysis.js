@@ -2,15 +2,24 @@
 // Derived analysis: bye weeks, lineup warnings, start/sit suggestions,
 // positional strength, and trade angles.
 //
-// Nothing here invents data. Bye weeks are whatever you enter (the 2026 NFL
-// bye schedule is not baked in — an invented one would quietly start a player
-// on bye, which is worse than showing nothing). League-wide positional ranks
-// require a pasted ranking set; until then the app says so instead of guessing.
+// Nothing here invents data. Bye weeks are whatever the schedule feed (or a
+// manual entry) says. Rosters and ranks come from the live ESPN sync; the
+// hand-transcribed leagueRosters snapshot and the pasted-ECR strings survive
+// ONLY as offline fallbacks, because every league transaction makes them a
+// little more wrong.
 // ============================================================================
 
 import { SLOT_DEFS, findLocation, slotAccepts, POSITIONS } from "./lineup.js";
-import { LEAGUE_ROSTERS, MY_TEAM, whoRosters } from "./data/leagueRosters.js";
+import { LEAGUE_ROSTERS, MY_TEAM } from "./data/leagueRosters.js";
 import { pointDistribution } from "./analytics.js";
+import { normName } from "./espnSync.js";
+import { lineupDistributions, simulateMatchup } from "./simulate.js";
+import { scheduleOpp } from "./scheduleSync.js";
+
+const nflOpp = (state, team, week) => {
+  const a = (scheduleOpp(state, team, week) || "").replace(/^@/, "").trim().toUpperCase();
+  return a && a !== "BYE" ? a : null;
+};
 
 /** "RB6" -> {pos:"RB", rank:6}; "DST9" -> {pos:"D/ST", rank:9} */
 export function parseEcr(ecr) {
@@ -23,16 +32,39 @@ export function parseEcr(ecr) {
 
 export const ecrRank = (p) => parseEcr(p?.ecr)?.rank ?? null;
 
+// -------------------------------------------------------------- rank index ---
+
+/**
+ * THE rank vocabulary, one for the whole app: ESPN-projection auto-ranks give
+ * full live coverage, pasted expert ranks override name-by-name where present.
+ * (myProfile, positionNeeds, leagueStrength and the waiver views all read
+ * this; the preseason ECR string on a player record is the last resort.)
+ */
+export function rankIndex(state) {
+  return { ...((state.espn && state.espn.autoRanks) || {}), ...(state.ecrIndex || {}) };
+}
+
+/** Live position rank for a player, falling back to their pasted ECR string. */
+export function liveRank(state, player) {
+  if (!player) return null;
+  const r = rankIndex(state)[normName(player.name)];
+  return r != null ? r : ecrRank(player);
+}
+
 // ------------------------------------------------------------------- byes ---
+// Byes are numbers everywhere (normalized at the storage boundary); comparing
+// them as strings in one file and numbers in another once made "on bye"
+// silently depend on which module asked.
 
 export function byeWeekFor(byes, team) {
-  const w = byes?.[team];
-  return w === 0 || w == null || w === "" ? null : String(w);
+  const w = Number(byes?.[team]);
+  return Number.isFinite(w) && w >= 1 ? w : null;
 }
 
 export function isOnBye(player, week, byes) {
   if (!player || !week) return false;
-  return byeWeekFor(byes, player.team) === String(week);
+  const wk = Number(week); // "PRE" → NaN → never on bye
+  return Number.isFinite(wk) && byeWeekFor(byes, player.team) === wk;
 }
 
 /**
@@ -75,27 +107,40 @@ export function lineupWarnings(state, week) {
 }
 
 /** Higher is better. Unusable players score -Infinity so they never start.
- *  Live projections (props > ESPN, vegas-tilted) are the primary scale so the
- *  optimizer and the Start/Sit Lab can never disagree; the preseason rank
- *  scale only survives as an offline fallback. */
+ *  The distribution mean is already injury-priced (playProb × outcome), so no
+ *  extra Q/D penalty here — the old flat penalty double-counted the risk. */
 function scorePlayer(p, week, byes, state) {
   if (!p) return -Infinity;
   if (isUnusable(p, week, byes)) return -Infinity;
+  const dist = state ? pointDistribution(p, week, state) : null;
+  if (dist) return dist.mean * 10;
   const st = effectiveStatus(p, week, byes);
   const penalty = st === "D" ? 12 : st === "Q" ? 4 : 0;
-  const dist = state ? pointDistribution(p, week, state) : null;
-  if (dist) return dist.mean * 10 - penalty;
   const rank = ecrRank(p);
   const base = rank == null ? 0 : 200 - rank;
   const wd = (p.weeks && p.weeks[week]) || {};
   return base + (wd.matchup || 0) * 4 - penalty;
 }
 
+// Fewer runs than the headline sim: the optimizer scans dozens of candidate
+// lineups, and at 8k runs the Monte Carlo noise (~±0.5%) sits safely under
+// the 1% reporting threshold below.
+const SCAN_RUNS = 8000;
+const MIN_WIN_DELTA = 0.01;
+
 /**
- * Greedy optimal lineup. Slots are filled most-restrictive first so FLEX takes
- * whatever is left rather than stealing a player a dedicated slot needed.
+ * Optimal lineup. Two modes:
+ *
+ * With opponent distributions (the normal, synced case) it maximizes WIN
+ * PROBABILITY: every legal starter↔bench substitution is simulated against
+ * this week's actual opponent, so the ceiling/floor logic strategyAdvice
+ * describes is what the optimizer executes — an underdog gets told to start
+ * the volatile guy even at a lower projection.
+ *
+ * Without an opponent (offline) it falls back to greedy projected points.
+ * Mandatory fixes (empty slot, player who can't play) surface in both modes.
  */
-export function suggestLineup(state, week) {
+export function suggestLineup(state, week, oppDists = null) {
   const byes = state.byes || {};
   const pool = [];
   for (const s of SLOT_DEFS) for (const id of state.lineup[s.key]) if (id) pool.push(id);
@@ -159,6 +204,7 @@ export function suggestLineup(state, week) {
     const gain = scorePlayer(inP, week, byes, state) - scorePlayer(outP, week, byes, state);
     const projIn = pointDistribution(inP, week, state)?.mean;
     const projOut = outP ? pointDistribution(outP, week, state)?.mean : null;
+    const mandatory = !outP || isUnusable(outP, week, byes);
     moves.push({
       slotKey: o.slotKey,
       index: o.index,
@@ -166,6 +212,7 @@ export function suggestLineup(state, week) {
       outId: o.id,
       inName: inP?.name,
       outName: outP?.name || null,
+      mandatory,
       reason: !outP
         ? "fills an empty slot"
         : isUnusable(outP, week, byes)
@@ -177,18 +224,116 @@ export function suggestLineup(state, week) {
     });
   }
   moves.sort((a, b) => b.gain - a.gain);
-  return moves;
+
+  // ---- win-probability mode -------------------------------------------------
+  if (!oppDists || !oppDists.length) return moves; // offline fallback: points
+
+  const mandatoryMoves = moves.filter((m) => m.mandatory);
+  const base = lineupDistributions(state, state.lineup, week);
+  // Unusable starters contribute nothing; drop them so the baseline is honest.
+  const baseDists = base.dists.filter((d) => !isUnusable(state.players[d.id], week, byes));
+  if (!baseDists.length) return moves;
+
+  const before = simulateMatchup(baseDists, oppDists, 12345, SCAN_RUNS);
+  if (!before) return moves;
+
+  const benchIds = state.bench.filter(Boolean).filter((id) => {
+    const p = state.players[id];
+    return p && !isUnusable(p, week, byes) && pointDistribution(p, week, state);
+  });
+  const claimedSlots = new Set(mandatoryMoves.map((m) => `${m.slotKey}:${m.index}`));
+  const claimedIns = new Set(mandatoryMoves.map((m) => m.inId));
+
+  const winMoves = [];
+  for (const s of SLOT_DEFS) {
+    for (let i = 0; i < s.count; i++) {
+      if (claimedSlots.has(`${s.key}:${i}`)) continue;
+      const outId = state.lineup[s.key][i];
+      if (!outId) continue;
+      const outP = state.players[outId];
+      if (!outP || isUnusable(outP, week, byes)) continue;
+      const outDist = pointDistribution(outP, week, state);
+      if (!outDist) continue;
+
+      for (const inId of benchIds) {
+        if (claimedIns.has(inId)) continue;
+        const inP = state.players[inId];
+        if (!slotAccepts(s.key, inP.pos)) continue;
+        const inDist = pointDistribution(inP, week, state);
+        // A far-lower projection can still be the right start for an underdog,
+        // but not INFINITELY lower — skip hopeless swaps to keep the scan fast.
+        if (inDist.mean < outDist.mean - 6) continue;
+
+        const swapped = baseDists
+          .filter((d) => d.id !== outId)
+          .concat([{ id: inId, name: inP.name, team: inP.team || null, pos: inP.pos, opp: nflOpp(state, inP.team, week), ...inDist }]);
+        const after = simulateMatchup(swapped, oppDists, 12345, SCAN_RUNS);
+        if (!after) continue;
+        const delta = after.winProb - before.winProb;
+        if (delta < MIN_WIN_DELTA) continue;
+        winMoves.push({
+          slotKey: s.key,
+          index: i,
+          inId,
+          outId,
+          inName: inP.name,
+          outName: outP.name,
+          mandatory: false,
+          delta,
+          reason: `+${(delta * 100).toFixed(1)}% win probability (${inDist.mean} vs ${outDist.mean} proj)`,
+          gain: Math.round(delta * 1000),
+        });
+      }
+    }
+  }
+
+  // Best swap per slot and per incoming player — no double-promising.
+  winMoves.sort((a, b) => b.delta - a.delta);
+  const seenSlot = new Set();
+  const seenIn = new Set();
+  const picked = [];
+  for (const m of winMoves) {
+    const sk = `${m.slotKey}:${m.index}`;
+    if (seenSlot.has(sk) || seenIn.has(m.inId)) continue;
+    seenSlot.add(sk);
+    seenIn.add(m.inId);
+    picked.push(m);
+  }
+  return [...mandatoryMoves, ...picked];
+}
+
+// ------------------------------------------------------- roster source ------
+
+/**
+ * Every roster in the league, from the live ESPN snapshot when synced (the
+ * truth), else the hand-transcribed file (the fallback that ages).
+ */
+function allRosters(state) {
+  if (state.espn && state.espn.teams && state.espn.teams.length) {
+    return state.espn.teams.map((t) => ({
+      team: t.mapped || t.name,
+      mine: t.id === state.espn.myTeamId,
+      players: (t.roster || [])
+        .filter((e) => e.slot !== "IR")
+        .map((e) => ({ name: e.name, pos: e.pos })),
+    }));
+  }
+  return LEAGUE_ROSTERS.map((t) => ({
+    team: t.team,
+    mine: t.team === MY_TEAM,
+    players: [...(t.starters || []), ...(t.bench || [])].map(([name, , pos]) => ({ name, pos })),
+  }));
 }
 
 // ------------------------------------------------------- positional profile ---
 
-/** Your ECR ranks per position, best first. Always available. */
+/** Your live position ranks per position, best first. Always available. */
 export function myProfile(state) {
   const byPos = {};
   for (const p of Object.values(state.players)) {
     const loc = findLocation(state, p.id);
     if (!loc || loc.zone === "ir") continue;
-    (byPos[p.pos] = byPos[p.pos] || []).push({ name: p.name, rank: ecrRank(p) });
+    (byPos[p.pos] = byPos[p.pos] || []).push({ name: p.name, rank: liveRank(state, p) });
   }
   for (const k of Object.keys(byPos)) {
     byPos[k].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
@@ -197,27 +342,24 @@ export function myProfile(state) {
 }
 
 /**
- * True league-wide positional rank. Requires an ECR index covering other
- * teams' players (populated by pasting a ranking set). Returns null when
- * there isn't enough data — the UI says so rather than inventing a number.
+ * True league-wide positional rank, computed over the LIVE rosters. Needs
+ * rank coverage of opponents' players (auto-ranks provide it after any sync);
+ * returns ready:false rather than inventing numbers when coverage is thin.
  */
 export function leagueStrength(state) {
-  // ESPN-projection auto-ranks give full coverage on their own; pasted
-  // expert ranks override name-by-name where present.
-  const index = { ...((state.espn && state.espn.autoRanks) || {}), ...(state.ecrIndex || {}) };
-  const norm = (s) => (s || "").toLowerCase().replace(/[^a-z]/g, "");
-  const lookup = (name) => index[norm(name)] ?? null;
+  const index = rankIndex(state);
+  const lookup = (name) => index[normName(name)] ?? null;
+  const rosters = allRosters(state);
+  const myName = (rosters.find((r) => r.mine) || {}).team || MY_TEAM;
 
   // How many opponent players we can actually rank
   let known = 0;
   let total = 0;
-  for (const t of LEAGUE_ROSTERS) {
-    if (t.team === MY_TEAM) continue;
-    for (const g of [t.starters, t.bench]) {
-      for (const [name] of g || []) {
-        total++;
-        if (lookup(name) != null) known++;
-      }
+  for (const t of rosters) {
+    if (t.mine) continue;
+    for (const pl of t.players) {
+      total++;
+      if (lookup(pl.name) != null) known++;
     }
   }
   const coverage = total ? known / total : 0;
@@ -227,11 +369,9 @@ export function leagueStrength(state) {
   const DEPTH = { QB: 1, RB: 3, WR: 4, TE: 1, "D/ST": 1, K: 1 };
   const scoreTeam = (t) => {
     const byPos = {};
-    for (const g of [t.starters, t.bench]) {
-      for (const [name, , pos] of g || []) {
-        const r = lookup(name);
-        (byPos[pos] = byPos[pos] || []).push(r == null ? 999 : r);
-      }
+    for (const pl of t.players) {
+      const r = lookup(pl.name);
+      (byPos[pl.pos] = byPos[pl.pos] || []).push(r == null ? 999 : r);
     }
     const out = {};
     for (const pos of POSITIONS) {
@@ -241,23 +381,22 @@ export function leagueStrength(state) {
     return out;
   };
 
-  const scored = LEAGUE_ROSTERS.map((t) => ({ team: t.team, ...scoreTeam(t) }));
+  const scored = rosters.map((t) => ({ team: t.team, mine: t.mine, ...scoreTeam(t) }));
   const ranks = {};
   for (const pos of POSITIONS) {
     const sorted = [...scored].sort((a, b) => b[pos] - a[pos]);
     ranks[pos] = {
-      rank: sorted.findIndex((s) => s.team === MY_TEAM) + 1,
+      rank: sorted.findIndex((s) => s.mine || s.team === myName) + 1,
       of: sorted.length,
       order: sorted.map((s) => s.team),
     };
   }
-  return { ready: true, coverage, ranks, scored };
+  return { ready: true, coverage, ranks, scored, myName };
 }
 
 /**
  * Trade angles: positions where you're deep and someone else is thin, paired
- * with the reverse. Uses league strength when available, roster counts as a
- * fallback so it degrades to something useful rather than nothing.
+ * with the reverse. Runs on the same live rosters as leagueStrength.
  */
 export function tradeAngles(state) {
   const strength = leagueStrength(state);
@@ -269,7 +408,7 @@ export function tradeAngles(state) {
 
   const partners = [];
   for (const t of strength.scored) {
-    if (t.team === MY_TEAM) continue;
+    if (t.mine || t.team === strength.myName) continue;
     const theirRankAt = (pos) => strength.ranks[pos].order.indexOf(t.team) + 1;
     const give = strong.filter((p) => theirRankAt(p) >= 7);
     const get = weak.filter((p) => theirRankAt(p) <= 4);
@@ -283,10 +422,9 @@ export function tradeAngles(state) {
 // ------------------------------------------------------------- suggestions ---
 
 /**
- * How weak each position group is: average ECR of the players you'd actually
- * start there (missing depth counts as rank 250, i.e. "nobody"). Higher =
- * needier. Works from your roster alone, so it functions before any league-
- * wide data is pasted.
+ * How weak each position group is: average live rank of the players you'd
+ * actually start there (missing depth counts as rank 250, i.e. "nobody").
+ * Higher = needier.
  */
 export function positionNeeds(state) {
   const profile = myProfile(state);
@@ -333,15 +471,21 @@ export function suggestAdds(state, available, limit = 6) {
 
 /**
  * Split a candidate pool into genuinely available vs rostered elsewhere,
- * excluding anyone already on your roster.
+ * excluding anyone already on your roster. Ownership comes from the live
+ * ESPN rosters when synced; the static snapshot is the offline fallback.
  */
 export function classifyAvailability(candidates, state) {
-  const mine = new Set(Object.values(state.players).map((p) => p.name.toLowerCase()));
+  const mine = new Set(Object.values(state.players).map((p) => normName(p.name)));
+  const ownerIndex = new Map();
+  for (const r of allRosters(state)) {
+    if (r.mine) continue;
+    for (const pl of r.players) ownerIndex.set(normName(pl.name), r.team);
+  }
   const available = [];
   const taken = [];
   for (const c of candidates) {
-    if (mine.has(c.name.toLowerCase())) continue;
-    const owner = whoRosters(c.name);
+    if (mine.has(normName(c.name))) continue;
+    const owner = ownerIndex.get(normName(c.name)) || null;
     if (owner) taken.push({ ...c, owner });
     else available.push(c);
   }

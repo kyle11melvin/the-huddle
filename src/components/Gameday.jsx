@@ -5,8 +5,11 @@ import { pointDistribution, playerAnalytics } from "../analytics.js";
 import { simulateLive, liveNarrative } from "../simulate.js";
 import { teamLogoUrl } from "../data/teams.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
+import { scheduleOpp } from "../scheduleSync.js";
 
 const CV = { QB: 0.32, RB: 0.5, WR: 0.58, TE: 0.6, K: 0.42, "D/ST": 0.72 };
+// ESPN's raw injury strings → play probability (bimodal injury pricing).
+const PLAY_PROB = { QUESTIONABLE: 0.77, DOUBTFUL: 0.25, OUT: 0, INJURY_RESERVE: 0, SUSPENSION: 0 };
 const STARTER_SLOTS = ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "FLEX", "D/ST", "K"];
 const STATUSES = [
   ["notStarted", "Not started"],
@@ -60,21 +63,35 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
   const selected = viewIdx != null ? leagueBoard[viewIdx] : leagueBoard.find((m) => m.isMine) || null;
   const viewingMine = !selected || selected.isMine;
 
+  /** Opposing NFL team this week, for the sim's correlation structure. */
+  const nflOpp = (team) => {
+    const a = (scheduleOpp(state, team, week) || "").replace(/^@/, "").trim().toUpperCase();
+    return a && a !== "BYE" ? a : null;
+  };
+
   /** Starters for any league team, straight from the synced rosters. */
   const teamRows = (mappedName, prefix) => {
     const r = espnTeamRoster(state, mappedName);
     if (!r) return [];
     return r
       .filter((e) => e.slot !== "BE" && e.slot !== "IR")
-      .map((e) => ({
-        slot: e.slot,
-        name: e.name,
-        team: e.team,
-        pos: e.pos,
-        k: `${prefix}:${key(e.name)}`,
-        proj: Number.isFinite(e.proj) && e.proj > 0 ? e.proj : null,
-        cv: CV[e.pos] ?? 0.55,
-      }));
+      .map((e) => {
+        const playProb = PLAY_PROB[e.injuryStatus] ?? 1;
+        const proj = Number.isFinite(e.proj) && e.proj > 0 ? e.proj : null;
+        return {
+          slot: e.slot,
+          name: e.name,
+          team: e.team,
+          pos: e.pos,
+          k: `${prefix}:${key(e.name)}`,
+          // displayed number = EXPECTED points (injury-priced) so the column
+          // still sums to the simulated header
+          proj: proj != null ? Math.round(proj * playProb * 10) / 10 : null,
+          simProj: proj, // if-he-plays projection, for the simulator
+          playProb,
+          cv: CV[e.pos] ?? 0.55,
+        };
+      });
   };
 
   // My starters, in slot order.
@@ -96,7 +113,10 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
           team: p.team,
           pos: p.pos,
           k: `me:${p.id}`,
+          // dist.mean is already injury-priced (expected points)
           proj: dist ? dist.mean : a && a.proj ? a.proj : null,
+          simProj: dist ? dist.condMean ?? dist.mean : a && a.proj ? a.proj : null,
+          playProb: dist ? dist.playProb ?? 1 : 1,
           cv: CV[p.pos] ?? 0.55,
         });
       }
@@ -110,16 +130,22 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
     if (live) {
       return live
         .filter((e) => e.slot !== "BE" && e.slot !== "IR")
-        .map((e) => ({
-          slot: e.slot,
-          name: e.name,
-          team: e.team,
-          pos: e.pos,
-          k: `opp:${key(e.name)}`,
-          proj: Number.isFinite(e.proj) && e.proj > 0 ? e.proj : null,
-          cv: CV[e.pos] ?? 0.55,
-          estimated: false,
-        }));
+        .map((e) => {
+          const playProb = PLAY_PROB[e.injuryStatus] ?? 1;
+          const proj = Number.isFinite(e.proj) && e.proj > 0 ? e.proj : null;
+          return {
+            slot: e.slot,
+            name: e.name,
+            team: e.team,
+            pos: e.pos,
+            k: `opp:${key(e.name)}`,
+            proj: proj != null ? Math.round(proj * playProb * 10) / 10 : null,
+            simProj: proj,
+            playProb,
+            cv: CV[e.pos] ?? 0.55,
+            estimated: false,
+          };
+        });
     }
     if (!oppRoster) return [];
     return oppRoster.starters.map(([name, team, pos], i) => {
@@ -151,11 +177,17 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
   const entryFor = (row) => {
     const l = resolveLive(row);
     return {
-      proj: row.proj || 0,
+      // if-he-plays projection; the sim applies playProb itself (bimodal)
+      proj: row.simProj ?? row.proj ?? 0,
+      playProb: row.playProb ?? 1,
       scored: Number.isFinite(l.scored) ? l.scored : 0,
       pctRemaining: Number.isFinite(l.pctRemaining) ? l.pctRemaining : 1,
       status: l.status || "notStarted",
       cv: row.cv,
+      // correlation metadata: same NFL game → shared factor in the sim
+      team: row.team || null,
+      pos: row.pos || null,
+      opp: row.team ? nflOpp(row.team) : null,
     };
   };
 
