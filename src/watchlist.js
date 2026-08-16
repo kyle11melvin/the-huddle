@@ -40,13 +40,16 @@ export function watchIntel(state, entry, owner) {
 
   const team = (poolRec && poolRec.team) || entry.team || "";
   const pos = (poolRec && poolRec.pos) || entry.pos || "";
-  const proj = poolRec && poolRec.proj > 0 ? poolRec.proj : null;
-  const owned = poolRec ? poolRec.percentOwned : null;
-  const rank =
-    (state.ecrIndex && state.ecrIndex[k]) ??
-    ((state.espn && state.espn.autoRanks && state.espn.autoRanks[k]) || null);
-
   const hasNflTeam = !!team;
+  // No NFL team → no projection, no rank, no fit math. ESPN projects unsigned
+  // veterans off last year's stats; showing "Tyreek Hill WR7, +27 better than
+  // your WRs" for a player who can't take a snap is worse than showing nothing.
+  const proj = hasNflTeam && poolRec && poolRec.proj > 0 ? poolRec.proj : null;
+  const owned = poolRec ? poolRec.percentOwned : null;
+  const rank = hasNflTeam
+    ? (state.ecrIndex && state.ecrIndex[k]) ??
+      ((state.espn && state.espn.autoRanks && state.espn.autoRanks[k]) || null)
+    : null;
   const week = state.week;
   const schedule = hasNflTeam ? nextOpponents(state, team, week, 3) : null;
   const byeWk = hasNflTeam ? Number(state.byes?.[team]) || null : null;

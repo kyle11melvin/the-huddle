@@ -1876,6 +1876,12 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 .wire-row { display: flex; align-items: center; gap: 11px; padding: 13px 16px; }
 .wire-name { font-weight: 700; font-size: 14px; flex: 1; min-width: 0; }
 
+/* Whole wire row is a watchlist toggle */
+.wire-row.clickable { cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
+.wire-row.clickable:hover { border-color: var(--gold); }
+.wire-row.clickable:hover .star-btn { color: var(--gold); transform: scale(1.15); }
+.wire-row.watching { border-color: rgba(255, 182, 18, 0.45); }
+
 .sug-reason {
   display: block;
   font-size: 11px;

@@ -2968,16 +2968,35 @@ export default function App() {
                   Paste a ranking set from the Data panel and this fills with the best genuinely-available players.
                 </EmptyState>
               )}
-              {topAvailable.map((p) => (
-                <div key={`${p.name}-${p.team}`} className="card wire-row">
-                  <span className="pos-chip" style={{ background: SLOT_COLOR[p.pos] || "var(--border-hi)" }}>
-                    {p.pos}
-                  </span>
-                  <span className="wire-name">{p.name}</span>
-                  <TeamChip abbr={p.team} />
-                  <span className="ecr-badge">{p.rank != null ? `#${p.rank}` : "—"}</span>
-                </div>
-              ))}
+              {topAvailable.map((p) => {
+                const starred = isInterested(state, p.name);
+                return (
+                  <div
+                    key={`${p.name}-${p.team}`}
+                    className={`card wire-row clickable ${starred ? "watching" : ""}`}
+                    role="button"
+                    tabIndex={0}
+                    title={starred ? "On your watchlist — click to remove" : "Click to add to your watchlist"}
+                    onClick={() => onToggleInterest({ name: p.name, team: p.team, pos: p.pos })}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onToggleInterest({ name: p.name, team: p.team, pos: p.pos });
+                      }
+                    }}
+                  >
+                    <span className="pos-chip" style={{ background: SLOT_COLOR[p.pos] || "var(--border-hi)" }}>
+                      {p.pos}
+                    </span>
+                    <span className="wire-name">{p.name}</span>
+                    <TeamChip abbr={p.team} />
+                    <span className="ecr-badge">{p.rank != null ? `#${p.rank}` : "—"}</span>
+                    <span className={`star-btn ${starred ? "on" : ""}`} aria-hidden="true">
+                      {starred ? "★" : "☆"}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

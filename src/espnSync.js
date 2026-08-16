@@ -278,6 +278,10 @@ function buildAutoRanks(pool) {
   const byPos = {};
   for (const p of pool) {
     if (!p.name || !p.pos || !(p.proj > 0)) continue;
+    // ESPN's model projects UNSIGNED veterans off historical stats (Tyreek
+    // Hill "WR7" with no team). A player who can't take a snap gets no rank —
+    // otherwise he squats on a slot and pushes every real player down one.
+    if (!p.proTeamId) continue;
     (byPos[p.pos] = byPos[p.pos] || []).push(p);
   }
   const out = {};
