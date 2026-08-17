@@ -85,7 +85,7 @@ import {
   setLiveEntry,
 } from "./lineup.js";
 import Gameday from "./components/Gameday.jsx";
-import { fetchLeague, applyEspnSync, summaryToText, liveOwner } from "./espnSync.js";
+import { fetchLeague, applyEspnSync, summaryToText, liveOwner, searchLeaguePlayers } from "./espnSync.js";
 import {
   fetchSchedule,
   applySchedule,
@@ -877,7 +877,81 @@ function ClaimCard({ claim, state, onEdit, onResult, onDelete }) {
   );
 }
 
-function WatchForm({ onAdd, onDone }) {
+/**
+ * Global player search — the "who owns this guy" box. One shared engine
+ * (searchLeaguePlayers) across all 10 rosters + the free-agent pool, so a
+ * name from an injury blurb resolves instantly instead of requiring a tour
+ * of every roster in the league browser.
+ */
+function PlayerSearchPanel({ state, onToggleInterest }) {
+  const [q, setQ] = useState("");
+  const results = useMemo(() => searchLeaguePlayers(state, q, 8), [state, q]);
+
+  return (
+    <div className="card psearch">
+      <div className="psearch-bar">
+        <span className="psearch-icon" aria-hidden="true">⌕</span>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Find any player — see who owns them…"
+          autoComplete="off"
+          spellCheck="false"
+          aria-label="Search all league players"
+        />
+        {q && (
+          <button className="psearch-clear" onClick={() => setQ("")} aria-label="Clear search">
+            ✕
+          </button>
+        )}
+      </div>
+      {q.trim().length >= 2 && results.length === 0 && (
+        <div className="psearch-empty">
+          No match in the league pool. If they're a deep stash, add them by name from the Watchlist tab.
+        </div>
+      )}
+      {results.length > 0 && (
+        <div className="psearch-results">
+          {results.map((r) => {
+            const starred = isInterested(state, r.name);
+            return (
+              <div key={`${r.name}-${r.team}`} className="psearch-row">
+                <span className="pos-chip" style={{ background: SLOT_COLOR[r.pos] || "var(--border-hi)" }}>
+                  {r.pos}
+                </span>
+                <span className="psearch-name">
+                  {r.name}
+                  {r.proj != null && <span className="psearch-proj">{r.proj} proj</span>}
+                </span>
+                <TeamChip abbr={r.team} />
+                <span className={`own-chip ${r.mine ? "mine" : r.owner ? "taken" : "free"}`}>
+                  {r.mine ? "YOUR ROSTER" : r.owner ? `Owned by ${r.owner}` : "FREE AGENT"}
+                </span>
+                {!r.mine && (
+                  <button
+                    className={`star-btn ${starred ? "on" : ""}`}
+                    title={
+                      starred
+                        ? "On your watchlist — click to remove"
+                        : r.owner
+                        ? "Track as a trade target (rostered — not claimable)"
+                        : "Track on your watchlist"
+                    }
+                    onClick={() => onToggleInterest({ name: r.name, team: r.team, pos: r.pos })}
+                  >
+                    {starred ? "★" : "☆"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WatchForm({ onAdd, onDone, search }) {
   const [form, setForm] = useState({ name: "", team: "", note: "" });
   const [err, setErr] = useState("");
   const submit = () => {
@@ -896,8 +970,8 @@ function WatchForm({ onAdd, onDone }) {
           value={form.name}
           onChange={(v) => setForm((f) => ({ ...f, name: v }))}
           onPick={(item) => setForm((f) => ({ ...f, name: item.name, team: item.team }))}
-          search={searchFreeAgents}
-          placeholder="Name — or type anything"
+          search={search || searchFreeAgents}
+          placeholder="Any player — rostered ones show their owner"
         />
       </label>
       <div className="field-row">
@@ -2140,16 +2214,29 @@ export default function App() {
     [state.players]
   );
 
-  /** Free-agent search that flags anyone already rostered in the league. */
-  const wireSearch = useCallback(
+  /** Shared global lookup shaped for Autocomplete rows: rostered players
+   *  surface with an owner badge instead of being invisible. */
+  const leagueSearch = useCallback(
     (q, limit) => {
-      return searchFreeAgents(q, limit).map((p) => {
-        const owner = ownerOf(p.name);
-        return { ...p, badge: owner && owner !== MY_TEAM ? "TAKEN" : null, owner };
-      });
+      const live = searchLeaguePlayers(state, q, limit);
+      if (live.length) {
+        return live.map((r) => ({
+          name: r.name,
+          team: r.team,
+          pos: r.pos,
+          owner: r.owner,
+          badge: r.mine ? "YOURS" : r.owner ? `OWNED · ${r.owner}` : null,
+        }));
+      }
+      // deep-stash fallback: the static FA name list still autocompletes
+      return searchFreeAgents(q, limit);
     },
-    [ownerOf]
+    [state]
   );
+
+  /** Claim-form search: same engine (claims only make sense for free agents,
+   *  so the owner badge is the "don't bother" signal). */
+  const wireSearch = leagueSearch;
 
   const rowProps = {
     week,
@@ -2318,6 +2405,8 @@ export default function App() {
               move menu. Tap the card itself for the full breakdown, status, and this week's matchup. Blue rank =
               expert consensus (ECR) · ★ = matchup grade for {weekLabel(week)}.
             </div>
+
+            <PlayerSearchPanel state={state} onToggleInterest={onToggleInterest} />
 
             <LeagueBrowser
               state={state}
@@ -2766,7 +2855,7 @@ export default function App() {
               the way a hand-kept list does. Star players from the league browser on the Roster tab.
             </div>
 
-            {watchOpen && <WatchForm onAdd={onAddWatch} onDone={() => setWatchOpen(false)} />}
+            {watchOpen && <WatchForm onAdd={onAddWatch} onDone={() => setWatchOpen(false)} search={leagueSearch} />}
 
 
             {suggestions.length > 0 && (

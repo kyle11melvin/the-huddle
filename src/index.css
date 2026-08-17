@@ -1873,6 +1873,46 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 /* ------------------------------------------------------------------ wire -- */
 
+/* Global player search — who owns this guy? */
+.psearch { padding: 12px 14px; }
+.psearch-bar { display: flex; align-items: center; gap: 9px; }
+.psearch-icon { font-size: 17px; color: var(--text-dim); }
+.psearch-bar input { flex: 1; min-width: 0; }
+.psearch-clear { color: var(--text-dim); font-size: 13px; padding: 4px 6px; }
+.psearch-clear:hover { color: var(--text); }
+.psearch-empty { margin-top: 10px; font-size: 12px; color: var(--text-dim); font-style: italic; }
+.psearch-results { margin-top: 10px; display: flex; flex-direction: column; }
+.psearch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 2px;
+  border-top: 1px solid var(--border);
+}
+.psearch-name { font-weight: 700; font-size: 14px; flex: 1; min-width: 0; }
+.psearch-proj {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+.own-chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-hi);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.own-chip.free { color: var(--positive); border-color: rgba(52, 211, 153, 0.4); }
+.own-chip.taken { color: var(--gold); border-color: rgba(255, 182, 18, 0.35); }
+.own-chip.mine { color: var(--accent); border-color: rgba(96, 165, 250, 0.4); }
+
 .wire-row { display: flex; align-items: center; gap: 11px; padding: 13px 16px; }
 .wire-name { font-weight: 700; font-size: 14px; flex: 1; min-width: 0; }
 

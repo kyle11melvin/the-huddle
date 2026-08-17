@@ -12,7 +12,7 @@
 // ============================================================================
 
 import { SLOT_DEFS, BENCH_SIZE, IR_SIZE, emptyZones, newPlayerId } from "./lineup.js";
-import { LEAGUE_ROSTERS } from "./data/leagueRosters.js";
+import { LEAGUE_ROSTERS, MY_TEAM } from "./data/leagueRosters.js";
 
 // ESPN proTeamId → abbreviation (stable ESPN internal ids)
 export const PRO_TEAM = {
@@ -271,6 +271,84 @@ export function isLiveFreeAgent(state, playerName) {
   if (!state.espn) return null; // unknown — no sync yet
   const k = normName(playerName);
   return !state.espn.teams.some((t) => t.roster.some((e) => normName(e.name) === k));
+}
+
+/**
+ * Global player lookup — THE shared search engine. Case-insensitive partial
+ * match across every player the league knows about: all 10 rosters (with
+ * owner) plus the full ESPN pool (free agents). One source of truth for the
+ * home search panel, the watchlist add box, and the claim form.
+ *
+ * @returns Array<{name, pos, team, owner: string|null, mine: boolean,
+ *                 proj: number|null, percentOwned: number|null}>
+ *          owner null = free agent; mine = on YOUR roster.
+ */
+export function searchLeaguePlayers(state, query, limit = 10) {
+  const q = normName(query);
+  if (!q || q.length < 2) return [];
+
+  const found = new Map(); // normName -> record (rosters first: they know the owner)
+  if (state.espn && state.espn.teams && state.espn.teams.length) {
+    for (const t of state.espn.teams) {
+      const mine = t.id === state.espn.myTeamId;
+      for (const e of t.roster || []) {
+        const k = normName(e.name);
+        if (!k.includes(q) || found.has(k)) continue;
+        found.set(k, {
+          name: e.name,
+          pos: e.pos,
+          team: e.team || "",
+          owner: mine ? null : t.mapped || t.name,
+          mine,
+          proj: Number.isFinite(e.proj) ? e.proj : null,
+          percentOwned: e.percentOwned ?? null,
+        });
+      }
+    }
+    for (const p of state.espn.pool || []) {
+      const k = normName(p.name);
+      if (!k.includes(q) || found.has(k)) continue;
+      // onTeamId > 0 without a roster hit shouldn't happen, but stay honest.
+      const owningTeam = p.onTeamId ? (state.espn.teams || []).find((t) => t.id === p.onTeamId) : null;
+      found.set(k, {
+        name: p.name,
+        pos: p.pos,
+        team: p.team || "",
+        owner: owningTeam ? owningTeam.mapped || owningTeam.name : null,
+        mine: !!owningTeam && owningTeam.id === state.espn.myTeamId,
+        proj: Number.isFinite(p.proj) ? p.proj : null,
+        percentOwned: p.percentOwned ?? null,
+      });
+    }
+  } else {
+    // Offline fallback: the hand-transcribed snapshot (ages with every trade).
+    for (const t of LEAGUE_ROSTERS) {
+      for (const g of [t.starters, t.bench, t.ir]) {
+        for (const [name, team, pos] of g || []) {
+          const k = normName(name);
+          if (!k.includes(q) || found.has(k)) continue;
+          found.set(k, {
+            name,
+            pos,
+            team: team || "",
+            owner: t.team === MY_TEAM ? null : t.team,
+            mine: t.team === MY_TEAM,
+            proj: null,
+            percentOwned: null,
+          });
+        }
+      }
+    }
+  }
+
+  const res = [...found.values()];
+  res.sort((a, b) => {
+    const as = normName(a.name).startsWith(q) ? 0 : 1;
+    const bs = normName(b.name).startsWith(q) ? 0 : 1;
+    if (as !== bs) return as - bs;
+    return (b.percentOwned ?? 0) - (a.percentOwned ?? 0);
+  });
+  return res.slice(0, limit);
 }
 
 /** normalizedName -> position rank, from projection order within each position. */
