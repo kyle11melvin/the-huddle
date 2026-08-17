@@ -13,6 +13,7 @@
 
 import { SLOT_DEFS, BENCH_SIZE, IR_SIZE, emptyZones, newPlayerId } from "./lineup.js";
 import { LEAGUE_ROSTERS, MY_TEAM } from "./data/leagueRosters.js";
+import { authHeaders, NO_TOKEN_ERROR } from "./authToken.js";
 
 // ESPN proTeamId → abbreviation (stable ESPN internal ids)
 export const PRO_TEAM = {
@@ -46,11 +47,16 @@ export function matchLeagueTeamName(espnName) {
 export async function fetchLeague(fresh = false) {
   // Vite's dev server has no /api routes — hit production directly there.
   const base = import.meta.env.DEV ? "https://the-huddle-hq.vercel.app" : "";
-  // /api/espn sits behind a 30s edge cache. `fresh` busts it — required right
-  // after a lineup write, when a cached pre-write snapshot would revert the
-  // app's picture and re-trigger the drift guard.
+  // /api/espn sits behind a 30s private cache. `fresh` busts it — required
+  // right after a lineup write, when a cached pre-write snapshot would revert
+  // the app's picture and re-trigger the drift guard.
   const buster = fresh ? `?fresh=${Date.now()}` : "";
-  const r = await fetch(`${base}/api/espn${buster}`, { cache: "no-store" });
+  const headers = authHeaders();
+  if (!headers) throw new Error(NO_TOKEN_ERROR);
+  const r = await fetch(`${base}/api/espn${buster}`, { cache: "no-store", headers });
+  if (r.status === 401) {
+    throw new Error("Huddle token rejected — check the token in Import & share.");
+  }
   if (!r.ok) throw new Error(`ESPN endpoint returned ${r.status}`);
   return r.json();
 }

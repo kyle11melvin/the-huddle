@@ -9,7 +9,13 @@
 // so the client can surface it.
 // ============================================================================
 
+import { applyCors, rejectUnknownParams, TIMEOUT_MS, isAbort } from "./_auth.js";
+
 const BASE = "https://api.the-odds-api.com/v4/sports/americanfootball_nfl";
+// Stop sweeping when the month's credits get this low. The sweep is an
+// enhancement; being unable to price ANY player for the rest of the month
+// because one afternoon drained the tier is the failure worth avoiding.
+const CREDIT_FLOOR = 50;
 const MARKETS = "player_reception_yds,player_receptions,player_rush_yds,player_rush_attempts,player_pass_yds,player_pass_tds,player_anytime_td";
 const MARKET_KEY = {
   player_reception_yds: "recYds",
@@ -23,8 +29,12 @@ const MARKET_KEY = {
 const norm = (s) => (s || "").toLowerCase().replace(/[^a-z]/g, "");
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  applyCors(req, res, "GET,OPTIONS");
   if (req.method === "OPTIONS") return res.status(204).end();
+  // The edge cache is this route's entire budget guard, and the CDN cache key
+  // is the full URL — so an unknown param is a free cache miss and a fresh
+  // ~90-credit sweep. This route takes no params at all.
+  if (!rejectUnknownParams(req, res, [])) return;
 
   const key = process.env.ODDS_API_KEY;
   if (!key) {
@@ -33,7 +43,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const evR = await fetch(`${BASE}/events?apiKey=${key}`, { cache: "no-store" });
+    const evR = await fetch(`${BASE}/events?apiKey=${key}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
     if (!evR.ok) {
       return res.status(502).send(JSON.stringify({ configured: true, error: `Odds API events returned ${evR.status}` }));
     }
@@ -50,13 +63,30 @@ export default async function handler(req, res) {
 
     const players = new Map(); // norm name -> {name, props}
     let remaining = null;
+    let partial = false;
+    let swept = 0;
 
     for (const ev of soon) {
+      // Bail before spending, not after: each event costs ~7 credits, so a
+      // sweep that starts under the floor could push the tier to zero and
+      // take the rest of the month's pricing down with it.
+      if (remaining != null && Number(remaining) < CREDIT_FLOOR) {
+        partial = true;
+        break;
+      }
       const r = await fetch(
         `${BASE}/events/${ev.id}/odds?apiKey=${key}&regions=us&markets=${MARKETS}&oddsFormat=american`,
-        { cache: "no-store" }
-      );
+        { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) }
+      ).catch((e) => {
+        if (isAbort(e)) return null; // one slow event shouldn't sink the sweep
+        throw e;
+      });
+      if (!r) {
+        partial = true;
+        continue;
+      }
       remaining = r.headers.get("x-requests-remaining") || remaining;
+      swept++;
       if (!r.ok) continue; // a single event without props shouldn't kill the sweep
       const data = await r.json();
 
@@ -89,12 +119,19 @@ export default async function handler(req, res) {
       JSON.stringify({
         configured: true,
         events: soon.length,
+        eventsSwept: swept,
+        // true = we stopped early (credit floor or a timeout); the players
+        // below are real, the set is just incomplete.
+        partial,
         players: [...players.values()].filter((p) => Object.keys(p.props).length > 0),
         remaining,
         fetchedAt: Date.now(),
       })
     );
   } catch (err) {
+    if (isAbort(err)) {
+      return res.status(504).send(JSON.stringify({ configured: true, error: "Odds API timed out (5s)." }));
+    }
     return res.status(502).send(JSON.stringify({ configured: true, error: String(err && err.message) }));
   }
 }

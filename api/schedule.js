@@ -11,27 +11,51 @@
 // Cached hard at the edge: the NFL schedule changes ~never mid-season.
 // ============================================================================
 
+import { applyCors, rejectUnknownParams, TIMEOUT_MS } from "./_auth.js";
+
 const WEEKS = 18;
+// 18 simultaneous requests is a burst ESPN can rate-limit (and every 429 is
+// a null week, which is exactly what poisons the bye derivation).
+const CONCURRENCY = 4;
 
 const FIX = { WAS: "WSH", JAC: "JAX", LA: "LAR" };
 const fixAbbr = (a) => FIX[a] || a;
 
+/** Run `worker` over `items` with at most `limit` in flight, preserving order. */
+async function mapLimit(items, limit, worker) {
+  const out = new Array(items.length);
+  let next = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await worker(items[i], i);
+    }
+  });
+  await Promise.all(runners);
+  return out;
+}
+
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  applyCors(req, res, "GET,OPTIONS");
   if (req.method === "OPTIONS") return res.status(204).end();
+  // Same cache-key reasoning as /api/odds: an unknown param is a free cache
+  // miss, and each miss fires a full 18-week ESPN sweep.
+  if (!rejectUnknownParams(req, res, [])) return;
 
   const season = process.env.ESPN_SEASON || "2026";
 
   try {
-    const weekPayloads = await Promise.all(
-      Array.from({ length: WEEKS }, (_, i) =>
+    const weekPayloads = await mapLimit(
+      Array.from({ length: WEEKS }, (_, i) => i + 1),
+      CONCURRENCY,
+      (wk) =>
         fetch(
-          `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${i + 1}&dates=${season}`,
-          { cache: "no-store" }
+          `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${wk}&dates=${season}`,
+          { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) }
         )
           .then((r) => (r.ok ? r.json() : null))
           .catch(() => null)
-      )
     );
 
     // opps[week][ABBR] = "OPP" or "@OPP"

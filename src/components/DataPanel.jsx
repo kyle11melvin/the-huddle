@@ -4,6 +4,7 @@ import { parseRankings, parseByes, planEcrUpdates, buildEcrIndex } from "../impo
 import { parseProps, leagueScoring } from "../props.js";
 import { shareUrl, decodeShare } from "../share.js";
 import { POSITIONS } from "../lineup.js";
+import { setToken, hasToken } from "../authToken.js";
 
 // Bye weeks left this list on purpose: they auto-fill from the NFL schedule
 // feed now, so there is nothing manual left to do there.
@@ -47,6 +48,17 @@ export default function DataPanel({
       return "";
     }
   }, [state]);
+
+  // ---- write token (stored per-device, never rendered back) ----
+  const [tokenDraft, setTokenDraft] = useState("");
+  const [tokenSet, setTokenSet] = useState(() => hasToken());
+  const saveTokenValue = () => {
+    const res = setToken(tokenDraft);
+    if (!res.ok) return flash(res.error);
+    setTokenDraft("");
+    setTokenSet(hasToken());
+    flash(tokenDraft.trim() ? "Token saved on this device." : "Token cleared from this device.");
+  };
 
   const copyText = async (text, which) => {
     try {
@@ -264,6 +276,33 @@ export default function DataPanel({
               >
                 Load team
               </button>
+
+              <div className="modal-section-label">Huddle write token</div>
+              <p className="panel-note">
+                Unlocks ESPN sync and lineup writes on this device. Without it the API routes reject every request —
+                which is what stops anyone else on the internet from moving your players. Paste it once per device;
+                it's stored only in this browser and never leaves it except as a request header.
+              </p>
+              <div className="share-box">
+                <input
+                  type="password"
+                  value={tokenDraft}
+                  onChange={(e) => setTokenDraft(e.target.value)}
+                  placeholder={tokenSet ? "••••••••  (a token is set)" : "Paste your token…"}
+                  autoComplete="off"
+                  spellCheck="false"
+                />
+                <button
+                  className="btn-secondary"
+                  onClick={saveTokenValue}
+                  disabled={!tokenDraft.trim() && !tokenSet}
+                >
+                  {tokenDraft.trim() ? "Save" : "Clear"}
+                </button>
+              </div>
+              <div className="panel-meta">
+                {tokenSet ? "✓ Token set on this device" : "No token on this device — sync and writes will fail"}
+              </div>
             </>
           )}
 

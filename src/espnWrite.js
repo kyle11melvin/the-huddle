@@ -4,6 +4,8 @@
 // revert them — the app and ESPN agree because they're the same roster.
 // ============================================================================
 
+import { authHeaders, NO_TOKEN_ERROR } from "./authToken.js";
+
 // App zones → ESPN lineup slot ids (verified against the captured payload).
 const SLOT_ID = { QB: 0, RB: 2, WR: 4, TE: 6, "D/ST": 16, K: 17, FLEX: 23 };
 export const BENCH_SLOT = 20;
@@ -38,14 +40,20 @@ export async function writeLineupMove(state, moves) {
   if (!items.length) return { ok: true, noop: true };
   if (items.length > 10) return { ok: false, error: "Too many moves for one ESPN transaction (max 10)." };
 
+  const auth = authHeaders();
+  if (!auth) return { ok: false, error: NO_TOKEN_ERROR };
+
   const base = import.meta.env.DEV ? "https://the-huddle-hq.vercel.app" : "";
   try {
     const r = await fetch(`${base}/api/espn-write`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify({ items, scoringPeriodId: parseInt(state.week, 10) || undefined }),
     });
     const data = await r.json().catch(() => ({}));
+    if (r.status === 401) {
+      return { ok: false, error: "Huddle token rejected — check the token in Import & share." };
+    }
     if (!r.ok || !data.ok) return { ok: false, error: data.error || `Write failed (${r.status}).` };
     return { ok: true };
   } catch (e) {

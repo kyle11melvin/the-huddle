@@ -17,6 +17,16 @@
 //   3. both sides of a swap ship in ONE transaction (atomic)
 // ============================================================================
 
+import {
+  applyCors,
+  isAuthorized,
+  sendUnauthorized,
+  rejectUnknownParams,
+  TIMEOUT_MS,
+  WRITE_TIMEOUT_MS,
+  isAbort,
+} from "./_auth.js";
+
 const READ = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons";
 const WRITE = "https://lm-api-writes.fantasy.espn.com/apis/v3/games/ffl/seasons";
 // Captured build hash — tried as fallback if the bare call is rejected.
@@ -29,10 +39,14 @@ function send(res, status, body) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  applyCors(req, res, "POST,OPTIONS");
   if (req.method === "OPTIONS") return res.status(204).end();
+
+  // The gate comes before the method check, the env read and the body parse:
+  // this route can rewrite a real ESPN lineup using the server's own cookies,
+  // so an unauthenticated caller must never reach any of that.
+  if (!isAuthorized(req)) return sendUnauthorized(res);
+  if (!rejectUnknownParams(req, res, [])) return;
   if (req.method !== "POST") return send(res, 405, { error: "POST only" });
 
   const leagueId = process.env.ESPN_LEAGUE_ID;
@@ -85,6 +99,7 @@ export default async function handler(req, res) {
     const leagueR = await fetch(`${READ}/${season}/segments/0/leagues/${leagueId}?view=mRoster&view=mTeam`, {
       headers,
       cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!leagueR.ok) return send(res, 502, { ok: false, error: `ESPN read failed (${leagueR.status}) — cookies may have expired.` });
     const league = await leagueR.json();
@@ -95,7 +110,7 @@ export default async function handler(req, res) {
     const lockWeek = body.scoringPeriodId || league.scoringPeriodId || 1;
     const sbR = await fetch(
       `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${lockWeek}&dates=${season}`,
-      { cache: "no-store" }
+      { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) }
     )
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
@@ -183,6 +198,7 @@ export default async function handler(req, res) {
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         cache: "no-store",
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
 
     let w = await post("");
@@ -207,6 +223,16 @@ export default async function handler(req, res) {
     audit("success", { scoringPeriodId });
     return send(res, 200, { ok: true, teamId: me.id, scoringPeriodId });
   } catch (err) {
+    if (isAbort(err)) {
+      // Explicit, reported failure. A write that timed out may or may not
+      // have landed at ESPN, so say so — the client re-syncs on failure and
+      // the next screen shows the truth.
+      audit("timeout", { message: String(err && err.message) });
+      return send(res, 504, {
+        ok: false,
+        error: "ESPN didn't respond in time. Re-syncing — check your lineup before retrying.",
+      });
+    }
     audit("error", { message: String(err && err.message) });
     return send(res, 502, { ok: false, error: String(err && err.message) });
   }

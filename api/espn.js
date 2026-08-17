@@ -17,6 +17,8 @@
 // why the manual paths stay in place rather than being replaced.
 // ============================================================================
 
+import { applyCors, isAuthorized, sendUnauthorized, rejectUnknownParams, TIMEOUT_MS, isAbort } from "./_auth.js";
+
 const BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons";
 
 // mRoster: who is on each team · mTeam: team names/owners · mMatchup: schedule
@@ -31,12 +33,15 @@ const POS = { 1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "D/ST" };
 
 function send(res, status, body, cacheSeconds) {
   res.setHeader("Content-Type", "application/json");
-  // Short edge cache on successful league reads: Gameday polls every 2 min,
-  // and multiple open tabs shouldn't each hammer ESPN. Post-write resyncs
-  // bypass it with a ?fresh= cache-buster so drift checks never see stale.
+  // PRIVATE cache only. This response is now token-gated, and a shared/CDN
+  // cache keyed on URL alone would happily replay an authorized 200 to an
+  // unauthenticated caller — the edge serves it without ever invoking this
+  // function, silently undoing the auth check. `private` keeps the browser
+  // cache (which still covers the 2-min Gameday poll and multiple tabs in
+  // the same browser) while forbidding any shared cache from storing it.
   res.setHeader(
     "Cache-Control",
-    cacheSeconds ? `s-maxage=${cacheSeconds}, stale-while-revalidate=${cacheSeconds * 2}` : "no-store"
+    cacheSeconds ? `private, max-age=${cacheSeconds}` : "no-store"
   );
   res.status(status).send(JSON.stringify(body));
 }
@@ -66,8 +71,15 @@ function extractScoring(settings) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  applyCors(req, res, "GET,OPTIONS");
   if (req.method === "OPTIONS") return res.status(204).end();
+
+  // First thing after CORS: an unauthorized caller must cost us nothing —
+  // no ESPN fetch, no cookie read, no ESPN rate-limit budget.
+  if (!isAuthorized(req)) return sendUnauthorized(res);
+  // `fresh` busts the client cache after a write; `week` scopes the read;
+  // `debugScoring` dumps raw mSettings for auditing the scoring extraction.
+  if (!rejectUnknownParams(req, res, ["fresh", "week", "debugScoring"])) return;
 
   const leagueId = process.env.ESPN_LEAGUE_ID;
   const season = process.env.ESPN_SEASON || "2026";
@@ -116,13 +128,14 @@ export default async function handler(req, res) {
         }),
       },
       cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     }
   )
     .then((r) => (r.ok ? r.json() : null))
-    .catch(() => null);
+    .catch(() => null); // pool is an enhancement — a slow pool must not fail the sync
 
   try {
-    const r = await fetch(url, { headers, cache: "no-store" });
+    const r = await fetch(url, { headers, cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (r.status === 401) {
       return send(res, 200, {
         configured: false,
@@ -188,7 +201,7 @@ export default async function handler(req, res) {
     // scoring period is the week whose games and odds we actually want.
     const sb = await fetch(
       `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${data.scoringPeriodId || 1}&dates=${season}`,
-      { cache: "no-store" }
+      { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) }
     )
       .then((x) => (x.ok ? x.json() : null))
       .catch(() => null);
@@ -286,6 +299,9 @@ export default async function handler(req, res) {
       fetchedAt: Date.now(),
     }, 30);
   } catch (err) {
+    if (isAbort(err)) {
+      return send(res, 504, { configured: true, error: "ESPN took too long to respond (5s timeout) — try again." });
+    }
     return send(res, 502, { configured: true, error: String(err && err.message) });
   }
 }
