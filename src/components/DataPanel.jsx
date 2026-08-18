@@ -41,13 +41,17 @@ export default function DataPanel({
   const [joinCode, setJoinCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // Keyed on what share.js actually encodes, not the whole state — this
+  // base64-encodes the entire team, and on `state` it re-ran on every
+  // keystroke anywhere in the app while this panel was open.
   const link = useMemo(() => {
     try {
       return shareUrl(state);
     } catch {
       return "";
     }
-  }, [state]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.players, state.lineup, state.bench, state.ir, state.watch, state.calls, state.claims, state.faab, state.week, state.byes, state.ecrIndex, state.analytics, state.matchups]);
 
   // ---- write token (stored per-device, never rendered back) ----
   const [tokenDraft, setTokenDraft] = useState("");

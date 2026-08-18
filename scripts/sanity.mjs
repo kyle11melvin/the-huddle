@@ -566,5 +566,52 @@ check(
   currentMatchupPeriod({ status: { currentMatchupPeriod: 5 }, scoringPeriodId: 3 }) === 5
 );
 
+// ---- 20. the memo-key narrowing must not change the recommendation ----
+// LineupCheck now passes a reconstructed { ...state, ...deferredInput } rather
+// than `state`. Identical inputs must produce byte-identical output, or the
+// speed-up changed the advice.
+const scanInput = (s) => ({
+  lineup: s.lineup,
+  bench: s.bench,
+  players: s.players,
+  analytics: s.analytics,
+  byes: s.byes,
+  ecrIndex: s.ecrIndex,
+  schedule: s.schedule,
+  espn: s.espn,
+  matchups: s.matchups,
+});
+// The bench QB is genuinely better here, so this state DOES yield a move —
+// comparing two empty arrays would prove nothing.
+const perfState = mkLineupState();
+perfState.analytics = { a: { 1: { proj: 12, projSource: "espn" } }, b: { 1: { proj: 25, projSource: "espn" } } };
+const fullOut = suggestLineup(perfState, "1", null);
+check(
+  "the identity fixture actually produces a recommendation",
+  fullOut.length === 1 && fullOut[0].inId === "b",
+  `moves: ${JSON.stringify(fullOut.map((m) => `${m.inName} over ${m.outName}`))}`
+);
+const narrowedOut = suggestLineup({ ...perfState, ...scanInput(perfState) }, "1", null);
+check(
+  "narrowed scan input produces an identical recommendation",
+  JSON.stringify(fullOut) === JSON.stringify(narrowedOut),
+  `full ${JSON.stringify(fullOut)} vs narrowed ${JSON.stringify(narrowedOut)}`
+);
+// and with an opponent, where the win-prob scan actually runs
+const oppForPerf = [
+  { id: "x1", name: "Opp QB", team: "KC", pos: "QB", opp: "BUF", mean: 18, sd: 6 },
+  { id: "x2", name: "Opp WR", team: "KC", pos: "WR", opp: "BUF", mean: 13, sd: 7 },
+];
+check(
+  "narrowed scan input is identical in win-probability mode too",
+  JSON.stringify(suggestLineup(perfState, "1", oppForPerf)) ===
+    JSON.stringify(suggestLineup({ ...perfState, ...scanInput(perfState) }, "1", oppForPerf))
+);
+
+// NOTE: the review's proposed debounce for the localStorage write was measured
+// and dropped — 0.4ms stringify + 0.1ms setItem on a 66 KB payload is not a
+// bottleneck, and debouncing would only add a window to lose a write. There is
+// no debounce to assert against; the write stays immediate.
+
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
@@ -20,6 +20,97 @@ const STATUSES = [
 const pct = (n) => `${Math.round(n * 100)}%`;
 const key = (s) => (s || "").toLowerCase().replace(/[^a-z]/g, "");
 
+// Live first (that's where the game is), then upcoming, finals last — and
+// inside each group, familiar slot order so the QB is always up top.
+const STATUS_RANK = { inProgress: 0, notStarted: 1, final: 2 };
+const SLOT_RANK = { QB: 0, RB: 1, WR: 2, TE: 3, FLEX: 4, "D/ST": 5, K: 6 };
+
+const kickoffOf = (l) => {
+  const d = (l && l.detail) || "";
+  const m = /-\s*(.+)$/.exec(d);
+  return (m ? m[1] : d).replace(/\s*(EDT|EST|PT|CT|MT)\s*$/, "").trim();
+};
+
+/**
+ * MODULE SCOPE, deliberately. Defined inside Gameday's body this was a new
+ * component *type* on every render, so React unmounted and remounted every
+ * row — which destroyed the fallback "Scored" input on each keystroke and
+ * took focus with it. Rows receive their already-resolved live entry.
+ */
+const Row = ({ row, l, autoMode, isOpen, onToggle, onSetLive, week }) => {
+  const status = l.status || "notStarted";
+  const logo = teamLogoUrl(row.team);
+  if (!row.name) {
+    return (
+      <div className="gd-row empty">
+        <span className="gd-slot">{row.slot}</span>
+        <span className="gd-name dim">Empty</span>
+      </div>
+    );
+  }
+  return (
+    <>
+      <div
+        className={`gd-row ${status}`}
+        onClick={() => !autoMode && onToggle(isOpen ? null : row.k)}
+        style={autoMode ? { cursor: "default" } : undefined}
+      >
+        <span className="gd-slot">{row.slot}</span>
+        <span className="gd-logo">{logo && <img src={logo} alt="" loading="lazy" />}</span>
+        <span className="gd-name">
+          {status === "inProgress" && <span className="gd-live-dot" />}
+          {row.name}
+        </span>
+        <span className="gd-proj">{row.proj != null ? row.proj : "—"}</span>
+        <span className={`gd-score ${status === "final" ? "final" : ""}`}>
+          {Number.isFinite(l.scored) ? l.scored : "—"}
+        </span>
+        <span className={`gd-status ${status}`} title={l.detail || ""}>
+          {status === "final"
+            ? "✓"
+            : status === "inProgress"
+            ? `${Math.round((1 - (l.pctRemaining ?? 1)) * 100)}%`
+            : kickoffOf(l) || "—"}
+        </span>
+      </div>
+      {isOpen && (
+        <div className="gd-edit">
+          <label className="field" style={{ width: 92 }}>
+            <span className="field-label">Scored</span>
+            <input
+              inputMode="decimal"
+              value={l.scored ?? ""}
+              onChange={(e) => onSetLive(week, row.k, { scored: parseFloat(e.target.value) || 0 })}
+            />
+          </label>
+          <label className="field" style={{ width: 120 }}>
+            <span className="field-label">Status</span>
+            <select value={status} onChange={(e) => onSetLive(week, row.k, { status: e.target.value })}>
+              {STATUSES.map(([v, t]) => (
+                <option key={v} value={v}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+          {status === "inProgress" && (
+            <label className="field" style={{ flex: 1, minWidth: 130 }}>
+              <span className="field-label">Game left · {Math.round((l.pctRemaining ?? 1) * 100)}%</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={Math.round((l.pctRemaining ?? 1) * 100)}
+                onChange={(e) => onSetLive(week, row.k, { pctRemaining: Number(e.target.value) / 100 })}
+              />
+            </label>
+          )}
+        </div>
+      )}
+    </>
+  );
+};
+
 /**
  * Live matchup view. The number that matters is "chance to win given who still
  * has football left" — a lead means nothing if the other side has three players
@@ -28,11 +119,22 @@ const key = (s) => (s || "").toLowerCase().replace(/[^a-z]/g, "");
 export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefresh }) {
   // While any NFL game is being played, poll ESPN so scores and the win bar
   // move on their own — no tapping required.
+  // The 120s live poll. Depending on [state, onRefresh] meant the interval was
+  // torn down and recreated on every state change and every syncEspn identity
+  // change — i.e. constantly — so it never survived long enough to fire once.
+  // During a live Sunday the app looked like it was auto-refreshing and wasn't.
+  // Depend on a BOOLEAN, and hold the callback in a ref so its identity churn
+  // can't reset the timer.
+  const gamesLive = anyGameLive(state);
+  const refreshRef = useRef(onRefresh);
   useEffect(() => {
-    if (!onRefresh || !anyGameLive(state)) return;
-    const t = setInterval(() => onRefresh(true), 120000);
+    refreshRef.current = onRefresh;
+  }, [onRefresh]);
+  useEffect(() => {
+    if (!gamesLive) return undefined;
+    const t = setInterval(() => refreshRef.current && refreshRef.current(true), 120000);
     return () => clearInterval(t);
-  }, [state, onRefresh]);
+  }, [gamesLive]);
   const [editing, setEditing] = useState(null);
   const board = (state.matchups && state.matchups[week]) || {};
   const oppTeam = board.oppTeam || "";
@@ -193,37 +295,53 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
 
   // Left/right sides: mine when viewing my matchup, otherwise any two teams
   // from the league board — same simulation either way.
-  const leftRows = viewingMine ? mySide : teamRows(selected.awayName, "l");
-  const rightRows = viewingMine ? oppSide : teamRows(selected.homeName, "r");
+  const leftRows = useMemo(
+    () => (viewingMine ? mySide : teamRows(selected.awayName, "l")),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [viewingMine, mySide, selected, state.espn, week]
+  );
+  const rightRows = useMemo(
+    () => (viewingMine ? oppSide : teamRows(selected.homeName, "r")),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [viewingMine, oppSide, selected, state.espn, week]
+  );
   const leftName = viewingMine ? MY_TEAM : selected.awayName;
   const rightName = viewingMine ? oppTeam || (selected && selected.homeName) || "" : selected.homeName;
 
-  const myEntries = leftRows.filter((r) => r.name && r.proj != null).map(entryFor);
-  const oppEntries = rightRows.filter((r) => r.name && r.proj != null).map(entryFor);
-  const sim = myEntries.length && oppEntries.length ? simulateLive(myEntries, oppEntries) : null;
-  const narrative = liveNarrative(sim);
-
-  // Live sync makes manual status entry obsolete — the editor only exists as
-  // a fallback when ESPN isn't connected. Rows are never hidden; status is
-  // pure styling: live pulse, dimmed final with a check, kickoff for upcoming.
-  const kickoffOf = (l) => {
-    const d = l.detail || "";
-    const m = /-\s*(.+)$/.exec(d);
-    return (m ? m[1] : d).replace(/\s*(EDT|EST|PT|CT|MT)\s*$/, "").trim();
-  };
-
-  // Live first (that's where the game is), then upcoming, finals last —
-  // and inside each group, familiar slot order so the QB is always up top.
-  const STATUS_RANK = { inProgress: 0, notStarted: 1, final: 2 };
-  const SLOT_RANK = { QB: 0, RB: 1, WR: 2, TE: 3, FLEX: 4, "D/ST": 5, K: 6 };
-  const sortRows = (rows) =>
+  // Resolve each row's live entry ONCE per data change, then sort on it.
+  // sortRows used to call resolveLive inside the comparator (O(n log n) live
+  // lookups per render), and the 20k-draw sim below ran on every render —
+  // including ones triggered by something as unrelated as a toast expiring.
+  const withLive = useCallback(
+    (rows) => rows.map((r) => ({ ...r, l: resolveLive(r) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [autoMode, live, state.espn]
+  );
+  const sortResolved = (rows) =>
     [...rows].sort((a, b) => {
-      const s =
-        (STATUS_RANK[resolveLive(a).status || "notStarted"] ?? 1) -
-        (STATUS_RANK[resolveLive(b).status || "notStarted"] ?? 1);
+      const s = (STATUS_RANK[a.l.status || "notStarted"] ?? 1) - (STATUS_RANK[b.l.status || "notStarted"] ?? 1);
       if (s !== 0) return s;
       return (SLOT_RANK[a.slot] ?? 9) - (SLOT_RANK[b.slot] ?? 9);
     });
+
+  const leftResolved = useMemo(() => sortResolved(withLive(leftRows)), [leftRows, withLive]);
+  const rightResolved = useMemo(() => sortResolved(withLive(rightRows)), [rightRows, withLive]);
+
+  const myEntries = useMemo(
+    () => leftResolved.filter((r) => r.name && r.proj != null).map(entryFor),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [leftResolved, state.schedule, week]
+  );
+  const oppEntries = useMemo(
+    () => rightResolved.filter((r) => r.name && r.proj != null).map(entryFor),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rightResolved, state.schedule, week]
+  );
+  const sim = useMemo(
+    () => (myEntries.length && oppEntries.length ? simulateLive(myEntries, oppEntries) : null),
+    [myEntries, oppEntries]
+  );
+  const narrative = useMemo(() => liveNarrative(sim), [sim]);
 
   const Row = ({ row, side }) => {
     const l = resolveLive(row);
@@ -397,8 +515,17 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               <span>PTS</span>
               <span>ST</span>
             </div>
-            {sortRows(leftRows).map((r) => (
-              <Row key={r.k} row={r} side="me" />
+            {leftResolved.map((r) => (
+              <Row
+                key={r.k}
+                row={r}
+                l={r.l}
+                autoMode={autoMode}
+                isOpen={!autoMode && editing === r.k}
+                onToggle={setEditing}
+                onSetLive={onSetLive}
+                week={week}
+              />
             ))}
           </div>
           <div className="gd-board">
@@ -410,8 +537,17 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               <span>PTS</span>
               <span>ST</span>
             </div>
-            {sortRows(rightRows).map((r) => (
-              <Row key={r.k} row={r} side="opp" />
+            {rightResolved.map((r) => (
+              <Row
+                key={r.k}
+                row={r}
+                l={r.l}
+                autoMode={autoMode}
+                isOpen={!autoMode && editing === r.k}
+                onToggle={setEditing}
+                onSetLive={onSetLive}
+                week={week}
+              />
             ))}
           </div>
         </div>
