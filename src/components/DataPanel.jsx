@@ -460,9 +460,17 @@ export default function DataPanel({
                       setRankText("");
                     }}
                   >
-                    Apply {preview.updates.length} update{preview.updates.length === 1 ? "" : "s"} + index{" "}
-                    {preview.rows.length}
+                    {preview.updates.length === 0
+                      ? `Re-index ${preview.rows.length} ranks (your players already match)`
+                      : `Apply ${preview.updates.length} update${preview.updates.length === 1 ? "" : "s"} + index ${preview.rows.length} ranks`}
                   </button>
+                  {preview.updates.length === 0 && preview.rows.length > 0 && (
+                    <div className="panel-meta">
+                      0 of your players changed because these ranks are already applied — but the {preview.rows.length}{" "}
+                      indexed rows still refresh Team Strength and the waiver ranks. This box does <strong>not</strong>{" "}
+                      carry projections; for those use <strong>Expert projections</strong> below.
+                    </div>
+                  )}
                 </div>
               )}
 
