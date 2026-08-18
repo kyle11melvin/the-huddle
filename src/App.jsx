@@ -314,7 +314,10 @@ function RosterRow({
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("text/plain", player.id);
-        beginDragAutoScroll(e.currentTarget);
+        // onDragEnd is passed as the teardown callback too: under touch the
+        // browser can abandon a drag without ever firing dragend, which used
+        // to leave this card stuck in .dragging forever.
+        beginDragAutoScroll(e.currentTarget, onDragEnd);
         onDragStart(player.id);
       }}
       onDragEnd={() => {
@@ -327,7 +330,11 @@ function RosterRow({
         e.preventDefault();
         stopDragAutoScroll();
         setOver(false);
-        onDrop(dest);
+        // Carry the player id in the drop event itself rather than relying on
+        // React state still holding it. A teardown path that cleared dragId
+        // could otherwise swallow a drop that genuinely landed.
+        const carried = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+        onDrop(dest, carried || null);
       }}
       onClick={() => onOpen(player.id)}
       role="button"
@@ -1783,12 +1790,14 @@ export default function App() {
   );
 
   const onDrop = useCallback(
-    (dest) => {
-      if (!dragId) return;
-      doMove(dragId, dest);
+    (dest, carriedId) => {
+      // The event's own payload wins over React state — see the drop handler.
+      const id = carriedId || dragId;
+      if (!id || !state.players[id]) return;
+      doMove(id, dest);
       setDragId(null);
     },
-    [dragId, doMove]
+    [dragId, doMove, state.players]
   );
 
   const onStatus = useCallback(
@@ -2586,9 +2595,20 @@ export default function App() {
               </div>
             )}
             <div className="hint-card">
-              Drag a row to another slot to start or bench a player — or tap the <strong>slot badge</strong> for a
-              move menu. Tap the card itself for the full breakdown, status, and this week's matchup. Blue rank =
-              expert consensus (ECR) · ★ = matchup grade for {weekLabel(week)}.
+              {coarse ? (
+                <>
+                  Tap the <strong>MOVE</strong> button on any player to start, bench or swap them. Dragging works on
+                  a phone but is unreliable — the gesture competes with scrolling, and a drag that turns into a
+                  scroll looks exactly like a move that worked.{" "}
+                  <strong>Use MOVE and you'll know it took.</strong> Tap the card itself for the full breakdown.
+                </>
+              ) : (
+                <>
+                  Drag a row to another slot to start or bench a player — or tap the <strong>slot badge</strong> for
+                  a move menu. Tap the card itself for the full breakdown, status, and this week's matchup. Blue
+                  rank = expert consensus (ECR) · ★ = matchup grade for {weekLabel(week)}.
+                </>
+              )}
             </div>
 
             <PlayerSearchPanel state={state} onToggleInterest={onToggleInterest} />

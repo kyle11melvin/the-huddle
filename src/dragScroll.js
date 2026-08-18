@@ -15,11 +15,19 @@
 
 const EDGE = 80; // px from the edge where scrolling kicks in
 const MAX_SPEED = 20; // px per frame at the very edge
+// A live drag emits dragover continuously (the spec says ~every 350ms even
+// when stationary). If we go this long without one, the gesture died without
+// telling us — which is exactly what happens when iOS turns a long-press drag
+// back into a scroll. Measured before this guard existed: the loop kept
+// scrolling until it hit the top of the page and pinned there.
+const STALL_MS = 1200;
 
 let raf = null;
 let listening = false;
 let pointer = { x: 0, y: 0 };
+let lastMove = 0;
 let target = null; // Element, or null meaning the document/window
+let onEndCb = null;
 
 const canScrollY = (el) => {
   const cs = getComputedStyle(el);
@@ -45,6 +53,13 @@ const ramp = (distanceIntoZone) => Math.min(1, Math.max(0, distanceIntoZone / ED
 
 function step() {
   if (!listening) return;
+  // Watchdog: stop scrolling if the drag went quiet. Deliberately does NOT
+  // end the drag itself — a browser that simply stopped emitting dragover
+  // mid-gesture shouldn't have the user's move cancelled out from under them.
+  if (lastMove && Date.now() - lastMove > STALL_MS) {
+    stopDragAutoScroll();
+    return;
+  }
   const { x, y } = pointer;
 
   let top;
@@ -84,28 +99,63 @@ function step() {
 
 const onDragOver = (e) => {
   pointer = { x: e.clientX, y: e.clientY };
+  lastMove = Date.now();
 };
 
-/** Begin auto-scrolling for a drag that started on `el`. */
-export function beginDragAutoScroll(el) {
+/** The gesture is definitively over — stop scrolling AND clear drag state. */
+const endGesture = () => {
+  const cb = onEndCb;
+  stopDragAutoScroll();
+  if (cb) cb();
+};
+const onHidden = () => {
+  if (document.visibilityState === "hidden") endGesture();
+};
+
+/**
+ * Begin auto-scrolling for a drag that started on `el`.
+ * @param {Function} [onEnd] called when the gesture ends by any route, so the
+ *        caller can clear its own drag state rather than leaving a card stuck
+ *        in a "dragging" style forever.
+ */
+export function beginDragAutoScroll(el, onEnd) {
   stopDragAutoScroll(); // never stack two loops
   target = findScrollParent(el);
+  onEndCb = onEnd || null;
   listening = true;
+  lastMove = Date.now();
   // passive: this listener only reads coordinates; the row handlers do the
   // preventDefault that makes a drop legal.
   document.addEventListener("dragover", onDragOver, { passive: true });
+  // Belt and braces. `dragend` is the documented end of a drag, but under
+  // touch — where the browser may abandon the drag and resume scrolling —
+  // it is not reliably delivered, so the touch-native end events are watched
+  // too. Every path here is idempotent.
+  document.addEventListener("dragend", endGesture, true);
+  document.addEventListener("drop", stopDragAutoScroll, true);
+  document.addEventListener("touchend", endGesture, { passive: true });
+  document.addEventListener("touchcancel", endGesture, { passive: true });
+  document.addEventListener("visibilitychange", onHidden);
   raf = requestAnimationFrame(step);
 }
 
 /**
- * Stop and fully tear down. Called on dragend, on drop, and on unmount — a
- * leaked rAF loop that keeps scrolling after the drop is worse than the bug
- * this fixes.
+ * Stop and fully tear down. Called on dragend, on drop, on a stall, and on
+ * unmount — a leaked rAF loop that keeps scrolling after the gesture is worse
+ * than the bug this fixes. Measured: without this, one dragover near the top
+ * edge with no dragend scrolled the page to 0 and held it there.
  */
 export function stopDragAutoScroll() {
   listening = false;
   if (raf != null) cancelAnimationFrame(raf);
   raf = null;
+  lastMove = 0;
   document.removeEventListener("dragover", onDragOver);
+  document.removeEventListener("dragend", endGesture, true);
+  document.removeEventListener("drop", stopDragAutoScroll, true);
+  document.removeEventListener("touchend", endGesture);
+  document.removeEventListener("touchcancel", endGesture);
+  document.removeEventListener("visibilitychange", onHidden);
   target = null;
+  onEndCb = null;
 }

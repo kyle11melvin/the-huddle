@@ -8,8 +8,11 @@
 // why title-attribute affordances are invisible on those devices.
 //
 // This exists because native HTML5 drag-and-drop (draggable + dataTransfer)
-// has never worked under touch in iOS Safari — a long-press on a roster card
-// simply does nothing there, with no error and no feedback.
+// is UNRELIABLE under touch on iOS — not absent. Verified on a real iPhone:
+// a long-press drag does sometimes complete and the move sticks, but the
+// gesture competes with scrolling and frequently degrades into a scroll
+// instead. An intermittent drag is more dangerous than a broken one, because
+// a failed move is indistinguishable from a successful one until kickoff.
 // ============================================================================
 
 import { useEffect, useState } from "react";

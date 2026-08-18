@@ -1121,11 +1121,15 @@ select option {
 .slot-tag.tappable:active { transform: scale(0.94); }
 .slot-tag-caret { font-size: 9px; opacity: 0.85; }
 
-/* ---- touch: the move button is the ONLY way to move a player ----
-   HTML5 drag never fires under touch in iOS Safari, so on a coarse pointer
-   this stops being a decorative slot label and becomes a real, labelled,
-   44px-tall button. Gated on input capability, not width — a touchscreen
-   laptop gets this, a narrow desktop window keeps drag. */
+/* ---- touch: the move button is the RELIABLE way to move a player ----
+   CORRECTION (verified on a real iPhone): HTML5 drag DOES fire under touch on
+   iOS — it is not absent, it is unreliable, because the long-press drag
+   competes with scrolling. That is worse than not working: a drag that
+   silently degrades into a scroll looks identical to a move that didn't take,
+   and you don't find out until kickoff. So on a coarse pointer this stops
+   being a decorative slot label and becomes a real, labelled, 44px button.
+   Gated on input capability, not width — a touchscreen laptop gets this, a
+   narrow desktop window keeps drag. */
 .slot-tag.touch-move {
   flex-direction: column;
   gap: 2px;
