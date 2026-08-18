@@ -20,7 +20,7 @@
 // probability cares about.
 // ============================================================================
 
-import { SLOT_DEFS } from "./lineup.js";
+import { SLOT_DEFS, findLocation, slotAccepts } from "./lineup.js";
 import { pointDistribution } from "./analytics.js";
 import { LEAGUE_ROSTERS } from "./data/leagueRosters.js";
 import { espnTeamRoster } from "./espnSync.js";
@@ -272,10 +272,23 @@ export function simulateMatchup(myDists, oppDists, seed = 12345, runs = RUNS) {
  * This is the number that actually answers "who should I start".
  */
 export function simulateSwap(state, week, oppDists, outId, inId, seed = 12345, runs = RUNS) {
-  const base = lineupDistributions(state, state.lineup, week);
-  const swapped = base.dists.filter((d) => d.id !== outId);
   const p = state.players[inId];
   if (!p) return null;
+
+  // Legality BEFORE arithmetic. The optimizer's scan checks slot eligibility;
+  // without the same check here the Lab would render "Start <WR> over <QB> ·
+  // +2.1% win — Apply to ESPN" for a swap movePlayer then refuses. Guarding
+  // inside simulateSwap means no future caller can reintroduce it.
+  const loc = findLocation(state, outId);
+  if (!loc || loc.zone !== "lineup") {
+    return { illegal: true, reason: `${state.players[outId]?.name || "That player"} isn't in a starting slot.` };
+  }
+  if (!slotAccepts(loc.slotKey, p.pos)) {
+    return { illegal: true, reason: `The ${loc.slotKey} slot doesn't accept a ${p.pos}.` };
+  }
+
+  const base = lineupDistributions(state, state.lineup, week);
+  const swapped = base.dists.filter((d) => d.id !== outId);
   const d = pointDistribution(p, week, state);
   if (!d) return null;
   swapped.push({ id: inId, name: p.name, team: p.team || null, pos: p.pos, opp: nflOppOf(state, p.team, week), ...d });
@@ -395,6 +408,10 @@ export function liveNarrative(sim) {
   const leftGap = sim.myLeft - sim.oppLeft;
 
   if (sim.myLeft === 0 && sim.oppLeft === 0) {
+    // A dead-even final gives every run a === b, so wins stays 0 and winProb
+    // is 0 — which read as "you lost" despite tieProb being 1.0. Check the
+    // tie before the win/loss test.
+    if (sim.tieProb > 0.5) return "Final — a tie.";
     return p > 0.5 ? "Final — you won." : "Final — you lost.";
   }
   if (sim.myLeft === 0) {

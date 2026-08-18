@@ -85,7 +85,10 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
     for (const inId of benchPicked) {
       for (const outId of startPicked) {
         const r = simulateSwap(state, week, oppDists, outId, inId);
-        if (r) out.push({ inId, outId, ...r });
+        // Illegal pairs (a WR for your QB slot) are dropped, not rendered —
+        // offering an Apply button for a move ESPN will reject is worse than
+        // offering nothing.
+        if (r && !r.illegal) out.push({ inId, outId, ...r });
       }
     }
     return out.sort((a, b) => b.delta - a.delta);

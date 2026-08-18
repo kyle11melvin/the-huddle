@@ -87,11 +87,31 @@ export function applyEspnSync(state, data, myTeamName) {
 
   // ---- index existing players ----
   const byEspnId = new Map();
-  const byName = new Map();
+  const byName = new Map(); // norm name -> ARRAY: real duplicate names exist
   for (const p of Object.values(state.players)) {
     if (p.espnId) byEspnId.set(String(p.espnId), p);
-    byName.set(normName(p.name), p);
+    const k = normName(p.name);
+    byName.set(k, [...(byName.get(k) || []), p]);
   }
+
+  /**
+   * Which existing record (if any) this ESPN entry refers to.
+   *
+   * Two entries could previously resolve to the SAME existing player — the
+   * second overwrote the first in `players` and both pushed that id into the
+   * zones, so one player silently vanished. Real duplicate names exist
+   * (Michael Thomas, Josh Allen, Justin Jackson) and D/ST units carry no
+   * espnId at all, so the name path has to refuse when it's ambiguous.
+   */
+  const claimed = new Set();
+  const resolveExisting = (entry) => {
+    const byId = entry.espnId ? byEspnId.get(String(entry.espnId)) : null;
+    if (byId && !claimed.has(byId.id)) return byId;
+    const sameName = byName.get(normName(entry.name)) || [];
+    // exactly one candidate, and nobody has taken it yet
+    if (sameName.length === 1 && !claimed.has(sameName[0].id)) return sameName[0];
+    return null; // ambiguous or already spoken for → treat as a new player
+  };
 
   // ---- build the new roster from ESPN's slots ----
   const { lineup, bench, ir } = emptyZones(benchSize, irSize);
@@ -103,9 +123,10 @@ export function applyEspnSync(state, data, myTeamName) {
   const espnStatus = (e) => INJURY[e.injuryStatus] || "";
 
   for (const entry of me.roster) {
-    const existing = byEspnId.get(String(entry.espnId)) || byName.get(normName(entry.name)) || null;
+    const existing = resolveExisting(entry);
     const id = existing ? existing.id : newPlayerId();
-    if (!existing) summary.added.push(entry.name);
+    if (existing) claimed.add(existing.id);
+    else summary.added.push(entry.name);
 
     const nextStatus = espnStatus(entry);
     if (existing && existing.status !== nextStatus) {

@@ -10,10 +10,19 @@ import { propsToPoints, SCORING, parseProps } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
 import { extractScoring } from "../api/espn.js";
 import { pointDistribution, floorCeiling } from "../src/analytics.js";
-import { simulateMatchup } from "../src/simulate.js";
-import { migrate } from "../src/lineup.js";
+import {
+  simulateMatchup,
+  simulateSwap,
+  simulateLive,
+  liveNarrative,
+  lineupDistributions,
+  sumMeans,
+} from "../src/simulate.js";
+import { migrate, addCall, callCalibration, applyWin, revertWin } from "../src/lineup.js";
 import { applyEspnSync } from "../src/espnSync.js";
 import { deriveSchedule } from "../api/schedule.js";
+import { gameStatesFrom } from "../api/espn-write.js";
+import { currentMatchupPeriod } from "../api/espn.js";
 
 let failures = 0;
 const check = (name, ok, detail) => {
@@ -361,6 +370,200 @@ check(
 check(
   "no override falls back to the base value",
   extractScoring({ scoringSettings: { scoringItems: [{ statId: 4, points: 6, pointsOverrides: {} }] } }).passTd === 6
+);
+
+// ---- 12. the Lab must not offer illegal swaps (finding 9) ----
+const swapState = {
+  v: 2,
+  week: "1",
+  players: {
+    qb: { id: "qb", name: "Starting QB", team: "JAX", pos: "QB", ecr: "QB11", status: "" },
+    wr: { id: "wr", name: "Bench WR", team: "LAC", pos: "WR", ecr: "WR38", status: "" },
+  },
+  lineup: { QB: ["qb"], RB: [null, null], WR: [null, null, null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  bench: ["wr", null, null, null, null, null],
+  ir: [null, null],
+  byes: {},
+  byesAuto: {},
+  byesManual: {},
+  analytics: { qb: { 1: { proj: 20, projSource: "espn" } }, wr: { 1: { proj: 9, projSource: "espn" } } },
+  espn: null,
+  ecrIndex: {},
+  schedule: null,
+  matchups: {},
+};
+const oppForSwap = [{ name: "them", mean: 20, sd: 7, team: null, opp: null, pos: "QB" }];
+const illegal = simulateSwap(swapState, "1", oppForSwap, "qb", "wr");
+check(
+  "simulateSwap refuses a WR-for-QB swap instead of returning a delta",
+  illegal && illegal.illegal === true && typeof illegal.delta !== "number",
+  `got ${JSON.stringify(illegal && { illegal: illegal.illegal, delta: illegal.delta })}`
+);
+// a legal swap must still work
+const legalState = {
+  ...swapState,
+  players: {
+    ...swapState.players,
+    wr2: { id: "wr2", name: "Starting WR", team: "CIN", pos: "WR", ecr: "WR14", status: "" },
+  },
+  lineup: { ...swapState.lineup, WR: ["wr2", null, null] },
+  analytics: { ...swapState.analytics, wr2: { 1: { proj: 11, projSource: "espn" } } },
+};
+const legal = simulateSwap(legalState, "1", oppForSwap, "wr2", "wr");
+check(
+  "a legal same-position swap still returns a delta",
+  legal && !legal.illegal && typeof legal.delta === "number",
+  `delta = ${legal && legal.delta}`
+);
+
+// ---- 13. bye weeks must reach the simulation (finding 10) ----
+const byeBase = {
+  ...swapState,
+  players: {
+    a1: { id: "a1", name: "Healthy One", team: "KC", pos: "WR", ecr: "WR10", status: "" },
+    a2: { id: "a2", name: "Bye Guy", team: "DEN", pos: "WR", ecr: "WR12", status: "" },
+  },
+  lineup: { QB: [null], RB: [null, null], WR: ["a1", "a2", null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  bench: [null, null, null, null, null, null],
+  analytics: { a1: { 1: { proj: 12, projSource: "espn" } }, a2: { 1: { proj: 12, projSource: "espn" } } },
+};
+const noBye = lineupDistributions(byeBase, byeBase.lineup, "1");
+// the merged effective map is state.byes — Commit 2 split auto/manual beneath it
+const withBye = lineupDistributions({ ...byeBase, byes: { DEN: 1 }, byesAuto: { DEN: 1 } }, byeBase.lineup, "1");
+check(
+  "a player on bye contributes 0 to the simulated total",
+  sumMeans(withBye.dists) < sumMeans(noBye.dists) - 11,
+  `with bye ${sumMeans(withBye.dists)} vs without ${sumMeans(noBye.dists)}`
+);
+
+// ---- 14. an exact tie is not a loss (finding 12c) ----
+const finalEntry = (scored) => ({ proj: 0, scored, status: "final", pctRemaining: 0, cv: 0.5, team: null, pos: null, opp: null });
+const tied = simulateLive([finalEntry(100)], [finalEntry(100)]);
+check(
+  "a dead-even final reports a tie, not a loss",
+  tied && tied.tieProb > 0.99 && !/lost/i.test(liveNarrative(tied) || ""),
+  `tieProb ${tied && tied.tieProb}, narrative: "${liveNarrative(tied)}"`
+);
+
+// ---- 15. kickoff locks must fail CLOSED (finding 12h) ----
+check(
+  "an unreadable scoreboard yields no lock table (refuse the write)",
+  gameStatesFrom(null) === null,
+  `got ${JSON.stringify(gameStatesFrom(null))}`
+);
+check(
+  "an empty but valid scoreboard is a real empty slate (allow the write)",
+  JSON.stringify(gameStatesFrom({ events: [] })) === "{}",
+  `got ${JSON.stringify(gameStatesFrom({ events: [] }))}`
+);
+
+// ---- 16. addCall keeps the confidence the form collected (finding 12a) ----
+const callState = migrate({ v: 2, week: "1", players: {}, lineup: emptyLineup, bench: [null], ir: [null] });
+const withCall = addCall(callState, { player: "Bijan Robinson", week: "1", type: "Start", reasoning: "volume", confidence: 5 });
+check(
+  "addCall persists confidence",
+  withCall.state.calls[0].confidence === 5,
+  `stored ${JSON.stringify(withCall.state.calls[0].confidence)}`
+);
+const graded = [
+  { ...withCall.state.calls[0], outcome: "right" },
+  { id: "legacy", player: "Old Call", type: "Start", outcome: "wrong" }, // pre-fix call, no confidence
+];
+const calib = callCalibration(graded);
+check(
+  "callCalibration buckets a high-confidence call as high",
+  calib && calib.byConfidence.high && calib.byConfidence.high.n === 1,
+  `buckets ${JSON.stringify(calib && calib.byConfidence)}`
+);
+check(
+  "a legacy call with no confidence stays in medium",
+  calib && calib.byConfidence.medium && calib.byConfidence.medium.n === 1,
+  `buckets ${JSON.stringify(calib && calib.byConfidence)}`
+);
+
+// ---- 17. revertWin is the exact inverse of applyWin (finding 12d) ----
+const claimState = (faab) => ({
+  ...migrate({ v: 2, week: "1", players: {}, lineup: emptyLineup, bench: [null, null], ir: [null] }),
+  faab,
+});
+const roundTrip = (faab, amount) => {
+  const before = claimState(faab);
+  const claim = { player: "Waiver Add", team: "KC", pos: "WR", amount };
+  const applied = applyWin(before, claim);
+  if (applied.error) return { ok: false, why: applied.error };
+  const reverted = revertWin(applied.state, { ...claim, effects: applied.effects });
+  if (reverted.error) return { ok: false, why: reverted.error };
+  return {
+    ok: reverted.state.faab === before.faab,
+    faabBefore: before.faab,
+    faabAfter: reverted.state.faab,
+    players: Object.keys(reverted.state.players).length,
+  };
+};
+const normalTrip = roundTrip(100, 30);
+check("apply→revert restores FAAB (normal case)", normalTrip.ok && normalTrip.players === 0, JSON.stringify(normalTrip));
+const clampTrip = roundTrip(10, 30); // bid exceeds balance — the clamping case
+check(
+  "apply→revert restores FAAB when the bid was clamped",
+  clampTrip.ok && clampTrip.players === 0,
+  `${JSON.stringify(clampTrip)} (clamping used to invent $20)`
+);
+
+// ---- 18. duplicate names must not merge two players (finding 12e) ----
+const dupName = (espnId) => ({
+  espnId,
+  name: "Michael Thomas",
+  pos: "WR",
+  proTeamId: 12,
+  slot: "BE",
+  injuryStatus: "",
+  percentOwned: 1,
+  proj: 6,
+  actual: null,
+});
+const dupStart = migrate({
+  v: 2,
+  week: "1",
+  players: { existing: { id: "existing", name: "Michael Thomas", team: "KC", pos: "WR", espnId: "", ecr: "WR40", notes: "my scouting note" } },
+  lineup: emptyLineup,
+  bench: ["existing", null, null, null, null, null],
+  ir: [null, null],
+});
+const dupSync = applyEspnSync(
+  dupStart,
+  {
+    currentWeek: 1,
+    rosterSlots: { 20: 6, 21: 2 },
+    leagueFaab: 100,
+    teams: [{ id: 7, name: "Test Team", faabSpent: 0, record: null, roster: [dupName("5001"), dupName("5002")] }],
+    matchups: [],
+    pool: [],
+    games: {},
+    impliedTotals: {},
+  },
+  "Test Team"
+);
+const seatedIds = [...Object.values(dupSync.state.lineup).flat(), ...dupSync.state.bench, ...dupSync.state.ir].filter(Boolean);
+check(
+  "two same-named ESPN players become two records, not one",
+  Object.keys(dupSync.state.players).length === 2,
+  `got ${Object.keys(dupSync.state.players).length} player record(s)`
+);
+check(
+  "both same-named players occupy their own roster spot",
+  new Set(seatedIds).size === 2 && seatedIds.length === 2,
+  `seated ids ${JSON.stringify(seatedIds)}`
+);
+
+// ---- 19. matchups must not silently empty (finding 12g) ----
+check(
+  "matchup period falls back to the scoring period when status is missing",
+  currentMatchupPeriod({ scoringPeriodId: 3 }) === 3,
+  `got ${currentMatchupPeriod({ scoringPeriodId: 3 })}`
+);
+check(
+  "an explicit matchup period still wins",
+  currentMatchupPeriod({ status: { currentMatchupPeriod: 5 }, scoringPeriodId: 3 }) === 5
 );
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

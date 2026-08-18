@@ -91,6 +91,24 @@ export const playProbFor = (player) =>
   player && player.status in PLAY_PROB ? PLAY_PROB[player.status] : 1;
 
 /**
+ * Is this player's NFL team on bye this week?
+ *
+ * Lives here, in the projection itself, rather than in lineupDistributions —
+ * so EVERY consumer is right at once (the Lab, simulateSwap, the optimizer,
+ * Gameday, the roster rows). Patching only the simulation left the Lab's
+ * headline win probability counting ~12 points from a player who would score
+ * zero, while the roster tab correctly said "on bye this week".
+ *
+ * Reads state.byes, which is the merged effective map (auto ∪ manual).
+ */
+export const isOnByeWeek = (player, week, state) => {
+  if (!player || !state || !state.byes) return false;
+  const wk = Number(week); // "PRE" → NaN → never a bye
+  const bye = Number(state.byes[player.team]);
+  return Number.isFinite(wk) && Number.isFinite(bye) && bye === wk;
+};
+
+/**
  * Turn what we know about a player into a distribution of fantasy points.
  * @returns {{mean:number, condMean:number, sd:number, playProb:number,
  *            source:string, confident:boolean}|null}
@@ -151,9 +169,11 @@ export function pointDistribution(player, week, state) {
   }
   const sd = mu * cv * uncertainty;
 
-  // Injury risk prices in here, not as a points penalty downstream.
-  const playProb = playProbFor(player);
-  if (playProb < 1) source = `${source} × ${player.status} risk`;
+  // Injury risk and byes price in here, not as a penalty downstream.
+  const bye = isOnByeWeek(player, week, state);
+  const playProb = bye ? 0 : playProbFor(player);
+  if (bye) source = `${source} · on bye`;
+  else if (playProb < 1) source = `${source} × ${player.status} risk`;
 
   return {
     mean: Math.round(mu * playProb * 10) / 10,

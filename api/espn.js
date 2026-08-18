@@ -55,6 +55,20 @@ const STAT_KEY = {
   72: "fumble",
 };
 
+/**
+ * Which matchup period the returned pairings belong to. ESPN omits `status`
+ * often enough that this can't be read blind — comparing against `undefined`
+ * matches nothing and empties the whole matchups array.
+ */
+export function currentMatchupPeriod(data) {
+  const explicit = data && data.status && data.status.currentMatchupPeriod;
+  if (Number.isFinite(explicit)) return explicit;
+  // Without this fallback a missing `status` made the filter compare against
+  // undefined, matching nothing — so `matchups` came back empty and the
+  // opponent was silently unset, with no error anywhere.
+  return data && data.scoringPeriodId;
+}
+
 /** League's real per-stat points from mSettings — the app should never guess. */
 export function extractScoring(settings) {
   const items = (settings && settings.scoringSettings && settings.scoringSettings.scoringItems) || [];
@@ -98,7 +112,12 @@ export default async function handler(req, res) {
     });
   }
 
-  const week = req.query.week ? `&scoringPeriodId=${encodeURIComponent(req.query.week)}` : "";
+  // `?week=1&week=2` arrives as an array and would stringify to "1,2".
+  const rawWeek = Array.isArray(req.query.week) ? req.query.week[0] : req.query.week;
+  const weekNum = parseInt(rawWeek, 10);
+  const week = Number.isFinite(weekNum) && weekNum >= 1 && weekNum <= 18
+    ? `&scoringPeriodId=${weekNum}`
+    : "";
   const url = `${BASE}/${season}/segments/0/leagues/${leagueId}?${VIEWS.map((v) => `view=${v}`).join("&")}${week}`;
 
   const headers = { Accept: "application/json" };
@@ -187,7 +206,7 @@ export default async function handler(req, res) {
     // This week's head-to-head pairings, so the simulator knows who you face.
     const currentWeek = data.scoringPeriodId;
     const matchups = (data.schedule || [])
-      .filter((m) => m.matchupPeriodId === data.status?.currentMatchupPeriod)
+      .filter((m) => m.matchupPeriodId === currentMatchupPeriod(data))
       .map((m) => ({
         home: m.home && m.home.teamId,
         away: m.away && m.away.teamId,

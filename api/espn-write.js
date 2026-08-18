@@ -32,6 +32,30 @@ const WRITE = "https://lm-api-writes.fantasy.espn.com/apis/v3/games/ffl/seasons"
 // Captured build hash — tried as fallback if the bare call is rejected.
 const PLATFORM_VERSION = "03952a53323901871b54cebc123891a6966b3143";
 
+const PRO = { 1:"ATL",2:"BUF",3:"CHI",4:"CIN",5:"CLE",6:"DAL",7:"DEN",8:"DET",9:"GB",10:"TEN",11:"IND",12:"KC",13:"LV",14:"LAR",15:"MIA",16:"MIN",17:"NE",18:"NO",19:"NYG",20:"NYJ",21:"PHI",22:"ARI",23:"PIT",24:"LAC",25:"SF",26:"SEA",27:"TB",28:"WSH",29:"CAR",30:"JAX",33:"BAL",34:"HOU" };
+
+/**
+ * Scoreboard payload → { TEAM: 'pre'|'in'|'post' }, or null when the
+ * scoreboard could not be read at all.
+ *
+ * The distinction is the whole guardrail: "no games returned" is a legitimate
+ * empty slate, but "the fetch failed" means we know NOTHING about what has
+ * kicked off — and an empty lock table silently permits every move.
+ */
+export function gameStatesFrom(sb) {
+  if (!sb) return null;
+  const out = {};
+  for (const ev of sb.events || []) {
+    const comp = ev.competitions && ev.competitions[0];
+    const st = (comp && comp.status && comp.status.type && comp.status.type.state) || "pre";
+    for (const c of (comp && comp.competitors) || []) {
+      const ab = c.team && c.team.abbreviation;
+      if (ab) out[ab === "WAS" ? "WSH" : ab === "JAC" ? "JAX" : ab] = st;
+    }
+  }
+  return out;
+}
+
 function send(res, status, body) {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store");
@@ -133,16 +157,20 @@ export default async function handler(req, res) {
     }
 
     // per-team game state from the scoreboard
-    const gameState = {};
-    for (const ev of (sbR && sbR.events) || []) {
-      const comp = ev.competitions && ev.competitions[0];
-      const st = (comp && comp.status && comp.status.type && comp.status.type.state) || "pre";
-      for (const c of (comp && comp.competitors) || []) {
-        const ab = c.team && c.team.abbreviation;
-        if (ab) gameState[ab === "WAS" ? "WSH" : ab === "JAC" ? "JAX" : ab] = st;
-      }
+    const gameState = gameStatesFrom(sbR);
+    // FAIL CLOSED. A scoreboard outage used to yield an empty lock table,
+    // which skipped EVERY kickoff lock and sent a locked-game move straight
+    // to ESPN — and "ESPN is having a bad afternoon" is exactly when the
+    // scoreboard flakes and exactly when lineup moves are being made.
+    if (!gameState) {
+      audit("rejected-locks-unavailable", { lockWeek });
+      return send(res, 503, {
+        ok: false,
+        locksUnavailable: true,
+        error:
+          "Can't reach ESPN's scoreboard, so there's no way to tell which games have kicked off. Refusing the move rather than risking a change to a game already underway — try again in a minute.",
+      });
     }
-    const PRO = { 1:"ATL",2:"BUF",3:"CHI",4:"CIN",5:"CLE",6:"DAL",7:"DEN",8:"DET",9:"GB",10:"TEN",11:"IND",12:"KC",13:"LV",14:"LAR",15:"MIA",16:"MIN",17:"NE",18:"NO",19:"NYG",20:"NYJ",21:"PHI",22:"ARI",23:"PIT",24:"LAC",25:"SF",26:"SEA",27:"TB",28:"WSH",29:"CAR",30:"JAX",33:"BAL",34:"HOU" };
 
     // ---- guardrails ----
     auditCtx.teamId = me.id;

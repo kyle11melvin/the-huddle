@@ -628,7 +628,7 @@ export function updateWatch(state, id, patch) {
 // -------------------------------------------------------------- game log ---
 
 let callSeq = 0;
-export function addCall(state, { player, week, type, reasoning }) {
+export function addCall(state, { player, week, type, reasoning, confidence }) {
   const clean = (player || "").trim();
   if (!clean) return { state, error: "Player is required" };
   callSeq += 1;
@@ -638,6 +638,10 @@ export function addCall(state, { player, week, type, reasoning }) {
     week: week || state.week,
     type: type || "Start",
     reasoning: (reasoning || "").trim(),
+    // Dropped on the floor before this: CallForm collected a 1–5 rating and
+    // addCall discarded it, so callCalibration bucketed every graded call as
+    // "medium" and the high/low rows never rendered.
+    confidence: Math.min(5, Math.max(1, parseInt(confidence, 10) || 3)),
   };
   return { state: { ...state, calls: [entry, ...state.calls] } };
 }
@@ -807,8 +811,13 @@ export function applyWin(state, claim) {
     effects.addedId = res.id;
   }
 
-  effects.faabDelta = -amt;
-  next = { ...next, faab: clampFaab(next.faab - amt) };
+  // Record the delta that was ACTUALLY applied, not the bid. With a $10
+  // balance and a $30 bid the spend clamps to $10, but storing -30 meant
+  // un-marking the claim credited $30 back and invented $20 of budget.
+  const faabBefore = next.faab;
+  const faabAfter = clampFaab(faabBefore - amt);
+  effects.faabDelta = faabAfter - faabBefore;
+  next = { ...next, faab: faabAfter };
   return { state: next, effects };
 }
 
