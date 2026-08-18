@@ -1121,6 +1121,32 @@ select option {
 .slot-tag.tappable:active { transform: scale(0.94); }
 .slot-tag-caret { font-size: 9px; opacity: 0.85; }
 
+/* ---- touch: the move button is the ONLY way to move a player ----
+   HTML5 drag never fires under touch in iOS Safari, so on a coarse pointer
+   this stops being a decorative slot label and becomes a real, labelled,
+   44px-tall button. Gated on input capability, not width — a touchscreen
+   laptop gets this, a narrow desktop window keeps drag. */
+.slot-tag.touch-move {
+  flex-direction: column;
+  gap: 2px;
+  min-height: 44px;
+  min-width: 52px;
+  padding: 7px 8px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.slot-tag.touch-move .slot-tag-caret { display: none; }
+.slot-tag-move {
+  font-size: 7.5px;
+  letter-spacing: 0.8px;
+  opacity: 0.9;
+  font-weight: 700;
+}
+/* No hover state on a device that can't hover — it sticks after a tap. */
+@media (hover: none) {
+  .slot-tag.tappable:hover { filter: none; box-shadow: none; transform: none; }
+  .player-card[draggable="true"] { cursor: default; }
+}
+
 .pos-mini {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -1360,6 +1386,55 @@ select option {
 /* ------------------------------------------------------------- move sheet -- */
 
 .modal.sheet { max-width: 440px; }
+
+/* ---- touch: MoveSheet as a bottom sheet ----
+   Anchored to the bottom so the destination list and Cancel sit under the
+   thumb, instead of a centred dialog whose only dismiss is a 32px ✕ in the
+   top-right corner. */
+.modal-backdrop.to-bottom {
+  align-items: flex-end;
+  padding: 0;
+}
+.modal.sheet.bottom-sheet {
+  max-width: 100%;
+  width: 100%;
+  border-radius: 18px 18px 0 0;
+  max-height: 85vh;
+  /* clear the iOS home indicator */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: sheet-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes sheet-up {
+  from { transform: translateY(14%); opacity: 0.6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+/* The resting position is translateY(0) with no transform declared, so the
+   sheet is correct even if the animation never runs — but honour the
+   preference rather than relying on that. */
+@media (prefers-reduced-motion: reduce) {
+  .modal.sheet.bottom-sheet { animation: none; }
+}
+.sheet-grabber {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-hi);
+  margin: 10px auto 0;
+}
+.bottom-sheet .sheet-head { padding: 14px 20px 14px; }
+.bottom-sheet .move-option { min-height: 56px; }
+.sheet-cancel {
+  width: 100%;
+  min-height: 50px;
+  margin-top: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-hi);
+  background: var(--surface-hover);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+}
+.sheet-cancel:active { transform: scale(0.99); }
 
 .sheet-head {
   display: flex;

@@ -23,6 +23,8 @@ import { applyEspnSync } from "../src/espnSync.js";
 import { deriveSchedule } from "../api/schedule.js";
 import { gameStatesFrom } from "../api/espn-write.js";
 import { storage, probeStorage, STORAGE_MESSAGE } from "../src/storage.js";
+import { isAuthorized } from "../api/_auth.js";
+import { readFileSync } from "node:fs";
 import { currentMatchupPeriod } from "../api/espn.js";
 
 let failures = 0;
@@ -681,6 +683,51 @@ check(
   ["private", "blocked", "full", "unavailable", "unknown"].every(
     (r) => typeof STORAGE_MESSAGE[r] === "string" && STORAGE_MESSAGE[r].length > 20
   )
+);
+
+// ---- 22. the two security controls prose can't defend ----
+// Source-text assertions on purpose. The threat here is someone EDITING a
+// string — "harmonising" espn.js's cache header with its neighbours, or
+// loosening the token gate — so grepping the string matches the threat.
+// A comment can't fail a build; this can.
+const espnSrc = readFileSync(new URL("../api/espn.js", import.meta.url), "utf8");
+check(
+  "/api/espn is never shared-cacheable (s-maxage would let the CDN replay an authorized 200)",
+  !/s-maxage/.test(espnSrc),
+  "found s-maxage in api/espn.js — the token check becomes bypassable at the edge"
+);
+check(
+  "/api/espn still sets an explicit private cache directive",
+  /private,\s*max-age=/.test(espnSrc),
+  "expected `private, max-age=` in api/espn.js"
+);
+// The neighbours SHOULD be shared-cacheable — they carry nothing private and
+// have no token gate. Asserted so the intent stays legible both ways.
+for (const f of ["odds", "schedule", "news"]) {
+  check(
+    `/api/${f} stays shared-cacheable (no private data, no token gate)`,
+    /s-maxage/.test(readFileSync(new URL(`../api/${f}.js`, import.meta.url), "utf8"))
+  );
+}
+
+// isAuthorized must fail closed. Covered above at the behavioural level; this
+// pins the source so the early-return can't be "simplified" away.
+const authSrc = readFileSync(new URL("../api/_auth.js", import.meta.url), "utf8");
+check(
+  "isAuthorized uses a constant-time comparison",
+  /timingSafeEqual/.test(authSrc),
+  "expected crypto.timingSafeEqual in api/_auth.js"
+);
+delete process.env.HUDDLE_WRITE_TOKEN;
+check(
+  "isAuthorized denies everything when HUDDLE_WRITE_TOKEN is unset",
+  isAuthorized({ headers: { "x-huddle-token": "anything-at-all" } }) === false
+);
+process.env.HUDDLE_WRITE_TOKEN = "z".repeat(64);
+check(
+  "isAuthorized accepts the exact token and rejects a same-length impostor",
+  isAuthorized({ headers: { "x-huddle-token": "z".repeat(64) } }) === true &&
+    isAuthorized({ headers: { "x-huddle-token": "y".repeat(64) } }) === false
 );
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

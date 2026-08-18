@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from "react";
 import { storage, HUDDLE_KEY, probeStorage, STORAGE_MESSAGE } from "./storage.js";
 import { beginDragAutoScroll, stopDragAutoScroll } from "./dragScroll.js";
+import { useCoarsePointer } from "./useCoarsePointer.js";
 import { teamOf, headshotUrl, teamLogoUrl } from "./data/teams.js";
 import { searchFreeAgents, FREE_AGENTS } from "./data/freeAgents.js";
 import {
@@ -248,6 +249,7 @@ function RosterRow({
   onDragStart,
   onDragEnd,
   onDrop,
+  coarse,
 }) {
   const [over, setOver] = useState(false);
   const label = zoneLabel(dest);
@@ -335,11 +337,15 @@ function RosterRow({
       }}
     >
       <div className="player-main">
+        {/* On touch this is the ONLY way to move a player — HTML5 drag never
+            fires on iOS — so it gets an explicit label and a 44px target
+            instead of a 9px caret whose `title` can never be hovered. */}
         <button
           type="button"
-          className="slot-tag tappable"
+          className={`slot-tag tappable ${coarse ? "touch-move" : ""}`}
           style={{ background: badgeColor }}
           title="Move player"
+          aria-label={`Move ${player.name}`}
           onClick={(e) => {
             e.stopPropagation();
             onBadge(player.id);
@@ -347,6 +353,7 @@ function RosterRow({
         >
           {label}
           <span className="slot-tag-caret">⇅</span>
+          {coarse && <span className="slot-tag-move">MOVE</span>}
         </button>
         <Avatar player={player} />
         <div className="player-info">
@@ -390,15 +397,29 @@ function RosterRow({
 
 // ------------------------------------------------------------------- modals ---
 
-function MoveSheet({ state, playerId, onClose, onMove }) {
+function MoveSheet({ state, playerId, onClose, onMove, coarse }) {
   const player = state.players[playerId];
   const dests = useMemo(() => (player ? legalDestinations(state, playerId) : []), [state, playerId, player]);
+  // Escape closes on desktop; touch users get the backdrop and a full-width
+  // Cancel button, because a 32px ✕ in the far corner is not a thumb target.
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   if (!player) return null;
   const here = findLocation(state, playerId);
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal sheet" onClick={(e) => e.stopPropagation()}>
+    <div className={`modal-backdrop ${coarse ? "to-bottom" : ""}`} onClick={onClose}>
+      <div
+        className={`modal sheet ${coarse ? "bottom-sheet" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Move ${player.name}`}
+      >
+        {coarse && <div className="sheet-grabber" aria-hidden="true" />}
         <div className="sheet-head">
           <div>
             <div className="sheet-kicker">Move player</div>
@@ -437,6 +458,11 @@ function MoveSheet({ state, playerId, onClose, onMove }) {
               </button>
             );
           })}
+          {coarse && (
+            <button className="sheet-cancel" onClick={onClose}>
+              Cancel
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1344,6 +1370,8 @@ export default function App() {
   const [interestFilter, setInterestFilter] = useState("all");
   const [viewingShared, setViewingShared] = useState(false);
   const [dragId, setDragId] = useState(null);
+  // Finger vs mouse — decides the move affordance, never the layout.
+  const coarse = useCoarsePointer();
   const [link, setLink] = useState(null); // live-sync identity, if any
   const [syncStatus, setSyncStatus] = useState("idle");
   const [syncError, setSyncError] = useState("");
@@ -2379,6 +2407,7 @@ export default function App() {
     legalKeys,
     onOpen: setModalId,
     onBadge: setMoveId,
+    coarse,
     onDragStart: setDragId,
     onDragEnd: () => setDragId(null),
     onDrop,
@@ -3261,7 +3290,15 @@ export default function App() {
           onDrop={onDropPlayer}
         />
       )}
-      {moveId && <MoveSheet state={state} playerId={moveId} onClose={() => setMoveId(null)} onMove={doMove} />}
+      {moveId && (
+        <MoveSheet
+          state={state}
+          playerId={moveId}
+          onClose={() => setMoveId(null)}
+          onMove={doMove}
+          coarse={coarse}
+        />
+      )}
       {addOpen && <AddPlayerModal state={state} onClose={() => setAddOpen(false)} onAdd={onAdd} />}
       {dataOpen && (
         <DataPanel
