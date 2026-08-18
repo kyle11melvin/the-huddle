@@ -282,6 +282,8 @@ export function migrate(raw) {
           : null,
       alertsDismissed: raw.alertsDismissed && typeof raw.alertsDismissed === "object" ? raw.alertsDismissed : {},
       calibration: raw.calibration && typeof raw.calibration === "object" ? raw.calibration : {},
+      // Refit on each sync; the prior stands until the ledger earns better.
+      projWeights: raw.projWeights && typeof raw.projWeights === "object" ? raw.projWeights : null,
       orphans,
     };
   }

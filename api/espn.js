@@ -56,6 +56,34 @@ const STAT_KEY = {
 };
 
 /**
+ * ESPN's weekly projection AND where it came from.
+ *
+ * The BASIS matters. "ESPN's week-1 projection" and "ESPN's season projection
+ * ÷ 17" are different claims, and both used to be returned as a bare number.
+ * As ESPN posts real weekly projections through the preseason a player can
+ * swing 40%+ purely because the source switched — which reads as news and
+ * isn't. The calibration ledger would otherwise bank that artifact as a
+ * projection error and quietly poison the accuracy comparison.
+ *
+ * @returns {{value: number|null, basis: 'weekly'|'weekly-other'|'season/17'|null}}
+ */
+export function weeklyProj(p, currentPeriod) {
+  const stats = (p && p.stats) || [];
+  const exact = stats.find(
+    (s) => s.statSourceId === 1 && s.statSplitTypeId === 1 && s.scoringPeriodId === currentPeriod
+  );
+  if (exact) return { value: Math.round((exact.appliedTotal || 0) * 10) / 10, basis: "weekly" };
+  const anyWeek = stats.find((s) => s.statSourceId === 1 && s.statSplitTypeId === 1);
+  if (anyWeek) return { value: Math.round((anyWeek.appliedTotal || 0) * 10) / 10, basis: "weekly-other" };
+  // only a season projection exists → per-game baseline, same scale
+  const season = stats.find((s) => s.statSourceId === 1 && s.statSplitTypeId === 0);
+  if (season && season.appliedTotal > 0) {
+    return { value: Math.round((season.appliedTotal / 17) * 10) / 10, basis: "season/17" };
+  }
+  return { value: null, basis: null };
+}
+
+/**
  * Which matchup period the returned pairings belong to. ESPN omits `status`
  * often enough that this can't be read blind — comparing against `undefined`
  * matches nothing and empties the whole matchups array.
@@ -126,17 +154,6 @@ export default async function handler(req, res) {
   // Weekly projection extractor. ESPN mixes season totals and single-week
   // projections in the same stats array; grabbing the wrong one made Tyreek
   // Hill "project" 273 points in a week. statSplitTypeId 1 = one week.
-  const weeklyProj = (p, currentPeriod) => {
-    const stats = p.stats || [];
-    const wk =
-      stats.find((s) => s.statSourceId === 1 && s.statSplitTypeId === 1 && s.scoringPeriodId === currentPeriod) ||
-      stats.find((s) => s.statSourceId === 1 && s.statSplitTypeId === 1);
-    if (wk) return Math.round((wk.appliedTotal || 0) * 10) / 10;
-    // only a season projection exists → per-game baseline, same scale
-    const season = stats.find((s) => s.statSourceId === 1 && s.statSplitTypeId === 0);
-    if (season && season.appliedTotal > 0) return Math.round((season.appliedTotal / 17) * 10) / 10;
-    return null;
-  };
 
   // Full player pool for THIS league — includes free agents, their weekly
   // projections and ownership. This is what lets rankings and the FA list
@@ -197,7 +214,8 @@ export default async function handler(req, res) {
           injured: !!p.injured,
           injuryStatus: p.injuryStatus || "",
           percentOwned: p.ownership ? Math.round((p.ownership.percentOwned || 0) * 10) / 10 : null,
-          proj: weeklyProj(p, data.scoringPeriodId),
+          proj: weeklyProj(p, data.scoringPeriodId).value,
+          projBasis: weeklyProj(p, data.scoringPeriodId).basis,
           actual: realStat ? Math.round((realStat.appliedTotal || 0) * 10) / 10 : null,
         };
       }),
@@ -275,7 +293,8 @@ export default async function handler(req, res) {
           proTeamId: p.proTeamId,
           onTeamId: e.onTeamId || 0,
           percentOwned: p.ownership ? Math.round((p.ownership.percentOwned || 0) * 10) / 10 : null,
-          proj: weeklyProj(p, data.scoringPeriodId),
+          proj: weeklyProj(p, data.scoringPeriodId).value,
+          projBasis: weeklyProj(p, data.scoringPeriodId).basis,
         };
       })
       .filter((x) => x.name && x.pos);

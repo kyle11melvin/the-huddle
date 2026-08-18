@@ -160,6 +160,33 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
                     <span className="lab-ceil">{fc.ceiling}</span>
                   </div>
                 )}
+                {/* The disagreement itself, never hidden behind the blend. */}
+                {a && Number.isFinite(a.proj) && Number.isFinite(a.fpProj) && (
+                  <div
+                    className={`lab-sources ${Math.abs(a.proj - a.fpProj) >= 2 ? "split" : ""}`}
+                    title={
+                      dist && dist.source
+                        ? `Blended: ${dist.source}`
+                        : "Both projections, side by side"
+                    }
+                  >
+                    <span>{a.proj} ESPN</span>
+                    <span className="lab-sources-dot">·</span>
+                    <span>{a.fpProj} FP</span>
+                    {Math.abs(a.proj - a.fpProj) >= 2 && (
+                      <span className="lab-sources-gap">{Math.abs(a.proj - a.fpProj).toFixed(1)} apart</span>
+                    )}
+                  </div>
+                )}
+                {a && Number.isFinite(a.matchupStars) && (
+                  <div className="lab-stat">
+                    <span>Matchup (FP)</span>
+                    <strong title="Context only — FantasyPros already prices the matchup into its projection">
+                      {"★".repeat(a.matchupStars)}
+                      <span style={{ opacity: 0.3 }}>{"★".repeat(5 - a.matchupStars)}</span>
+                    </strong>
+                  </div>
+                )}
                 <div className="lab-stat">
                   <span>Vegas team total</span>
                   <strong>

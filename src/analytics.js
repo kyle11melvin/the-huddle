@@ -80,6 +80,22 @@ export function consensusLabel(disp) {
 const BASE_CV = { QB: 0.32, RB: 0.5, WR: 0.58, TE: 0.6, K: 0.42, "D/ST": 0.72 };
 
 /**
+ * How much to trust each projection source when both exist.
+ *
+ * EQUAL WEIGHT, AND THAT IS A PRIOR — not a derived number. With two sources
+ * and no track record there is no measured variance to weight by, and a
+ * fabricated inverse-variance weighting would be exactly the failure this
+ * codebase keeps having to fix: a figure that looks computed but is a guess
+ * wearing a lab coat. `basis` is carried into the UI so the label always
+ * matches the arithmetic.
+ *
+ * calibration.projWeights() replaces this with `basis: "measured"` once the
+ * ledger has enough graded rows to say which source is actually better for
+ * THIS league's scoring.
+ */
+export const DEFAULT_PROJ_WEIGHTS = { espn: 0.5, fp: 0.5, basis: "assumed" };
+
+/**
  * Injury designations as play probabilities. Q/D outcomes are BIMODAL — the
  * player either suits up and produces a roughly normal game, or sits and
  * scores exactly zero. A flat points penalty models neither branch; a mixture
@@ -124,10 +140,31 @@ export function pointDistribution(player, week, state) {
 
   let mu = null;
   let source = "";
-  // Priority order, not a blend: money-backed lines outrank expert opinion.
+  let blendGap = 0;
+  const espnProj = a && Number.isFinite(a.proj) ? a.proj : null;
+  const fpProj = a && Number.isFinite(a.fpProj) ? a.fpProj : null;
+
+  // Priority: money-backed lines still outrank opinion. Below that, two
+  // independent opinions are BLENDED rather than ranked.
+  //
+  // Why blend instead of picking a winner: on a real roster five of six
+  // players agreed within 0.7 points and one disagreed by 4. A precedence
+  // rule throws away the agreement on the five to resolve the one — but the
+  // agreement is signal, and on the sixth the DISAGREEMENT is the finding.
+  // Blending keeps the mean and widens sd by the gap, so a contested player
+  // is correctly modelled as a less certain bet rather than a confident one.
   if (a && Number.isFinite(a.propsProj) && a.propsProj > 0) {
     mu = a.propsProj;
     source = "vegas props";
+  } else if (espnProj != null && fpProj != null && (espnProj > 0 || fpProj > 0)) {
+    const w = state.projWeights || DEFAULT_PROJ_WEIGHTS;
+    mu = espnProj * w.espn + fpProj * w.fp;
+    const avg = (espnProj + fpProj) / 2;
+    blendGap = avg > 0 ? Math.abs(espnProj - fpProj) / avg : 0;
+    source = `ESPN+FP blend (${w.basis})`;
+  } else if (fpProj != null && fpProj > 0) {
+    mu = fpProj;
+    source = "FantasyPros";
   } else if (a && Number.isFinite(a.proj) && (a.proj > 0 || a.projSource === "espn")) {
     // An explicit ESPN zero is authoritative (bye / ruled out) and must NOT
     // fall through to a season average — that's how a player who will score
@@ -163,6 +200,8 @@ export function pointDistribution(player, week, state) {
   // uncertainty, no experts required.
   const disp = rankDispersion(a && a.expertRanks);
   let uncertainty = disp ? 1 + disp.spread * 0.5 : 1;
+  // Two projections disagreeing IS uncertainty — widen rather than pretend.
+  if (blendGap > 0) uncertainty = Math.max(uncertainty, 1 + Math.min(0.5, blendGap));
   if (a && Number.isFinite(a.propsProj) && Number.isFinite(a.proj) && a.proj > 0 && a.propsProj > 0) {
     const gap = Math.abs(a.propsProj - a.proj) / ((a.propsProj + a.proj) / 2);
     uncertainty = Math.max(uncertainty, 1 + Math.min(0.5, gap));

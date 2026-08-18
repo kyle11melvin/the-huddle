@@ -1389,6 +1389,28 @@ select option {
 
 /* ------------------------------------------------------------- move sheet -- */
 
+/* Two projections shown side by side — the gap is information, not noise. */
+.lab-sources {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+.lab-sources-dot { opacity: 0.5; }
+.lab-sources.split { color: var(--gold); }
+.lab-sources-gap {
+  margin-left: auto;
+  font-size: 9.5px;
+  border: 1px solid rgba(255, 182, 18, 0.4);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+.stars-mini { color: var(--gold); font-size: 10px; margin-left: 6px; }
+.gap-flag { color: var(--gold); font-size: 10px; margin-left: 6px; }
+
 /* Opponent realism: two win probabilities, the gap is the point. */
 .sim-both {
   margin-top: 12px;

@@ -18,7 +18,7 @@
 // goes ungraded is gone, so this has to be running from week 1.
 // ============================================================================
 
-import { pointDistribution } from "./analytics.js";
+import { pointDistribution, playerAnalytics, DEFAULT_PROJ_WEIGHTS } from "./analytics.js";
 import { normName } from "./espnSync.js";
 
 /** Kickoff state for a player's NFL team: 'pre' | 'in' | 'post' | null. */
@@ -68,6 +68,7 @@ export function captureCalibration(state, week) {
     if (!existing || !existing.locked) {
       const dist = pointDistribution(p, wk, state);
       if (dist) {
+        const a = playerAnalytics(state, p.id, wk) || {};
         forWeek[p.id] = {
           ...(existing || {}),
           name: p.name,
@@ -78,6 +79,15 @@ export function captureCalibration(state, week) {
           sd: dist.sd,
           playProb: dist.playProb,
           source: dist.source,
+          // EACH source recorded separately against the one actual. This is
+          // what lets the weighting stop being an assumption in December.
+          sources: {
+            espn: Number.isFinite(a.proj) ? a.proj : null,
+            espnBasis: a.projBasis || null,
+            fp: Number.isFinite(a.fpProj) ? a.fpProj : null,
+            props: Number.isFinite(a.propsProj) ? a.propsProj : null,
+          },
+          stars: Number.isFinite(a.matchupStars) ? a.matchupStars : null,
           status: p.status || "",
           // Frozen the moment the ball is kicked — see the header note.
           locked: started,
@@ -120,6 +130,46 @@ export function calibrationStats(state) {
   }
   weeks.sort((a, b) => a.week - b.week);
   return { tracked, graded: gradedRows, weeks };
+}
+
+/**
+ * Blend weights, EARNED rather than assumed.
+ *
+ * Until the ledger holds enough rows where both sources projected the same
+ * player and we know what he actually scored, this returns the equal-weight
+ * prior with basis "assumed". Past the threshold it weights each source by
+ * the inverse of its mean absolute error — a real inverse-error weighting,
+ * computed from this league's scoring and this roster's players, and labelled
+ * "measured" so the UI can stop calling it an assumption.
+ *
+ * @param {number} minRows both-source graded rows required before refitting
+ */
+export function projWeights(state, minRows = 60) {
+  const pairs = [];
+  for (const wkRows of Object.values(state.calibration || {})) {
+    for (const r of Object.values(wkRows || {})) {
+      const s = r.sources || {};
+      if (Number.isFinite(r.actual) && Number.isFinite(s.espn) && Number.isFinite(s.fp)) {
+        pairs.push({ actual: r.actual, espn: s.espn, fp: s.fp });
+      }
+    }
+  }
+  if (pairs.length < minRows) return { ...DEFAULT_PROJ_WEIGHTS, n: pairs.length, needed: minRows };
+
+  const mae = (pick) => pairs.reduce((sum, p) => sum + Math.abs(p.actual - pick(p)), 0) / pairs.length;
+  const eErr = Math.max(0.01, mae((p) => p.espn));
+  const fErr = Math.max(0.01, mae((p) => p.fp));
+  const eInv = 1 / eErr;
+  const fInv = 1 / fErr;
+  const total = eInv + fInv;
+  return {
+    espn: Math.round((eInv / total) * 100) / 100,
+    fp: Math.round((fInv / total) * 100) / 100,
+    basis: "measured",
+    n: pairs.length,
+    espnMae: Math.round(eErr * 100) / 100,
+    fpMae: Math.round(fErr * 100) / 100,
+  };
 }
 
 /**

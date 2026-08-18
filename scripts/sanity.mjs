@@ -20,7 +20,8 @@ import {
 } from "../src/simulate.js";
 import { migrate, addCall, callCalibration, applyWin, revertWin, bestLineupFrom } from "../src/lineup.js";
 import { opponentLineups, opponentDistributions } from "../src/simulate.js";
-import { matchPlayer, parseRankings, planEcrUpdates } from "../src/importer.js";
+import { matchPlayer, parseRankings, planEcrUpdates, parseProjections } from "../src/importer.js";
+import { projWeights } from "../src/calibration.js";
 import { applyEspnSync } from "../src/espnSync.js";
 import { deriveSchedule } from "../api/schedule.js";
 import { gameStatesFrom } from "../api/espn-write.js";
@@ -30,7 +31,8 @@ import { readFileSync } from "node:fs";
 import { captureCalibration, calibrationStats, calibrationSummary } from "../src/calibration.js";
 import { priceBid, demandFactor, weakestReplaceablePoints } from "../src/watchlist.js";
 import { liveRankInfo, RANK_SOURCE_LABEL, RANK_SOURCE_SHORT } from "../src/analysis.js";
-import { currentMatchupPeriod } from "../api/espn.js";
+import { currentMatchupPeriod, weeklyProj } from "../api/espn.js";
+const weeklyProjBasis = (p, wk) => weeklyProj(p, wk).basis;
 
 let failures = 0;
 const check = (name, ok, detail) => {
@@ -1064,6 +1066,127 @@ check(
   "a full abbreviated ranking paste matches every colliding player",
   plan16.updates.length === 5 && plan16.ambiguous.length === 0 && plan16.unmatched.length === 0,
   `matched ${plan16.updates.length}/5, ambiguous ${plan16.ambiguous.length}, unmatched ${plan16.unmatched.length}`
+);
+
+// ---- 28. expert projections: parse, blend, widen, label ----
+const projRoster = [
+  { id: "x1", name: "Chase Brown", team: "CIN", pos: "RB", ecr: "" },
+  { id: "x2", name: "Keenan Allen", team: "LAC", pos: "WR", ecr: "" },
+  { id: "x3", name: "Steelers D/ST", team: "PIT", pos: "D/ST", ecr: "" },
+];
+const csv = [
+  '"RK","PLAYER NAME","TEAM","OPP","MATCHUP","PROJ. FPTS"',
+  '1,"Chase Brown","CIN","@CLE","3 out of 5 stars",17.6',
+  '2,"Keenan Allen","LAC","vs KC","1 out of 5 stars",3.1',
+  '3,"Steelers","PIT","@NYJ","5 out of 5 stars",9.4',
+].join("\n");
+const pj = parseProjections(csv, projRoster);
+check("a pasted FantasyPros CSV parses with its header", pj.sawHeader === true && pj.rows.length === 3, JSON.stringify({ h: pj.sawHeader, n: pj.rows.length }));
+check("all three rows match, D/ST included", pj.matched.length === 3, JSON.stringify(pj.matched.map((m) => m.player.name)));
+check(
+  "the projection column is read",
+  pj.matched.find((m) => m.player.id === "x2").proj === 3.1,
+  JSON.stringify(pj.matched.map((m) => [m.player.name, m.proj]))
+);
+check(
+  "matchup stars are captured in the same pass",
+  pj.matched.find((m) => m.player.id === "x1").stars === 3 &&
+    pj.matched.find((m) => m.player.id === "x3").stars === 5,
+  JSON.stringify(pj.matched.map((m) => [m.player.name, m.stars]))
+);
+// free-form (no header) paste
+const freeform = parseProjections("1 Chase Brown CIN @CLE 3 out of 5 stars 17.6", projRoster);
+check(
+  "a header-less table paste still parses",
+  freeform.matched.length === 1 && freeform.matched[0].proj === 17.6 && freeform.matched[0].stars === 3,
+  JSON.stringify(freeform.matched.map((m) => [m.player.name, m.proj, m.stars]))
+);
+
+// --- the blend ---
+const blendState = (espn, fp, weights) => ({
+  week: "1",
+  players: { b1: { id: "b1", name: "Blend Guy", team: "KC", pos: "WR", status: "" } },
+  analytics: { b1: { 1: { proj: espn, projSource: "espn", fpProj: fp } } },
+  byes: {},
+  espn: null,
+  ...(weights ? { projWeights: weights } : {}),
+});
+const agree = pointDistribution({ id: "b1", name: "Blend Guy", team: "KC", pos: "WR", status: "" }, "1", blendState(14.2, 14.7));
+const split = pointDistribution({ id: "b1", name: "Blend Guy", team: "KC", pos: "WR", status: "" }, "1", blendState(7.1, 3.1));
+check(
+  "two sources blend at equal weight by default",
+  Math.abs(agree.mean - 14.45) < 0.06,
+  `got ${agree.mean}, expected the midpoint of 14.2 and 14.7`
+);
+check(
+  "the blend is labelled an assumption, not a derived weighting",
+  /assumed/.test(agree.source),
+  `source read "${agree.source}"`
+);
+check(
+  "sources 4 pts apart produce a WIDER sd than sources agreeing",
+  split.sd / split.mean > agree.sd / agree.mean,
+  `split cv ${(split.sd / split.mean).toFixed(3)} vs agreeing cv ${(agree.sd / agree.mean).toFixed(3)}`
+);
+check(
+  "measured weights, once earned, are labelled measured and actually shift the mean",
+  (() => {
+    const m = pointDistribution(
+      { id: "b1", name: "Blend Guy", team: "KC", pos: "WR", status: "" },
+      "1",
+      blendState(10, 20, { espn: 0.8, fp: 0.2, basis: "measured" })
+    );
+    return Math.abs(m.mean - 12) < 0.06 && /measured/.test(m.source);
+  })(),
+  "expected 0.8*10 + 0.2*20 = 12 and a 'measured' label"
+);
+// stars must NOT reach the projection — FP already prices the matchup
+const withStars = pointDistribution(
+  { id: "b1", name: "Blend Guy", team: "KC", pos: "WR", status: "" },
+  "1",
+  { ...blendState(12, 12), analytics: { b1: { 1: { proj: 12, projSource: "espn", fpProj: 12, matchupStars: 1 } } } }
+);
+const withoutStars = pointDistribution({ id: "b1", name: "Blend Guy", team: "KC", pos: "WR", status: "" }, "1", blendState(12, 12));
+check(
+  "matchup stars are context only and never move the projection",
+  withStars.mean === withoutStars.mean && withStars.sd === withoutStars.sd,
+  "FantasyPros already prices the matchup into its number; counting stars too would double-dip"
+);
+
+// --- weights are earned, not assumed ---
+const gradedRows = (n, espnErr, fpErr) => {
+  const rows = {};
+  for (let i = 0; i < n; i++) {
+    rows[`p${i}`] = { actual: 10, sources: { espn: 10 + espnErr, fp: 10 + fpErr } };
+  }
+  return { calibration: { 1: rows } };
+};
+check(
+  "below the threshold the weighting stays an explicit prior",
+  projWeights(gradedRows(10, 1, 4)).basis === "assumed",
+  JSON.stringify(projWeights(gradedRows(10, 1, 4)))
+);
+const earned = projWeights(gradedRows(80, 1, 4));
+check(
+  "past the threshold it refits from observed accuracy and says so",
+  earned.basis === "measured" && earned.espn > earned.fp,
+  JSON.stringify(earned)
+);
+check(
+  "the more accurate source gets the larger weight, proportional to its error",
+  Math.abs(earned.espn - 0.8) < 0.02,
+  `ESPN mae 1, FP mae 4 → expected ~0.80 / 0.20, got ${earned.espn} / ${earned.fp}`
+);
+
+// --- weeklyProj provenance ---
+check(
+  "a real weekly projection is labelled weekly",
+  weeklyProjBasis({ stats: [{ statSourceId: 1, statSplitTypeId: 1, scoringPeriodId: 1, appliedTotal: 12.4 }] }, 1) === "weekly"
+);
+check(
+  "a season projection used as a per-game baseline is labelled season/17",
+  weeklyProjBasis({ stats: [{ statSourceId: 1, statSplitTypeId: 0, appliedTotal: 217.6 }] }, 1) === "season/17",
+  "this is the switch that moved a player 45% with no news behind it"
 );
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

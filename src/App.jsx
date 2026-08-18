@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } f
 import { storage, HUDDLE_KEY, probeStorage, STORAGE_MESSAGE } from "./storage.js";
 import { beginDragAutoScroll, stopDragAutoScroll } from "./dragScroll.js";
 import { useCoarsePointer } from "./useCoarsePointer.js";
-import { captureCalibration, calibrationStats, calibrationSummary } from "./calibration.js";
+import { captureCalibration, calibrationStats, calibrationSummary, projWeights } from "./calibration.js";
 import { teamOf, headshotUrl, teamLogoUrl } from "./data/teams.js";
 import { searchFreeAgents, FREE_AGENTS } from "./data/freeAgents.js";
 import {
@@ -1592,6 +1592,9 @@ export default function App() {
   const calibration = useMemo(() => callCalibration(state.calls), [state.calls]);
   const ledger = useMemo(() => calibrationStats(state), [state.calibration]);
   const ledgerVerdict = useMemo(() => calibrationSummary(state), [state.calibration]);
+  // Blend weights: the equal-weight prior until the ledger has enough graded
+  // both-source rows to replace it with something measured.
+  const weights = useMemo(() => projWeights(state), [state.calibration]);
 
   /** Ownership from the live ESPN snapshot when we have one, else the static transcription. */
   // Keyed on state.espn, not state: ownership only changes when a sync lands.
@@ -1947,8 +1950,12 @@ export default function App() {
           // fresh actual, so the ledger folds in here. Projections keep
           // refreshing until kickoff, then freeze; actuals land at final.
           const cal = captureCalibration(res.state, res.state.week);
+          const withCal = { ...res.state, calibration: cal.calibration };
           flash(summaryToText(res.summary));
-          return { ...res.state, calibration: cal.calibration };
+          // Refit the blend weights here rather than inside pointDistribution:
+          // that function runs hundreds of thousands of times per simulation
+          // and must stay a pure lookup.
+          return { ...withCal, projWeights: projWeights(withCal) };
         });
       } catch (e) {
         if (aliveRef.current && !silent) flash(`ESPN sync failed: ${e.message}`);
@@ -2124,6 +2131,36 @@ export default function App() {
     [flash]
   );
   /** Vegas props become the top-priority projection for the current week. */
+  /** Expert projections + matchup stars. Stored alongside ESPN's number,
+   *  never over it — pointDistribution blends the two. */
+  const onApplyProjections = useCallback(
+    (matched) => {
+      setState((s) => {
+        let next = s;
+        for (const m of matched) {
+          next = setPlayerAnalytics(next, m.player.id, s.week, {
+            fpProj: m.proj,
+            fpSource: "fantasypros",
+            // Context only — deliberately NOT read by pointDistribution.
+            ...(m.stars != null ? { matchupStars: m.stars } : {}),
+          });
+        }
+        return next;
+      });
+      const disagreements = matched.filter((m) => {
+        const espn = playerAnalytics(state, m.player.id, state.week)?.proj;
+        return Number.isFinite(espn) && Math.abs(espn - m.proj) >= 2;
+      });
+      flash(
+        `Blended ${matched.length} expert projection${matched.length === 1 ? "" : "s"} with ESPN's.` +
+          (disagreements.length
+            ? ` ${disagreements.length} disagree by 2+ pts — those now carry a wider range.`
+            : "")
+      );
+    },
+    [flash, state]
+  );
+
   const onApplyProps = useCallback(
     (propPlayers) => {
       setState((s) => {
@@ -2771,6 +2808,23 @@ export default function App() {
                 </>
               )}
             </div>
+            <div className="hint-card subtle">
+              <strong>Projection blend:</strong>{" "}
+              {weights.basis === "measured" ? (
+                <>
+                  ESPN {Math.round(weights.espn * 100)}% / FantasyPros {Math.round(weights.fp * 100)}% —{" "}
+                  <strong>measured</strong> from {weights.n} graded results (average miss: ESPN {weights.espnMae},
+                  FP {weights.fpMae}). This weighting is now evidence from your league, not an assumption.
+                </>
+              ) : (
+                <>
+                  ESPN 50% / FantasyPros 50% — <strong>an assumption, not a measurement</strong>. With no track
+                  record there's no honest way to weight one source over the other, so they're split evenly. After{" "}
+                  {weights.needed} graded results where both sources projected the same player ({weights.n} so far),
+                  this refits from which source is actually more accurate for your scoring.
+                </>
+              )}
+            </div>
 
             <SectionHeader kicker="Decision archive" title="Game Log" count={state.calls.length} />
             <CallForm state={state} week={week} onAdd={onAddCall} />
@@ -3391,6 +3445,7 @@ export default function App() {
           onSetBye={onSetBye}
           onImportTeam={onImportTeam}
           onApplyProps={onApplyProps}
+          onApplyProjections={onApplyProjections}
           flash={flash}
           link={link}
           syncStatus={syncStatus}

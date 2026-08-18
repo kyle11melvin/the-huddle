@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { TEAMS } from "../data/teams.js";
-import { parseRankings, parseByes, planEcrUpdates, buildEcrIndex } from "../importer.js";
+import { parseRankings, parseByes, planEcrUpdates, buildEcrIndex, parseProjections } from "../importer.js";
+import { playerAnalytics } from "../analytics.js";
 import { parseProps, leagueScoring } from "../props.js";
 import { shareUrl, decodeShare } from "../share.js";
 import { POSITIONS } from "../lineup.js";
@@ -22,6 +23,7 @@ export default function DataPanel({
   onSetBye,
   onImportTeam,
   onApplyProps,
+  onApplyProjections,
   flash,
   link: syncLink,
   syncStatus,
@@ -120,6 +122,13 @@ export default function DataPanel({
     if (!propsText.trim()) return null;
     return parseProps(propsText, Object.values(state.players), leagueScoring(state));
   }, [propsText, state]);
+
+  // ---- expert projections ----
+  const [projText, setProjText] = useState("");
+  const projPreview = useMemo(
+    () => (projText.trim() ? parseProjections(projText, Object.values(state.players)) : null),
+    [projText, state.players]
+  );
 
   // ---- byes ----
   const [byeText, setByeText] = useState("");
@@ -453,6 +462,69 @@ export default function DataPanel({
                   >
                     Apply {preview.updates.length} update{preview.updates.length === 1 ? "" : "s"} + index{" "}
                     {preview.rows.length}
+                  </button>
+                </div>
+              )}
+
+              <div className="modal-section-label">Expert projections (PROJ. FPTS)</div>
+              <p className="panel-note">
+                Paste the FantasyPros weekly export — <strong>the CSV works as-is</strong>, header and all. This
+                reads the projection column and the matchup stars. The projection is <strong>blended</strong> with
+                ESPN's rather than replacing it: where they agree you get a tighter range, where they disagree the
+                app widens the range instead of picking a winner. Stars are shown as context only — FantasyPros
+                already prices the matchup into its projection, so counting them twice would be double-dipping.
+              </p>
+              <textarea
+                rows={5}
+                value={projText}
+                onChange={(e) => setProjText(e.target.value)}
+                placeholder={'"RK","PLAYER NAME","TEAM","OPP","MATCHUP","PROJ. FPTS"\n1,"Ja\'Marr Chase","CIN","@CLE","4 out of 5 stars",18.7'}
+              />
+              {projPreview && (
+                <div className="import-preview">
+                  <div className="import-summary">
+                    <strong>{projPreview.matched.length}</strong> matched
+                    {projPreview.unmatched.length > 0 && ` · ${projPreview.unmatched.length} not on your roster`}
+                    {projPreview.ambiguous.length > 0 && ` · ${projPreview.ambiguous.length} ambiguous`}
+                    {projPreview.skipped > 0 && ` · ${projPreview.skipped} unreadable`}
+                    {projPreview.sawHeader && " · CSV header detected"}
+                  </div>
+                  {projPreview.matched.length > 0 && (
+                    <div className="import-list">
+                      {projPreview.matched.slice(0, 12).map((m) => {
+                        const espn = playerAnalytics(state, m.player.id, state.week)?.proj;
+                        const gap = Number.isFinite(espn) ? Math.abs(espn - m.proj) : null;
+                        return (
+                          <div key={m.player.id} className="import-row">
+                            <span className="import-name">
+                              {m.player.name}
+                              {m.stars != null && <span className="stars-mini"> {"★".repeat(m.stars)}</span>}
+                            </span>
+                            <span className="import-change">
+                              {Number.isFinite(espn) && <span className="from">{espn} ESPN</span>}
+                              {Number.isFinite(espn) && " → "}
+                              <span className="to">{m.proj} FP</span>
+                              {gap != null && gap >= 2 && <span className="gap-flag"> ⚠ {gap.toFixed(1)} apart</span>}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {projPreview.matched.length > 12 && (
+                        <div className="import-more">+{projPreview.matched.length - 12} more</div>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    className="btn-primary"
+                    style={{ marginTop: 14 }}
+                    disabled={!projPreview.matched.length}
+                    onClick={() => {
+                      onApplyProjections(projPreview.matched);
+                      setProjText("");
+                    }}
+                  >
+                    Apply {projPreview.matched.length} projection
+                    {projPreview.matched.length === 1 ? "" : "s"}
                   </button>
                 </div>
               )}

@@ -242,6 +242,155 @@ export function planEcrUpdates(rows, players) {
   return { updates, unmatched, ambiguous };
 }
 
+// ------------------------------------------ FantasyPros projections ----------
+
+/** Split one CSV line, honouring quoted fields that contain commas. */
+function splitCsvLine(line) {
+  const out = [];
+  let cur = "";
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQ && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else inQ = !inQ;
+    } else if ((c === "," || c === "\t") && !inQ) {
+      out.push(cur.trim());
+      cur = "";
+    } else cur += c;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+/** "3 out of 5 stars" | "★★★" | a bare 0–5 → 3 */
+function parseStars(raw) {
+  if (raw == null) return null;
+  const s = String(raw);
+  const glyphs = (s.match(/[★✩☆]/g) || []).filter((g) => g === "★").length;
+  if (glyphs > 0) return Math.min(5, glyphs);
+  const outOf = /(\d(?:\.\d)?)\s*(?:out of\s*)?5?\s*stars?/i.exec(s);
+  if (outOf) return Math.min(5, Math.round(parseFloat(outOf[1])));
+  const bare = /^\s*([0-5])\s*$/.exec(s);
+  return bare ? parseInt(bare[1], 10) : null;
+}
+
+/**
+ * Parse a FantasyPros weekly export carrying a projection column.
+ *
+ * Accepts a pasted CSV (with or without its header row) or the whitespace
+ * table you get from copying the page. Deliberately forgiving in the same way
+ * the ranking parser is — 17 weeks of hand-converting a CSV is 17 chances to
+ * make a transcription error.
+ *
+ * Captures the matchup star rating in the same pass. That is CONTEXT ONLY —
+ * see pointDistribution: FantasyPros' own projection already prices the
+ * matchup, so feeding the stars in as well would double-count it.
+ *
+ * @returns {{rows, matched, unmatched, ambiguous, skipped, sawHeader}}
+ */
+export function parseProjections(text, rosterPlayers = []) {
+  const lines = (text || "").split(/\r?\n/).map((l) => l.replace(/ /g, " ").trim()).filter(Boolean);
+  const rows = [];
+  let skipped = 0;
+  let sawHeader = false;
+
+  // Header-driven path: the CSV export names its columns, so use them.
+  let col = null;
+  if (lines.length) {
+    const head = splitCsvLine(lines[0]).map((h) => h.toLowerCase());
+    const find = (re) => head.findIndex((h) => re.test(h));
+    const nameCol = find(/player|name/);
+    const projCol = find(/proj.*(fpts|pts|points)|^fpts$|^proj$/);
+    if (nameCol >= 0 && projCol >= 0) {
+      sawHeader = true;
+      col = {
+        name: nameCol,
+        proj: projCol,
+        team: find(/^team$/),
+        pos: find(/^pos/),
+        opp: find(/^opp/),
+        stars: find(/matchup|star/),
+      };
+    }
+  }
+
+  for (let i = sawHeader ? 1 : 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^(rk|rank|tiers?)\b/i.test(line) && !sawHeader) continue;
+
+    let name = "";
+    let team = "";
+    let pos = "";
+    let proj = null;
+    let stars = null;
+
+    if (col) {
+      const f = splitCsvLine(line);
+      name = f[col.name] || "";
+      proj = parseFloat(String(f[col.proj] || "").replace(/[^0-9.\-]/g, ""));
+      team = col.team >= 0 ? canonTeam(f[col.team]) || "" : "";
+      pos = col.pos >= 0 ? POS_TOKENS[(f[col.pos] || "").toUpperCase().replace(/\d+$/, "")] || "" : "";
+      stars = col.stars >= 0 ? parseStars(f[col.stars]) : null;
+    } else {
+      // Free-form: "1 Ja'Marr Chase CIN @CLE 3 out of 5 stars 18.7"
+      let rest = line.replace(/^\s*\d{1,3}\s*[.)\]]?\s+/, "");
+      stars = parseStars(rest);
+      rest = rest.replace(/\d(?:\.\d)?\s*(?:out of\s*)?5?\s*stars?/i, " ").replace(/[★✩☆]/g, " ");
+      // the projection is the last decimal on the line
+      const nums = rest.match(/-?\d+\.\d+|\b\d+\b/g) || [];
+      if (nums.length) proj = parseFloat(nums[nums.length - 1]);
+      rest = rest.replace(/(-?\d+\.\d+|\b\d+\b)\s*$/, " ");
+      // Opponent. NO leading \b before the @ — "@" is not a word character, so
+      // \b never matches there and "@CLE" survived, after which the team
+      // regex below happily grabbed the OPPONENT as the team and left
+      // "Chase Brown CIN @" as the name.
+      rest = rest.replace(/(?:\bvs\.?\s*|@\s*)[A-Za-z]{2,3}\b/gi, " ");
+      rest = rest.replace(/\b(QB|RB|WR|TE|K|DST|DEF|D\/ST)\d*\b/gi, (t) => {
+        if (!pos) pos = POS_TOKENS[t.toUpperCase().replace(/\d+$/, "")] || "";
+        return " ";
+      });
+      const tm = /\b([A-Za-z]{2,3})\b\s*$/.exec(rest.trim());
+      if (tm && canonTeam(tm[1])) {
+        team = canonTeam(tm[1]);
+        rest = rest.slice(0, tm.index);
+      }
+      // "Chase Brown RB - CIN" leaves a dangling separator once the position
+      // and team are lifted out; the rankings parser already strips these.
+      name = rest
+        .replace(/\s+/g, " ")
+        .replace(/[-–—]+\s*$/, "")
+        .replace(/^\s*[-–—]+/, "")
+        .trim();
+    }
+
+    if (!name || !Number.isFinite(proj)) {
+      if (/[A-Za-z]/.test(line)) skipped++;
+      continue;
+    }
+    rows.push({ name, team, pos, proj: Math.round(proj * 10) / 10, stars });
+  }
+
+  // Same matcher the rankings import uses — team/pos hints included, which is
+  // what makes the surname collisions on this roster resolvable.
+  const matched = [];
+  const unmatched = [];
+  const ambiguous = [];
+  const claimed = new Set();
+  for (const r of rows) {
+    const { match, ambiguous: amb } = matchPlayer(r.name, rosterPlayers, { team: r.team, pos: r.pos });
+    if (amb) ambiguous.push(r);
+    else if (!match) unmatched.push(r);
+    else if (!claimed.has(match.id)) {
+      claimed.add(match.id);
+      matched.push({ player: match, proj: r.proj, stars: r.stars, team: r.team });
+    }
+  }
+  return { rows, matched, unmatched, ambiguous, skipped, sawHeader };
+}
+
 // ------------------------------------- FantasyPros "Who Should I Start" ------
 
 /** Row label -> the analytics key it feeds. Rushing/receiving variants merge. */
