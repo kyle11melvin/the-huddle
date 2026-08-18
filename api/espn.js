@@ -56,15 +56,19 @@ const STAT_KEY = {
 };
 
 /** League's real per-stat points from mSettings — the app should never guess. */
-function extractScoring(settings) {
+export function extractScoring(settings) {
   const items = (settings && settings.scoringSettings && settings.scoringSettings.scoringItems) || [];
   const out = {};
   for (const it of items) {
     const k = STAT_KEY[it.statId];
     if (!k) continue;
     // Some leagues store the live value in pointsOverrides["16"] (PPR slot).
-    const override = it.pointsOverrides && Number(it.pointsOverrides["16"]);
-    const pts = Number.isFinite(override) && override !== 0 ? override : it.points;
+    // Key on the property's PRESENCE, not its value: `override !== 0` could
+    // not tell "no override" from "override is deliberately 0", so a league
+    // that zeroed out PPR would still be scored as if receptions counted.
+    const ov = it.pointsOverrides;
+    const hasOverride = ov && Object.prototype.hasOwnProperty.call(ov, "16");
+    const pts = hasOverride ? Number(ov["16"]) : it.points;
     if (Number.isFinite(pts)) out[k] = pts;
   }
   return out;

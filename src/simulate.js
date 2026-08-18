@@ -171,6 +171,15 @@ const OPP_PLAY_PROB = { QUESTIONABLE: 0.77, DOUBTFUL: 0.25, OUT: 0, INJURY_RESER
 const CVS = { QB: 0.32, RB: 0.5, WR: 0.58, TE: 0.6, K: 0.42, "D/ST": 0.72 };
 
 /**
+ * Position rank → expected fantasy points. A rough curve, but the ONLY one in
+ * the app: everything that has to price a player from a rank alone uses this,
+ * so a rank-derived estimate and a real projection are always the same kind
+ * of number and can be compared directly.
+ */
+export const rankToPoints = (rank) =>
+  Math.max(4, 22 - Math.log2(Math.max(1, rank)) * 3.1);
+
+/**
  * The opponent side of any simulation, one canonical builder (Lab, optimizer
  * and Gameday all use this instead of three hand-rolled copies).
  * Live ESPN starters + projections when synced; static-roster rank estimates
@@ -209,7 +218,7 @@ export function opponentDistributions(state, week, oppTeamOverride) {
     if (rank == null) continue;
     // Rough points-from-rank curve, only used to give the simulation an
     // opponent at all. Flagged as an estimate everywhere it surfaces.
-    const mean = Math.max(4, 22 - Math.log2(Math.max(1, rank)) * 3.1);
+    const mean = rankToPoints(rank);
     out.push({ id: k, name, team: team || null, pos, opp: nflOppOf(state, team, week), mean, sd: mean * (CVS[pos] ?? 0.55) });
   }
   return out;

@@ -167,7 +167,11 @@ export function applyEspnSync(state, data, myTeamName) {
   // ---- ESPN projections into the analytics layer, for everyone rostered ----
   let analytics = { ...(state.analytics || {}) };
   const writeProj = (playerId, proj) => {
-    if (!Number.isFinite(proj) || proj <= 0) return;
+    // ZERO IS DATA. ESPN projects 0.0 for a player on bye or ruled out;
+    // discarding it (the old `proj <= 0` guard) left the optimizer reading a
+    // stale pasted projection and cheerfully recommending you start him.
+    // "ESPN says zero" and "we have no number" must stay distinguishable.
+    if (!Number.isFinite(proj)) return;
     const forPlayer = { ...(analytics[playerId] || {}) };
     forPlayer[week] = { ...(forPlayer[week] || {}), proj, projSource: "espn" };
     analytics[playerId] = forPlayer;

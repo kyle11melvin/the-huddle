@@ -109,17 +109,29 @@ export function propsToPoints(props, scoring = SCORING) {
 
 // ------------------------------------------------------------------ parser ---
 
-// market patterns → prop key. Ordered: more specific first.
+// Market patterns → prop key. Ordered: more specific first.
+//
+// EVERY pattern is anchored on both sides. Unanchored, `ints?\b` matched the
+// tail of "Po|ints" — so a line reading "Fantasy Points 13.5" parsed as 13.5
+// interceptions and scored the player at −25.6. Since propsToPoints feeds
+// analytics.propsProj, which pointDistribution treats as its HIGHEST-priority
+// source, one ordinary paste could silently override good ESPN data.
 const MARKETS = [
-  [/rec(?:eiving)?\s*(?:yards|yds)/i, "recYds"],
-  [/rush(?:ing)?\s*att(?:empts)?/i, "rushAtt"],
-  [/rush(?:ing)?\s*(?:yards|yds)/i, "rushYds"],
-  [/pass(?:ing)?\s*(?:yards|yds)/i, "passYds"],
-  [/pass(?:ing)?\s*(?:touchdowns|tds?)/i, "passTds"],
-  [/interceptions?|ints?\b/i, "ints"],
-  [/receptions?|catches\b/i, "receptions"],
-  [/total\s*(?:touchdowns|tds?)/i, "tds"],
+  [/\brec(?:eiving)?\s*(?:yards|yds)\b/i, "recYds"],
+  [/\brush(?:ing)?\s*att(?:empts)?\b/i, "rushAtt"],
+  [/\brush(?:ing)?\s*(?:yards|yds)\b/i, "rushYds"],
+  [/\bpass(?:ing)?\s*(?:yards|yds)\b/i, "passYds"],
+  [/\bpass(?:ing)?\s*(?:touchdowns|tds?)\b/i, "passTds"],
+  [/\b(?:interceptions?|ints?)\b/i, "ints"],
+  [/\b(?:receptions?|catches)\b/i, "receptions"],
+  [/\btotal\s*(?:touchdowns|tds?)\b/i, "tds"],
 ];
+
+// Lines that LOOK like a market we score but aren't. "Longest Reception" is a
+// real word-boundary match for `receptions`, so anchoring can't save it — the
+// whole line has to be skipped. readMarket keeps the FIRST value it sees for
+// a market, so a decoy appearing above the real line is the one that sticks.
+const SKIP_LINE = /\blongest\b|\bfantasy\s*points\b|\btotal\s*points\b|\bcompletions?\b|\battempts?\s*\/\s*completions?\b/i;
 
 const ANYTIME_RE = /any\s*time|anytime|to\s+score\s+a?\s*(?:td|touchdown)/i;
 const NUM_RE = /(\d{1,3}(?:\.\d)?)/;
@@ -140,6 +152,9 @@ export function parseProps(text, rosterPlayers, scoring = SCORING) {
 
   const readMarket = (line, target) => {
     let hit = false;
+    // Informational rows we don't score — skipped whole, before any pattern
+    // gets a chance to half-match them.
+    if (SKIP_LINE.test(line)) return false;
     if (ANYTIME_RE.test(line)) {
       const odds = ODDS_RE.exec(line.replace(/[−–]/g, "-"));
       if (odds) {

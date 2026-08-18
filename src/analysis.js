@@ -11,9 +11,9 @@
 
 import { SLOT_DEFS, findLocation, slotAccepts, POSITIONS } from "./lineup.js";
 import { LEAGUE_ROSTERS, MY_TEAM } from "./data/leagueRosters.js";
-import { pointDistribution } from "./analytics.js";
+import { pointDistribution, PLAY_PROB } from "./analytics.js";
 import { normName } from "./espnSync.js";
-import { lineupDistributions, simulateMatchup } from "./simulate.js";
+import { lineupDistributions, simulateMatchup, rankToPoints } from "./simulate.js";
 import { scheduleOpp } from "./scheduleSync.js";
 
 const nflOpp = (state, team, week) => {
@@ -106,20 +106,35 @@ export function lineupWarnings(state, week) {
   return out;
 }
 
-/** Higher is better. Unusable players score -Infinity so they never start.
- *  The distribution mean is already injury-priced (playProb × outcome), so no
- *  extra Q/D penalty here — the old flat penalty double-counted the risk. */
+/**
+ * Higher is better. Unusable players score -Infinity so they never start.
+ *
+ * EVERY branch returns expected fantasy points × 10. That is the whole point:
+ * the old fallback returned `200 - rank` (≈100–200) while the projection
+ * branch returned points×10 (≈0–350), so an UNPROJECTED bench player
+ * routinely outscored a projected starter and the optimizer confidently
+ * recommended benching your best player.
+ *
+ * The distribution mean is already injury-priced (playProb × outcome); the
+ * rank fallback applies the same play-probability multiplier rather than a
+ * flat penalty, so Q/D means the same thing on both paths.
+ */
 function scorePlayer(p, week, byes, state) {
   if (!p) return -Infinity;
   if (isUnusable(p, week, byes)) return -Infinity;
   const dist = state ? pointDistribution(p, week, state) : null;
   if (dist) return dist.mean * 10;
+
+  // No projection: estimate points from rank using the app's one rank→points
+  // curve, so the result is directly comparable with the branch above.
+  const rank = state ? liveRank(state, p) : ecrRank(p);
+  if (rank == null) return 0;
   const st = effectiveStatus(p, week, byes);
-  const penalty = st === "D" ? 12 : st === "Q" ? 4 : 0;
-  const rank = ecrRank(p);
-  const base = rank == null ? 0 : 200 - rank;
+  const playProb = PLAY_PROB[st] ?? 1;
   const wd = (p.weeks && p.weeks[week]) || {};
-  return base + (wd.matchup || 0) * 4 - penalty;
+  // matchup grade is a small nudge in POINTS (was 4 rank-units per star)
+  const points = rankToPoints(rank) * playProb + (wd.matchup || 0) * 0.4;
+  return points * 10;
 }
 
 // Fewer runs than the headline sim: the optimizer scans dozens of candidate

@@ -6,7 +6,9 @@
 //   4. migrate never silently deletes a player, never double-places one
 //   5. ESPN sync seats every player it can and REPORTS the ones it can't
 //   6. one failed week fetch must not fabricate a league-wide bye
-import { propsToPoints, SCORING } from "../src/props.js";
+import { propsToPoints, SCORING, parseProps } from "../src/props.js";
+import { suggestLineup } from "../src/analysis.js";
+import { extractScoring } from "../api/espn.js";
 import { pointDistribution, floorCeiling } from "../src/analytics.js";
 import { simulateMatchup } from "../src/simulate.js";
 import { migrate } from "../src/lineup.js";
@@ -226,6 +228,139 @@ check(
   "one failed week → NO byes derived (no phantom league-wide bye)",
   Object.keys(bad.byes).length === 0,
   `derived ${Object.keys(bad.byes).length} byes`
+);
+
+// ---- 8. scorePlayer: one scale, not two (finding 7) ----
+// A projected starter must outrank an unprojected bench player whose only
+// credential is an ECR string. The old code compared points×10 (≈0–350)
+// against 200−rank (≈100–200), so WR38-with-no-projection beat WR14-with-12.
+// QBs on purpose: one QB slot and FLEX doesn't accept them, so the two
+// players genuinely COMPETE. (With WRs they'd both just start — three WR
+// slots for two players — and no swap would ever be proposed.)
+const mkLineupState = () => ({
+  v: 2,
+  week: "1",
+  players: {
+    a: { id: "a", name: "Projected Starter", team: "KC", pos: "QB", ecr: "QB14", status: "" },
+    b: { id: "b", name: "Unprojected Bench", team: "BUF", pos: "QB", ecr: "QB38", status: "" },
+  },
+  lineup: { QB: ["a"], RB: [null, null], WR: [null, null, null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  bench: ["b", null, null, null, null, null],
+  ir: [null, null],
+  byes: {},
+  byesAuto: {},
+  byesManual: {},
+  analytics: { a: { 1: { proj: 12, projSource: "espn" } } }, // b has none
+  espn: null,
+  ecrIndex: {},
+  schedule: null,
+  matchups: {},
+});
+const scaleMoves = suggestLineup(mkLineupState(), "1", null);
+const badSwap = scaleMoves.find((m) => m.inId === "b" && m.outId === "a");
+check(
+  "optimizer does not bench a projected starter for an unprojected bench player",
+  !badSwap,
+  badSwap ? `recommended "${badSwap.inName} over ${badSwap.outName}" (gain ${badSwap.gain})` : "no bad swap"
+);
+
+// ---- 9. props parser: market names must not match inside other words ----
+// "Longest Reception" comes BEFORE the real receptions line: readMarket keeps
+// the first value it sees for a market, so a decoy that appears first is the
+// one that lands. (Ordered the other way the bug hides.)
+const realPaste = [
+  "Tee Higgins",
+  "Receiving Yards 69.5",
+  "Longest Reception 24.5",
+  "Receptions 5.5",
+  "Fantasy Points 13.5",
+  "Anytime TD +190",
+].join("\n");
+const roster = [{ id: "h1", name: "Tee Higgins", team: "CIN", pos: "WR" }];
+const parsed = parseProps(realPaste, roster);
+const higgins = parsed.players[0];
+check("props paste matches the player", !!higgins, `matched ${parsed.players.length} players`);
+check(
+  '"Fantasy Points" is not read as interceptions',
+  higgins && higgins.props.ints === undefined,
+  `ints = ${higgins && higgins.props.ints}`
+);
+check(
+  '"Longest Reception" does not overwrite the real receptions line',
+  higgins && higgins.props.receptions === 5.5,
+  `receptions = ${higgins && higgins.props.receptions}`
+);
+check(
+  "a normal paste lands in a sane points range",
+  higgins && higgins.computed.points > 10 && higgins.computed.points < 25,
+  `computed ${higgins && higgins.computed.points} (was −25.6 with the substring bug)`
+);
+// …and a genuine interception line must still be read.
+const qbPaste = ["Trevor Lawrence", "Passing Yards 245.5", "Interceptions 0.5"].join("\n");
+const qbParsed = parseProps(qbPaste, [{ id: "q1", name: "Trevor Lawrence", team: "JAX", pos: "QB" }]);
+check(
+  "a real interceptions line is still parsed",
+  qbParsed.players[0] && qbParsed.players[0].props.ints === 0.5,
+  `ints = ${qbParsed.players[0] && qbParsed.players[0].props.ints}`
+);
+
+// ---- 10. an explicit ESPN zero is data, not a missing value (finding 11) ----
+const zeroSync = applyEspnSync(
+  migrate({ v: 2, week: "1", players: {}, lineup: emptyLineup, bench: [null], ir: [null] }),
+  {
+    currentWeek: 1,
+    rosterSlots: { 20: 6, 21: 2 },
+    leagueFaab: 100,
+    teams: [
+      {
+        id: 7,
+        name: "Test Team",
+        faabSpent: 0,
+        record: null,
+        roster: [{ espnId: "9001", name: "Bye Week Guy", pos: "WR", proTeamId: 12, slot: "BE", injuryStatus: "", percentOwned: 1, proj: 0, actual: null }],
+      },
+    ],
+    matchups: [],
+    pool: [],
+    games: {},
+    impliedTotals: {},
+  },
+  "Test Team"
+);
+const zeroId = Object.keys(zeroSync.state.players)[0];
+const zeroAnalytics = zeroSync.state.analytics[zeroId]?.["1"];
+check(
+  "an ESPN projection of 0 is stored, not discarded",
+  zeroAnalytics && zeroAnalytics.proj === 0 && zeroAnalytics.projSource === "espn",
+  `stored ${JSON.stringify(zeroAnalytics)}`
+);
+// …and it must beat a stale season average rather than falling back to it.
+const zeroState = {
+  ...zeroSync.state,
+  analytics: { [zeroId]: { 1: { proj: 0, projSource: "espn", seasonAvg: 11.4 } } },
+};
+const zeroDist = pointDistribution(zeroState.players[zeroId], "1", zeroState);
+check(
+  "an explicit zero projection beats a stale season average",
+  zeroDist && zeroDist.mean === 0,
+  `mean = ${zeroDist && zeroDist.mean} (source: ${zeroDist && zeroDist.source})`
+);
+
+// ---- 11. a scoring override of exactly 0 must survive (finding 12f) ----
+check(
+  "a deliberate 0-point override is not treated as absent",
+  extractScoring({ scoringSettings: { scoringItems: [{ statId: 53, points: 1, pointsOverrides: { 16: 0 } }] } })
+    .reception === 0,
+  `reception = ${extractScoring({ scoringSettings: { scoringItems: [{ statId: 53, points: 1, pointsOverrides: { 16: 0 } }] } }).reception}`
+);
+check(
+  "a real override still wins over the base value",
+  extractScoring({ scoringSettings: { scoringItems: [{ statId: 4, points: 4, pointsOverrides: { 16: 6 } }] } })
+    .passTd === 6
+);
+check(
+  "no override falls back to the base value",
+  extractScoring({ scoringSettings: { scoringItems: [{ statId: 4, points: 6, pointsOverrides: {} }] } }).passTd === 6
 );
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

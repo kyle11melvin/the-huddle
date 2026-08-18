@@ -110,9 +110,13 @@ export function pointDistribution(player, week, state) {
   if (a && Number.isFinite(a.propsProj) && a.propsProj > 0) {
     mu = a.propsProj;
     source = "vegas props";
-  } else if (a && Number.isFinite(a.proj) && a.proj > 0) {
+  } else if (a && Number.isFinite(a.proj) && (a.proj > 0 || a.projSource === "espn")) {
+    // An explicit ESPN zero is authoritative (bye / ruled out) and must NOT
+    // fall through to a season average — that's how a player who will score
+    // nothing ends up projected for his season mean. A zero from any other
+    // source is still treated as "no number".
     mu = a.proj;
-    source = "projection";
+    source = a.proj === 0 ? "ESPN projects zero" : "projection";
   } else if (a && Number.isFinite(a.seasonAvg) && a.seasonAvg > 0) {
     mu = a.seasonAvg;
     source = "season average";
