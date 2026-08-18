@@ -77,7 +77,13 @@ export function applyEspnSync(state, data, myTeamName) {
   }
 
   const week = String(data.currentWeek || state.week || "1");
-  const summary = { added: [], dropped: [], projections: 0, statusChanges: [], week };
+  const summary = { added: [], dropped: [], projections: 0, statusChanges: [], overflow: [], week };
+
+  // Zone sizes come from the league's own settings when ESPN reports them
+  // (slot 20 = bench, 21 = IR); the constants are only a fallback.
+  const slotCounts = data.rosterSlots || {};
+  const benchSize = Number.isFinite(slotCounts["20"]) && slotCounts["20"] > 0 ? slotCounts["20"] : BENCH_SIZE;
+  const irSize = Number.isFinite(slotCounts["21"]) && slotCounts["21"] >= 0 ? slotCounts["21"] : IR_SIZE;
 
   // ---- index existing players ----
   const byEspnId = new Map();
@@ -88,7 +94,7 @@ export function applyEspnSync(state, data, myTeamName) {
   }
 
   // ---- build the new roster from ESPN's slots ----
-  const { lineup, bench, ir } = emptyZones();
+  const { lineup, bench, ir } = emptyZones(benchSize, irSize);
   const players = {};
   const cursor = {};
   const benchQueue = [];
@@ -132,15 +138,26 @@ export function applyEspnSync(state, data, myTeamName) {
     }
   }
 
-  benchQueue.slice(0, BENCH_SIZE).forEach((id, i) => (bench[i] = id));
-  benchQueue.slice(BENCH_SIZE).forEach((id) => {
+  // IR FIRST. Bench overflow used to claim IR slots before genuinely-IR'd
+  // players got one, which pushed a real player into no zone at all — and an
+  // unplaced player was then deleted by migrate on the next page load, taking
+  // their notes, ECR and week history with them.
+  const place = (id) => {
     const free = ir.indexOf(null);
-    if (free >= 0) ir[free] = id; // overflow safety net; shouldn't happen at 16+2
-  });
-  irQueue.slice(0, IR_SIZE).forEach((id) => {
-    const free = ir.indexOf(null);
-    if (free >= 0) ir[free] = id;
-  });
+    if (free >= 0) {
+      ir[free] = id;
+      return true;
+    }
+    return false;
+  };
+  for (const id of irQueue) {
+    if (!place(id)) summary.overflow.push(players[id]?.name || id);
+  }
+  benchQueue.slice(0, bench.length).forEach((id, i) => (bench[i] = id));
+  for (const id of benchQueue.slice(bench.length)) {
+    // Anyone we cannot seat is REPORTED, never silently dropped.
+    if (!place(id)) summary.overflow.push(players[id]?.name || id);
+  }
 
   // dropped = anyone previously rostered who didn't come back from ESPN
   for (const p of Object.values(state.players)) {
@@ -418,6 +435,7 @@ export function summaryToText(s) {
   if (s.added.length) bits.push(`+${s.added.length} added (${s.added.join(", ")})`);
   if (s.dropped.length) bits.push(`−${s.dropped.length} dropped (${s.dropped.join(", ")})`);
   if (s.statusChanges.length) bits.push(`${s.statusChanges.length} status change${s.statusChanges.length === 1 ? "" : "s"}`);
+  if (s.overflow && s.overflow.length) bits.push(`⚠ no roster spot for ${s.overflow.join(", ")}`);
   bits.push(`${s.projections} projections`);
   if (s.opponent) bits.push(`opponent: ${s.opponent}`);
   if (s.faab != null) bits.push(`FAAB $${s.faab}`);

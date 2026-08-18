@@ -48,8 +48,6 @@ import {
 } from "./remoteStore.js";
 import {
   SLOT_DEFS,
-  BENCH_SIZE,
-  IR_SIZE,
   MAX_ROSTER,
   POS_LIMITS,
   POSITIONS,
@@ -1388,8 +1386,27 @@ export default function App() {
     })();
   }, []);
 
+  // A player migrate couldn't seat is kept in `players` rather than deleted —
+  // say so, or "kept but invisible" is just a quieter kind of data loss.
   useEffect(() => {
     if (!loaded) return;
+    const o = state.orphans;
+    if (o && o.length) {
+      flash(
+        `⚠ No roster spot for ${o.map((x) => x.name).join(", ")} — kept your notes, but they're not on a bench or IR slot.`
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    // Viewing someone else's shared team must NEVER touch your own saved
+    // team. Without this guard, opening a league-mate's ?team= link writes
+    // their roster over huddle-data — and the 45s viewer poll keeps
+    // re-writing it — silently destroying a season of notes, ECR strings,
+    // claims and the call log, with localStorage the only copy.
+    if (viewingShared) return;
     (async () => {
       try {
         const res = await storage.set(HUDDLE_KEY, JSON.stringify(state));
@@ -1402,7 +1419,7 @@ export default function App() {
     if (link && link.mode === "owner" && link.key) {
       syncer.current.queue(link.id, link.key, state);
     }
-  }, [loaded, state, link]);
+  }, [loaded, state, link, viewingShared]);
 
   // Viewers pull the owner's changes: on tab re-focus, and on a slow poll so a
   // page left open in the foreground still updates. ~45s across a 10-person
@@ -2443,7 +2460,7 @@ export default function App() {
             <SectionHeader
               kicker="Reserves"
               title="Bench"
-              count={BENCH_SIZE}
+              count={state.bench.length}
               action={
                 // With live ESPN sync, adds/drops happen on ESPN and flow in
                 // automatically — a local add would be erased by the next
@@ -2470,7 +2487,7 @@ export default function App() {
               })}
             </div>
 
-            <SectionHeader kicker="Injured reserve" title="IR" count={IR_SIZE} />
+            <SectionHeader kicker="Injured reserve" title="IR" count={state.ir.length} />
             <div className="hint-card subtle">
               IR spots don't count against your {MAX_ROSTER}-man roster. A player must be flagged <strong>IR</strong>{" "}
               in their status editor before they can be moved here.
@@ -2495,7 +2512,7 @@ export default function App() {
                 Roster <strong>{total}</strong>/{MAX_ROSTER}
               </span>
               <span className="rs-ir">
-                IR {irUsed}/{IR_SIZE}
+                IR {irUsed}/{state.ir.length}
               </span>
               {POSITIONS.map((p) => (
                 <span key={p} className={`limit-chip ${(counts[p] || 0) >= POS_LIMITS[p] ? "full" : ""}`}>

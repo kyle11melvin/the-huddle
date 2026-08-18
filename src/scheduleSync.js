@@ -4,6 +4,8 @@
 // list into intel.
 // ============================================================================
 
+import { resolveByes } from "./lineup.js";
+
 export async function fetchSchedule() {
   const base = import.meta.env.DEV ? "https://the-huddle-hq.vercel.app" : "";
   const r = await fetch(`${base}/api/schedule`, { cache: "no-store" });
@@ -21,17 +23,25 @@ export function applySchedule(state, data) {
     // than no schedule; keep whatever exists and say nothing.
     return { state, skipped: true };
   }
-  // Numeric byes only (storage-boundary rule); manual entries still win.
+  // Numeric byes only (storage-boundary rule).
   const clean = {};
   for (const [team, w] of Object.entries(data.byes || {})) {
     const n = parseInt(w, 10);
     if (n >= 1 && n <= 18) clean[team] = n;
   }
-  const byes = { ...clean, ...(state.byes || {}) };
+  // Auto values are REPLACED wholesale, and only genuinely-manual entries
+  // layer on top. Merging the previous effective map back over the fresh one
+  // (the old `{ ...clean, ...state.byes }`) meant any bad auto value shadowed
+  // every future correct fetch forever, because it looked like a human's.
+  const byesAuto = clean;
+  const byesManual = state.byesManual || {};
+  const byes = resolveByes(byesAuto, byesManual);
   return {
     state: {
       ...state,
       byes,
+      byesAuto,
+      byesManual,
       schedule: { opps: data.opps, fetchedAt: data.fetchedAt, season: data.season },
     },
     byeCount: Object.keys(byes).length,

@@ -64,10 +64,17 @@ export function slotAccepts(slotKey, pos) {
   return def ? def.accepts.includes(pos) : false;
 }
 
-export function emptyZones() {
+/** Zone sizes are league settings, not constants — ESPN reports them in
+ *  mSettings.rosterSettings.lineupSlotCounts and plenty of leagues run 7
+ *  bench spots. The exported constants are the fallback, not the truth. */
+export function emptyZones(benchSize = BENCH_SIZE, irSize = IR_SIZE) {
   const lineup = {};
   for (const s of SLOT_DEFS) lineup[s.key] = Array(s.count).fill(null);
-  return { lineup, bench: Array(BENCH_SIZE).fill(null), ir: Array(IR_SIZE).fill(null) };
+  return {
+    lineup,
+    bench: Array(Math.max(1, benchSize)).fill(null),
+    ir: Array(Math.max(0, irSize)).fill(null),
+  };
 }
 
 // ------------------------------------------------------------ build/migrate ---
@@ -115,7 +122,10 @@ export function buildInitialState() {
     calls: [],
     faab: 100,
     claims: [],
-    byes: {}, // team -> week; empty until entered/imported. Never fabricated.
+    byes: {}, // team -> week, EFFECTIVE map (auto ∪ manual). What readers use.
+    byesAuto: {}, // derived from the schedule feed; replaced wholesale each fetch
+    byesManual: {}, // typed by a human; merged on top of byesAuto
+    orphans: [], // players migrate couldn't place; surfaced, never deleted
     ecrIndex: {}, // normalized name -> rank, from pasted ranking sets
     analytics: {}, // playerId -> week -> { proj, dvp, ou, expertRanks, ... }
     matchups: {}, // week -> { oppTeam, live: { rowKey -> {scored, status, pctRemaining} } }
@@ -131,7 +141,12 @@ export function migrate(raw) {
 
   if (raw.v === 2 && raw.players && raw.lineup) {
     const base = buildInitialState();
-    const { lineup, bench, ir } = emptyZones();
+    // Never shrink a saved roster: if this league runs 7 bench spots, the
+    // saved arrays say so and truncating here would orphan the 7th player.
+    const { lineup, bench, ir } = emptyZones(
+      Math.max(BENCH_SIZE, Array.isArray(raw.bench) ? raw.bench.length : 0),
+      Math.max(IR_SIZE, Array.isArray(raw.ir) ? raw.ir.length : 0)
+    );
     const players = {};
     for (const [id, p] of Object.entries(raw.players || {})) {
       if (!p || !p.name) continue;
@@ -147,24 +162,30 @@ export function migrate(raw) {
         weeks: p.weeks && typeof p.weeks === "object" ? p.weeks : {},
       };
     }
+    // ONE `used` set across every zone. A per-zone set let the same player
+    // occupy a lineup slot AND a bench slot, which inflates rosterCounts
+    // (blocking legal adds) and leaves a ghost behind on drop.
+    const used = new Set();
     const place = (target, src) => {
-      const seen = new Set();
       for (let i = 0; i < target.length; i++) {
         const id = Array.isArray(src) ? src[i] : null;
-        if (id && players[id] && !seen.has(id)) {
+        if (id && players[id] && !used.has(id)) {
           target[i] = id;
-          seen.add(id);
+          used.add(id);
         }
       }
-      return seen;
     };
-    const used = new Set();
-    for (const s of SLOT_DEFS) {
-      for (const id of place(lineup[s.key], raw.lineup?.[s.key])) used.add(id);
-    }
-    for (const id of place(bench, raw.bench)) used.add(id);
-    for (const id of place(ir, raw.ir)) used.add(id);
-    // any orphaned player falls to a free bench slot, else is dropped
+    for (const s of SLOT_DEFS) place(lineup[s.key], raw.lineup?.[s.key]);
+    place(bench, raw.bench);
+    place(ir, raw.ir);
+    // An orphaned player takes a free bench slot. If there is none we KEEP
+    // the record and report it — deleting silently cost the user their notes,
+    // ECR and week history, and the next sync re-added the player as "new".
+    // A state that predates the auto/manual bye split needs the one-time
+    // discard below; one that's already been migrated does not.
+    const legacyByes = raw.byesAuto === undefined;
+
+    const orphans = [];
     for (const id of Object.keys(players)) {
       if (used.has(id)) continue;
       const free = bench.indexOf(null);
@@ -172,7 +193,7 @@ export function migrate(raw) {
         bench[free] = id;
         used.add(id);
       } else {
-        delete players[id];
+        orphans.push({ id, name: players[id].name });
       }
     }
     return {
@@ -186,13 +207,28 @@ export function migrate(raw) {
       calls: Array.isArray(raw.calls) ? raw.calls : [],
       faab: typeof raw.faab === "number" ? raw.faab : 100,
       claims: Array.isArray(raw.claims) ? raw.claims : [],
-      byes: normalizeByes(raw.byes && typeof raw.byes === "object" ? raw.byes : {}),
+      // Legacy states (no byesAuto field) kept auto and manual byes in ONE
+      // map, so a phantom bye from a failed week fetch was indistinguishable
+      // from a human correction and shadowed every later good fetch. Those
+      // are discarded wholesale — only byesManual, which never existed in the
+      // old schema, can be trusted as human. Already-migrated states keep
+      // their auto map as-is.
+      byes: resolveByes(legacyByes ? {} : raw.byesAuto, raw.byesManual),
+      byesAuto: legacyByes ? {} : normalizeByes(raw.byesAuto),
+      byesManual: normalizeByes(raw.byesManual && typeof raw.byesManual === "object" ? raw.byesManual : {}),
       ecrIndex: raw.ecrIndex && typeof raw.ecrIndex === "object" ? raw.ecrIndex : {},
       analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
       matchups: raw.matchups && typeof raw.matchups === "object" ? raw.matchups : {},
       espn: raw.espn && typeof raw.espn === "object" ? raw.espn : null,
-      schedule: raw.schedule && typeof raw.schedule === "object" ? raw.schedule : null,
+      // On the legacy upgrade ONLY, clear fetchedAt so the discarded byes are
+      // repopulated now rather than after the 7-day staleness gate. Doing it
+      // unconditionally would re-fetch the schedule on every page load.
+      schedule:
+        raw.schedule && typeof raw.schedule === "object"
+          ? { ...raw.schedule, ...(legacyByes ? { fetchedAt: 0 } : {}) }
+          : null,
       alertsDismissed: raw.alertsDismissed && typeof raw.alertsDismissed === "object" ? raw.alertsDismissed : {},
+      orphans,
     };
   }
 
@@ -252,7 +288,9 @@ export function migrate(raw) {
     calls: Array.isArray(raw.calls) ? raw.calls : [],
     faab: typeof raw.faab === "number" ? raw.faab : 100,
     claims: Array.isArray(raw.claims) ? raw.claims : [],
-    byes: normalizeByes(raw.byes && typeof raw.byes === "object" ? raw.byes : {}),
+    byes: resolveByes({}, raw.byesManual), // see v2 branch: auto byes never carry forward
+    byesAuto: {},
+    byesManual: normalizeByes(raw.byesManual && typeof raw.byesManual === "object" ? raw.byesManual : {}),
     ecrIndex: raw.ecrIndex && typeof raw.ecrIndex === "object" ? raw.ecrIndex : {},
     analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
     matchups: raw.matchups && typeof raw.matchups === "object" ? raw.matchups : {},
@@ -352,8 +390,8 @@ export function legalDestinations(state, id) {
   for (const s of SLOT_DEFS) {
     for (let i = 0; i < s.count; i++) consider({ zone: "lineup", slotKey: s.key, index: i });
   }
-  for (let i = 0; i < BENCH_SIZE; i++) consider({ zone: "bench", index: i });
-  for (let i = 0; i < IR_SIZE; i++) consider({ zone: "ir", index: i });
+  for (let i = 0; i < state.bench.length; i++) consider({ zone: "bench", index: i });
+  for (let i = 0; i < state.ir.length; i++) consider({ zone: "ir", index: i });
   return out;
 }
 
@@ -680,16 +718,29 @@ export function toggleInterest(state, { name, team, pos, note }) {
 
 // ------------------------------------------------------------------ byes ---
 
+/**
+ * The effective bye map every reader consumes: auto-derived values from the
+ * schedule feed, with genuinely-manual entries layered on top.
+ *
+ * Keeping the two sources apart is the whole fix for the poisoned-bye bug —
+ * when auto and manual shared one map, a bad auto value was indistinguishable
+ * from a human correction and shadowed every later good fetch forever.
+ */
+export const resolveByes = (auto, manual) => normalizeByes({ ...(auto || {}), ...(manual || {}) });
+
+/** Manual bye entry — a human typing it is the only thing that lands here. */
 export function setBye(state, team, week) {
-  const byes = { ...(state.byes || {}) };
+  const byesManual = { ...(state.byesManual || {}) };
   const w = parseInt(week, 10);
-  if (!w || w < 1 || w > 18) delete byes[team];
-  else byes[team] = w;
-  return { ...state, byes };
+  if (!w || w < 1 || w > 18) delete byesManual[team];
+  else byesManual[team] = w;
+  return { ...state, byesManual, byes: resolveByes(state.byesAuto, byesManual) };
 }
 
+/** A pasted bye table is also a human entry — it outranks the feed. */
 export function mergeByes(state, incoming) {
-  return { ...state, byes: normalizeByes({ ...(state.byes || {}), ...incoming }) };
+  const byesManual = normalizeByes({ ...(state.byesManual || {}), ...incoming });
+  return { ...state, byesManual, byes: resolveByes(state.byesAuto, byesManual) };
 }
 
 /** Byes are numbers, enforced at every storage boundary — analysis.js once

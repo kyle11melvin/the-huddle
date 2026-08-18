@@ -36,6 +36,60 @@ async function mapLimit(items, limit, worker) {
   return out;
 }
 
+/**
+ * Pure: week payloads (null = that week's fetch failed) → opponents, byes and
+ * a completeness verdict. Exported so the completeness guard is testable
+ * without touching the network — it's the rule that decides whether the app
+ * believes a bye at all.
+ */
+export function deriveSchedule(weekPayloads) {
+  const opps = {};
+  const teamsSeen = new Set();
+  weekPayloads.forEach((data, i) => {
+    const wk = String(i + 1);
+    opps[wk] = {};
+    for (const ev of (data && data.events) || []) {
+      const comp = ev.competitions && ev.competitions[0];
+      if (!comp) continue;
+      const home = comp.competitors?.find((c) => c.homeAway === "home");
+      const away = comp.competitors?.find((c) => c.homeAway === "away");
+      const h = home && fixAbbr(home.team?.abbreviation);
+      const a = away && fixAbbr(away.team?.abbreviation);
+      if (!h || !a) continue;
+      opps[wk][h] = a;
+      opps[wk][a] = `@${h}`;
+      teamsSeen.add(h);
+      teamsSeen.add(a);
+    }
+  });
+
+  // A failed week fetch is INDISTINGUISHABLE from "nobody plays that week"
+  // once it lands in `opps` as an empty object — which is precisely how a
+  // single ESPN 503 used to hand every team in the league a phantom bye.
+  // So track failures explicitly and require a perfect sweep.
+  const failedWeeks = weekPayloads.map((p, i) => (p ? null : i + 1)).filter((w) => w !== null);
+  const populatedWeeks = Object.values(opps).filter((w) => Object.keys(w).length > 0).length;
+  const complete =
+    failedWeeks.length === 0 && populatedWeeks === weekPayloads.length && teamsSeen.size >= 30;
+
+  // bye = the regular-season week a team simply doesn't appear. Derived ONLY
+  // from a complete sweep; anything less and we publish no byes at all,
+  // because a wrong bye is far worse than a missing one.
+  const byes = {};
+  if (complete) {
+    for (const team of teamsSeen) {
+      for (let w = 1; w <= weekPayloads.length; w++) {
+        if (!opps[String(w)][team]) {
+          byes[team] = w;
+          break;
+        }
+      }
+    }
+  }
+
+  return { opps, byes, complete, failedWeeks, populatedWeeks, teamsSeen: teamsSeen.size };
+}
+
 export default async function handler(req, res) {
   applyCors(req, res, "GET,OPTIONS");
   if (req.method === "OPTIONS") return res.status(204).end();
@@ -59,47 +113,23 @@ export default async function handler(req, res) {
     );
 
     // opps[week][ABBR] = "OPP" or "@OPP"
-    const opps = {};
-    const teamsSeen = new Set();
-    weekPayloads.forEach((data, i) => {
-      const wk = String(i + 1);
-      opps[wk] = {};
-      for (const ev of (data && data.events) || []) {
-        const comp = ev.competitions && ev.competitions[0];
-        if (!comp) continue;
-        const home = comp.competitors?.find((c) => c.homeAway === "home");
-        const away = comp.competitors?.find((c) => c.homeAway === "away");
-        const h = home && fixAbbr(home.team?.abbreviation);
-        const a = away && fixAbbr(away.team?.abbreviation);
-        if (!h || !a) continue;
-        opps[wk][h] = a;
-        opps[wk][a] = `@${h}`;
-        teamsSeen.add(h);
-        teamsSeen.add(a);
-      }
-    });
+    const { opps, byes, complete, failedWeeks, populatedWeeks, teamsSeen } = deriveSchedule(weekPayloads);
 
-    // bye = the regular-season week a team simply doesn't appear
-    const byes = {};
-    for (const team of teamsSeen) {
-      for (let w = 1; w <= WEEKS; w++) {
-        if (!opps[String(w)][team]) {
-          byes[team] = w;
-          break;
-        }
-      }
-    }
-
-    const populatedWeeks = Object.values(opps).filter((w) => Object.keys(w).length > 0).length;
-    res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=604800");
+    // Don't cache an incomplete sweep for a day — retry soon instead.
+    res.setHeader(
+      "Cache-Control",
+      complete ? "s-maxage=86400, stale-while-revalidate=604800" : "s-maxage=120"
+    );
     res.setHeader("Content-Type", "application/json");
     return res.status(200).send(
       JSON.stringify({
         season,
         populatedWeeks,
+        failedWeeks,
+        teamsSeen,
         // Preseason: ESPN may not have the full slate posted yet — the client
         // treats a sparse schedule as "not available" rather than truth.
-        complete: populatedWeeks >= 17 && teamsSeen.size >= 30,
+        complete,
         opps,
         byes,
         fetchedAt: Date.now(),

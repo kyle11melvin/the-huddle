@@ -1,11 +1,17 @@
-// Engine sanity checks — run with `node scripts/sanity.mjs`.
-// Guards the three behaviours the app's honesty depends on:
+// Engine + data-integrity sanity checks — run with `npm test`.
+// Guards the behaviours the app's honesty depends on:
 //   1. scoring uses league values (6-pt pass TDs, rush attempts)
 //   2. injury risk is bimodal (Q = 77% × outcome, floor 0)
 //   3. correlation: stacked lineups are WIDER, QB-vs-opposing-D/ST narrower
+//   4. migrate never silently deletes a player, never double-places one
+//   5. ESPN sync seats every player it can and REPORTS the ones it can't
+//   6. one failed week fetch must not fabricate a league-wide bye
 import { propsToPoints, SCORING } from "../src/props.js";
 import { pointDistribution, floorCeiling } from "../src/analytics.js";
 import { simulateMatchup } from "../src/simulate.js";
+import { migrate } from "../src/lineup.js";
+import { applyEspnSync } from "../src/espnSync.js";
+import { deriveSchedule } from "../api/schedule.js";
 
 let failures = 0;
 const check = (name, ok, detail) => {
@@ -85,6 +91,142 @@ const B = [
 ];
 const even = simulateMatchup(A, B, 777);
 check("identical lineups ≈ 50% win", Math.abs(even.winProb - 0.5) < 0.02, `got ${(even.winProb * 100).toFixed(1)}%`);
+
+// ---- 5. migrate: never lose a player, never place one twice ----
+const mkPlayers = (n) =>
+  Object.fromEntries(
+    Array.from({ length: n }, (_, i) => [`p${i}`, { id: `p${i}`, name: `Player ${i}`, team: "KC", pos: "WR" }])
+  );
+const emptyLineup = { QB: [null], RB: [null, null], WR: [null, null, null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] };
+
+// 10 players, nothing placed, 6 bench slots → 6 seated, 4 unplaceable.
+// The 4 must SURVIVE (they used to be `delete`d, losing notes/ECR/history).
+const orphanState = migrate({
+  v: 2,
+  week: "1",
+  players: mkPlayers(10),
+  lineup: emptyLineup,
+  bench: [null, null, null, null, null, null],
+  ir: [null, null],
+});
+check(
+  "migrate keeps unplaceable players instead of deleting them",
+  Object.keys(orphanState.players).length === 10,
+  `kept ${Object.keys(orphanState.players).length}/10`
+);
+check(
+  "migrate reports the orphans it couldn't seat",
+  Array.isArray(orphanState.orphans) && orphanState.orphans.length === 4,
+  `orphans: ${JSON.stringify((orphanState.orphans || []).map((o) => o.name))}`
+);
+
+// Same player in a lineup slot AND on the bench must end up in exactly one.
+const dupeState = migrate({
+  v: 2,
+  week: "1",
+  players: mkPlayers(3),
+  lineup: { ...emptyLineup, QB: ["p0"] },
+  bench: ["p0", "p1", null, null, null, null],
+  ir: [null, null],
+});
+const zoneCount = (s, id) => {
+  let n = 0;
+  for (const arr of Object.values(s.lineup)) n += arr.filter((x) => x === id).length;
+  n += s.bench.filter((x) => x === id).length;
+  n += s.ir.filter((x) => x === id).length;
+  return n;
+};
+check("migrate places a duplicated player in exactly one zone", zoneCount(dupeState, "p0") === 1, `found in ${zoneCount(dupeState, "p0")} zones`);
+
+// ---- 6. applyEspnSync: seat everyone, or say who didn't fit ----
+const rosterEntry = (i, slot) => ({
+  espnId: String(1000 + i),
+  name: `Sync Player ${i}`,
+  pos: "RB",
+  proTeamId: 12,
+  slot,
+  injuryStatus: "",
+  percentOwned: 1,
+  proj: 5,
+  actual: null,
+});
+// 7 bench-bound + 2 IR in a league that reports 7 bench and 2 IR slots.
+const nineMan = [
+  ...Array.from({ length: 7 }, (_, i) => rosterEntry(i, "BE")),
+  rosterEntry(7, "IR"),
+  rosterEntry(8, "IR"),
+];
+const baseState = migrate({ v: 2, week: "1", players: {}, lineup: emptyLineup, bench: [null], ir: [null] });
+const mkData = (rosterSlots) => ({
+  currentWeek: 1,
+  rosterSlots,
+  leagueFaab: 100,
+  teams: [{ id: 7, name: "Test Team", roster: nineMan, faabSpent: 0, record: null }],
+  matchups: [],
+  pool: [],
+  games: {},
+  impliedTotals: {},
+});
+
+const sync7 = applyEspnSync(baseState, mkData({ 20: 7, 21: 2 }), "Test Team");
+const seated = (s) => s.bench.filter(Boolean).length + s.ir.filter(Boolean).length;
+check(
+  "ESPN sync seats all 9 when the league reports 7 bench + 2 IR",
+  seated(sync7.state) === 9 && sync7.summary.overflow.length === 0,
+  `seated ${seated(sync7.state)}/9, overflow ${JSON.stringify(sync7.summary.overflow)}`
+);
+check(
+  "ESPN sync honours the league's bench size over the constant",
+  sync7.state.bench.length === 7 && sync7.state.ir.length === 2,
+  `bench ${sync7.state.bench.length}, ir ${sync7.state.ir.length}`
+);
+
+// Same roster, but the league reports nothing → fall back to 6 bench / 2 IR.
+// Both real IR players must still get IR slots (they used to be evicted by
+// bench overflow), and the player who genuinely doesn't fit is REPORTED.
+const syncFallback = applyEspnSync(baseState, mkData(null), "Test Team");
+const irNames = syncFallback.state.ir.filter(Boolean).map((id) => syncFallback.state.players[id].name);
+check(
+  "IR players keep their IR slots when bench overflows",
+  irNames.includes("Sync Player 7") && irNames.includes("Sync Player 8"),
+  `IR holds ${JSON.stringify(irNames)}`
+);
+check(
+  "the player who doesn't fit is reported, not dropped",
+  syncFallback.summary.overflow.length === 1 &&
+    Object.keys(syncFallback.state.players).length === 9,
+  `overflow ${JSON.stringify(syncFallback.summary.overflow)}, players ${Object.keys(syncFallback.state.players).length}`
+);
+
+// ---- 7. schedule completeness: one failed week must not fake a bye ----
+const week = (n) => ({
+  events: Array.from({ length: 16 }, (_, g) => ({
+    competitions: [
+      {
+        competitors: [
+          { homeAway: "home", team: { abbreviation: `H${g}` } },
+          { homeAway: "away", team: { abbreviation: `A${g}` } },
+        ],
+      },
+    ],
+  })),
+});
+const fullSeason = Array.from({ length: 18 }, (_, i) => week(i + 1));
+const good = deriveSchedule(fullSeason);
+check("a clean 18-week sweep is complete", good.complete === true, `complete=${good.complete}, teams=${good.teamsSeen}`);
+
+const oneFailed = fullSeason.map((w, i) => (i === 5 ? null : w)); // ESPN 503 on week 6
+const bad = deriveSchedule(oneFailed);
+check(
+  "one failed week → complete:false",
+  bad.complete === false && bad.failedWeeks.length === 1 && bad.failedWeeks[0] === 6,
+  `complete=${bad.complete}, failed=${JSON.stringify(bad.failedWeeks)}`
+);
+check(
+  "one failed week → NO byes derived (no phantom league-wide bye)",
+  Object.keys(bad.byes).length === 0,
+  `derived ${Object.keys(bad.byes).length} byes`
+);
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);

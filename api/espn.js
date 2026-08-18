@@ -271,6 +271,11 @@ export default async function handler(req, res) {
           ? data.settings.acquisitionSettings.acquisitionBudget
           : 100,
       scoring: extractScoring(data.settings),
+      // Roster shape is a league setting, not a constant: slot 20 = bench,
+      // 21 = IR. Leagues running 7 bench spots used to silently lose the
+      // 7th player on the next page load.
+      rosterSlots:
+        (data.settings && data.settings.rosterSettings && data.settings.rosterSettings.lineupSlotCounts) || null,
       // raw scoringItems on demand, for auditing the extraction
       ...(req.query.debugScoring
         ? {
