@@ -20,6 +20,7 @@ import {
 } from "../src/simulate.js";
 import { migrate, addCall, callCalibration, applyWin, revertWin, bestLineupFrom } from "../src/lineup.js";
 import { opponentLineups, opponentDistributions } from "../src/simulate.js";
+import { matchPlayer, parseRankings, planEcrUpdates } from "../src/importer.js";
 import { applyEspnSync } from "../src/espnSync.js";
 import { deriveSchedule } from "../api/schedule.js";
 import { gameStatesFrom } from "../api/espn-write.js";
@@ -1005,6 +1006,64 @@ check(
     ],
     { "QB:0": "a" }
   ).bySlot["QB:0"] === "a"
+);
+
+// ---- 27. the importer matcher, against the real roster's collisions ----
+// Five of sixteen failed before this: FantasyPros abbreviates first names on
+// its position pages, and this roster contains TWO surname+initial collisions
+// (Bijan/Brian Robinson, Jameson/Javonte Williams) plus a D/ST written by
+// nickname. The team abbreviation in the same row resolves all of them — it
+// was parsed and then thrown away.
+const rosterFixture = [
+  ["Bijan Robinson", "ATL", "RB"],
+  ["Brian Robinson Jr.", "SF", "RB"],
+  ["Jameson Williams", "DET", "WR"],
+  ["Javonte Williams", "DAL", "RB"],
+  ["Steelers D/ST", "PIT", "D/ST"],
+  ["Trevor Lawrence", "JAX", "QB"],
+].map(([name, team, pos], i) => ({ id: `r${i}`, name, team, pos, ecr: "" }));
+
+const m = (name, hints) => matchPlayer(name, rosterFixture, hints);
+check(
+  "an abbreviated name + team resolves a same-surname collision",
+  m("B. Robinson", { team: "ATL", pos: "RB" }).match?.name === "Bijan Robinson" &&
+    m("B. Robinson", { team: "SF", pos: "RB" }).match?.name === "Brian Robinson Jr.",
+  `ATL → ${m("B. Robinson", { team: "ATL" }).match?.name}, SF → ${m("B. Robinson", { team: "SF" }).match?.name}`
+);
+check(
+  "position breaks a collision when the teams don't",
+  m("J. Williams", { pos: "WR" }).match?.name === "Jameson Williams" &&
+    m("J. Williams", { pos: "RB" }).match?.name === "Javonte Williams"
+);
+check(
+  "an abbreviated name with NO hints is still reported ambiguous, not guessed",
+  m("B. Robinson", {}).ambiguous === true && m("B. Robinson", {}).match === null
+);
+check(
+  "a D/ST written by nickname alone matches on team",
+  m("Steelers", { team: "PIT" }).match?.name === "Steelers D/ST",
+  `got ${m("Steelers", { team: "PIT" }).match?.name}`
+);
+check(
+  "a D/ST matches by nickname even with no team hint",
+  m("Steelers", {}).match?.name === "Steelers D/ST" &&
+    m("Steelers D/ST", { pos: "D/ST" }).match?.name === "Steelers D/ST"
+);
+check(
+  "a stale team on our side doesn't turn a findable match into a miss",
+  // row says he's on KC; our roster still has him on JAX. Name is unique, so
+  // the team filter must not be allowed to empty the candidate set.
+  m("T. Lawrence", { team: "KC", pos: "QB" }).match?.name === "Trevor Lawrence"
+);
+// end to end through the real parser
+const parsed16 = parseRankings(
+  ["1 B. Robinson ATL", "2 B. Robinson SF", "3 J. Williams DET", "4 J. Williams DAL", "5 Steelers PIT"].join("\n")
+);
+const plan16 = planEcrUpdates(parsed16.rows, rosterFixture);
+check(
+  "a full abbreviated ranking paste matches every colliding player",
+  plan16.updates.length === 5 && plan16.ambiguous.length === 0 && plan16.unmatched.length === 0,
+  `matched ${plan16.updates.length}/5, ambiguous ${plan16.ambiguous.length}, unmatched ${plan16.unmatched.length}`
 );
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

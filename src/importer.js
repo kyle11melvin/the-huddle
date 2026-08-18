@@ -44,23 +44,91 @@ export function nameParts(raw) {
   };
 }
 
-/** "T. Lawrence" matches "Trevor Lawrence"; "B. Robinson" won't match "Brian Robinson Jr." vs "Bijan" ambiguity is reported. */
-export function matchPlayer(rawName, players) {
+const looksLikeDefense = (s) => /\bd\/?st\b|\bdefense\b|\bdef\b/i.test(s || "");
+
+/** Defense identity with the D/ST decoration stripped: "Steelers D/ST" → "steelers". */
+const defKey = (s) =>
+  (s || "")
+    .toLowerCase()
+    .replace(/\bd\/?st\b|\bdefense\b|\bdef\b/g, " ")
+    .replace(/[^a-z]/g, "");
+
+/**
+ * Match a parsed row to a roster player.
+ *
+ * `hints` carries the team and position the row already told us. They were
+ * being parsed and then thrown away, which is why five of a sixteen-man
+ * roster failed to import: FantasyPros abbreviates first names on its
+ * position pages, so "B. Robinson" matched BOTH Bijan Robinson and Brian
+ * Robinson Jr., and "J. Williams" matched both Jameson and Javonte. The team
+ * abbreviation sitting in the same row resolves every one of those.
+ *
+ * @param {{team?:string, pos?:string}} [hints]
+ */
+export function matchPlayer(rawName, players, hints = {}) {
+  const hintTeam = canonTeam(hints.team) || null;
+  const hintPos = hints.pos || "";
+
+  // ---- team defenses ----
+  // FantasyPros lists these by nickname alone ("Steelers"); we store
+  // "Steelers D/ST". Name matching can't bridge that, but the team can.
+  const matchDefense = () => {
+    const defs = players.filter((p) => p.pos === "D/ST");
+    if (!defs.length) return null;
+    if (hintTeam) {
+      const byTeam = defs.filter((p) => canonTeam(p.team) === hintTeam);
+      if (byTeam.length === 1) return { match: byTeam[0], ambiguous: false };
+    }
+    const k = defKey(rawName);
+    const byName = k
+      ? defs.filter((p) => {
+          const pk = defKey(p.name);
+          return pk && (pk.includes(k) || k.includes(pk));
+        })
+      : [];
+    if (byName.length === 1) return { match: byName[0], ambiguous: false };
+    if (byName.length > 1) return { match: null, ambiguous: true, candidates: byName };
+    return null;
+  };
+
+  if (hintPos === "D/ST" || looksLikeDefense(rawName)) {
+    const d = matchDefense();
+    if (d) return d;
+  }
+
   const want = nameParts(rawName);
   if (!want || !want.last) return { match: null, ambiguous: false };
-  const hits = players.filter((p) => {
+  let hits = players.filter((p) => {
     const have = nameParts(p.name);
     if (!have || have.last !== want.last) return false;
     if (!want.first || !have.first) return true;
     // Both first names spelled out — compare them in full so "Bijan Robinson"
     // does not collide with "Brian Robinson Jr.". Only fall back to the initial
-    // when one side is genuinely abbreviated ("B. Robinson"), which stays
-    // ambiguous and gets reported rather than guessed.
+    // when one side is genuinely abbreviated ("B. Robinson").
     if (!want.abbreviated && !have.abbreviated) return want.first === have.first;
     return want.initial === have.initial;
   });
+
+  // Narrow an initial-collision with what the row already told us. Filters are
+  // applied only when they leave something behind — a stale team on our side
+  // (a traded player) must not turn a findable match into a miss.
+  if (hits.length > 1 && hintTeam) {
+    const byTeam = hits.filter((p) => canonTeam(p.team) === hintTeam);
+    if (byTeam.length) hits = byTeam;
+  }
+  if (hits.length > 1 && hintPos) {
+    const byPos = hits.filter((p) => p.pos === hintPos);
+    if (byPos.length) hits = byPos;
+  }
+
   if (hits.length === 1) return { match: hits[0], ambiguous: false };
   if (hits.length > 1) return { match: null, ambiguous: true, candidates: hits };
+
+  // Last resort: a bare nickname like "Steelers" carries no position token
+  // and no surname our roster would recognise, so nothing above fires. If the
+  // roster has defenses and nothing else claimed this row, try them.
+  const d = matchDefense();
+  if (d) return d;
   return { match: null, ambiguous: false };
 }
 
@@ -152,7 +220,9 @@ export function planEcrUpdates(rows, players) {
   const claimed = new Set();
 
   for (const r of rows) {
-    const { match, ambiguous: amb } = matchPlayer(r.name, players);
+    // Pass the row's own team and position through — they were parsed and
+    // then discarded, which is what made the initial-collisions unresolvable.
+    const { match, ambiguous: amb } = matchPlayer(r.name, players, { team: r.team, pos: r.pos });
     if (amb) {
       ambiguous.push(r);
       continue;
