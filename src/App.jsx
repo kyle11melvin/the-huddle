@@ -30,6 +30,8 @@ import {
   suggestLineup,
   myProfile,
   leagueStrength,
+  RANK_SOURCE_LABEL,
+  RANK_SOURCE_SHORT,
   tradeAngles,
   classifyAvailability,
   suggestAdds,
@@ -3209,8 +3211,20 @@ export default function App() {
                             <em>proj</em>
                             {wi.proj != null ? wi.proj : "—"}
                           </span>
-                          <span className="wi-metric">
-                            <em>{wi.pos} rank</em>
+                          {/* Rank carries its provenance now — "22nd-highest
+                              ESPN projection" and "22nd by expert consensus"
+                              are different claims and used to look identical. */}
+                          <span
+                            className="wi-metric"
+                            title={
+                              wi.rankSource
+                                ? `Source: ${RANK_SOURCE_LABEL[wi.rankSource]}`
+                                : "No rank available"
+                            }
+                          >
+                            <em>
+                              {wi.pos} rank{wi.rankSource ? ` · ${RANK_SOURCE_SHORT[wi.rankSource]}` : ""}
+                            </em>
                             {wi.rank != null ? `#${wi.rank}` : "—"}
                           </span>
                           <span className="wi-metric">
@@ -3224,11 +3238,17 @@ export default function App() {
                             </span>
                           )}
                           {wi.bid != null && !owner && (
-                            <span className="wi-metric bid" title="Heuristic: upgrade size + live competition, capped at 45% of your FAAB">
+                            <span
+                              className="wi-metric bid"
+                              title={`Heuristic. ${(wi.bidWhy || []).join(" · ")}`}
+                            >
                               <em>open bid</em>${wi.bid}
                             </span>
                           )}
                         </div>
+                        {wi.bid != null && !owner && (wi.bidWhy || []).length > 0 && (
+                          <div className="wi-note dim">Bid: {wi.bidWhy.join(" · ")}</div>
+                        )}
 
                         {wi.schedule && (
                           <div className="wi-sched">

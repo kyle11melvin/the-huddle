@@ -26,6 +26,8 @@ import { storage, probeStorage, STORAGE_MESSAGE } from "../src/storage.js";
 import { isAuthorized } from "../api/_auth.js";
 import { readFileSync } from "node:fs";
 import { captureCalibration, calibrationStats, calibrationSummary } from "../src/calibration.js";
+import { priceBid, demandFactor, weakestReplaceablePoints } from "../src/watchlist.js";
+import { liveRankInfo, RANK_SOURCE_LABEL, RANK_SOURCE_SHORT } from "../src/analysis.js";
 import { currentMatchupPeriod } from "../api/espn.js";
 
 let failures = 0;
@@ -798,6 +800,96 @@ check(
   "no verdict is published below the sample threshold",
   calibrationSummary(r5) === null,
   "a hit-rate off one game is exactly the overconfidence this ledger exists to catch"
+);
+
+// ---- 24. bids are priced in points and gated by real demand ----
+// The bug: 3 + upgradeRanks*1.2 + rivals*6 priced a 1%-rostered player at $23.
+const bidBase = { pointsAdded: 34, rivals: 1, week: "1", faab: 99 };
+const cheap = priceBid({ ...bidBase, owned: 3 });
+check(
+  "a 3%-rostered modest upgrade is a SINGLE-DIGIT bid",
+  cheap.bid < 10,
+  `got $${cheap.bid} — the old formula said $23 for this`
+);
+const contested = priceBid({ ...bidBase, owned: 55 });
+check(
+  "the same player at 55% rostered costs materially more",
+  contested.bid > cheap.bid * 2.5,
+  `3% → $${cheap.bid}, 55% → $${contested.bid}`
+);
+check(
+  "a player who adds nothing gets the minimum bid regardless of rank delta",
+  priceBid({ pointsAdded: 0, owned: 70, rivals: 4, week: "5", faab: 99 }).bid === 1,
+  `got $${priceBid({ pointsAdded: 0, owned: 70, rivals: 4, week: "5", faab: 99 }).bid}`
+);
+const wk2 = priceBid({ ...bidBase, owned: 50, week: "2" });
+const wk11 = priceBid({ ...bidBase, owned: 50, week: "11" });
+check(
+  "late-season FAAB is spent more freely than early-season FAAB",
+  wk11.bid > wk2.bid,
+  `wk2 $${wk2.bid} vs wk11 $${wk11.bid} — early budget buys optionality, late budget expires`
+);
+check(
+  "a bid never exceeds remaining FAAB",
+  priceBid({ pointsAdded: 500, owned: 95, rivals: 4, week: "12", faab: 6 }).bid <= 6,
+  `got $${priceBid({ pointsAdded: 500, owned: 95, rivals: 4, week: "12", faab: 6 }).bid} of $6 left`
+);
+check("a bid never goes below 1", priceBid({ pointsAdded: 0, owned: 0, week: "1", faab: 99 }).bid >= 1);
+// thinness scales, it no longer manufactures
+check(
+  "positional thinness scales a contested bid but can't create one from nothing",
+  priceBid({ pointsAdded: 0, owned: 5, rivals: 4, week: "3", faab: 99 }).bid === 1 &&
+    priceBid({ ...bidBase, owned: 55, rivals: 4 }).bid > priceBid({ ...bidBase, owned: 55, rivals: 0 }).bid
+);
+check(
+  "the handcuff branch is priced and labelled as a heuristic",
+  priceBid({ ...bidBase, owned: 20, handcuffFor: "Bijan Robinson" }).bid >
+    priceBid({ ...bidBase, owned: 20 }).bid &&
+    priceBid({ ...bidBase, owned: 20, handcuffFor: "Bijan Robinson" }).why.some((w) => /heuristic/i.test(w))
+);
+check(
+  "unknown ownership is priced conservatively, not free",
+  demandFactor(null) > demandFactor(3) && demandFactor(null) < demandFactor(55),
+  `null=${demandFactor(null).toFixed(2)} vs 3%=${demandFactor(3).toFixed(2)} vs 55%=${demandFactor(55).toFixed(2)}`
+);
+
+// an empty starting slot means replacement level is zero
+const emptySlotState = {
+  week: "1",
+  players: { w1: { id: "w1", name: "Only WR", team: "KC", pos: "WR", status: "" } },
+  lineup: { QB: [null], RB: [null, null], WR: ["w1", null, null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  analytics: { w1: { 1: { proj: 12, projSource: "espn" } } },
+  byes: {},
+  espn: null,
+};
+check(
+  "an empty startable slot prices replacement at zero, not at your worst starter",
+  weakestReplaceablePoints(emptySlotState, "1", "WR") === 0,
+  `got ${weakestReplaceablePoints(emptySlotState, "1", "WR")}`
+);
+
+// ---- 25. ranks carry their provenance ----
+const rankState = {
+  ecrIndex: { pastedguy: 8 },
+  espn: { autoRanks: { pastedguy: 40, projguy: 22 } },
+};
+check(
+  "a pasted expert rank is labelled as consensus and wins over the projection",
+  JSON.stringify(liveRankInfo(rankState, { name: "Pasted Guy" })) === JSON.stringify({ rank: 8, source: "fp" })
+);
+check(
+  "a projection-derived rank is labelled ESPN, not consensus",
+  JSON.stringify(liveRankInfo(rankState, { name: "Proj Guy" })) === JSON.stringify({ rank: 22, source: "espn" })
+);
+check(
+  "a seed ECR string is labelled preseason ECR",
+  JSON.stringify(liveRankInfo(rankState, { name: "Nobody Known", ecr: "WR31" })) ===
+    JSON.stringify({ rank: 31, source: "ecr" })
+);
+check("an unrankable player returns null rather than a bare number", liveRankInfo(rankState, { name: "Ghost" }) === null);
+check(
+  "every source has a human label",
+  ["espn", "fp", "ecr"].every((s) => RANK_SOURCE_LABEL[s] && RANK_SOURCE_SHORT[s])
 );
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

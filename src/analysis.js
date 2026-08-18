@@ -44,11 +44,40 @@ export function rankIndex(state) {
   return { ...((state.espn && state.espn.autoRanks) || {}), ...(state.ecrIndex || {}) };
 }
 
+/**
+ * Where a rank came from. Three different things were being rendered
+ * identically as "WR RANK #22":
+ *
+ *   espn  — position rank derived by sorting ESPN's own weekly projections.
+ *           "22nd-highest projection among WRs", NOT a consensus.
+ *   fp    — a pasted expert ranking set. Actual consensus.
+ *   ecr   — the preseason ECR string on the player record (from seeds).
+ *
+ * They are not the same claim and shouldn't look the same.
+ */
+export const RANK_SOURCE_LABEL = {
+  espn: "ESPN proj",
+  fp: "expert consensus",
+  ecr: "preseason ECR",
+};
+export const RANK_SOURCE_SHORT = { espn: "ESPN", fp: "FP", ecr: "ECR" };
+
+/** Rank + provenance, resolved in the same priority order the app uses. */
+export function liveRankInfo(state, player) {
+  if (!player) return null;
+  const k = normName(player.name);
+  const pasted = state.ecrIndex && state.ecrIndex[k];
+  if (pasted != null) return { rank: pasted, source: "fp" };
+  const auto = state.espn && state.espn.autoRanks && state.espn.autoRanks[k];
+  if (auto != null) return { rank: auto, source: "espn" };
+  const seeded = ecrRank(player);
+  return seeded != null ? { rank: seeded, source: "ecr" } : null;
+}
+
 /** Live position rank for a player, falling back to their pasted ECR string. */
 export function liveRank(state, player) {
-  if (!player) return null;
-  const r = rankIndex(state)[normName(player.name)];
-  return r != null ? r : ecrRank(player);
+  const info = liveRankInfo(state, player);
+  return info ? info.rank : null;
 }
 
 // ------------------------------------------------------------------- byes ---
@@ -348,7 +377,12 @@ export function myProfile(state) {
   for (const p of Object.values(state.players)) {
     const loc = findLocation(state, p.id);
     if (!loc || loc.zone === "ir") continue;
-    (byPos[p.pos] = byPos[p.pos] || []).push({ name: p.name, rank: liveRank(state, p) });
+    const info = liveRankInfo(state, p);
+    (byPos[p.pos] = byPos[p.pos] || []).push({
+      name: p.name,
+      rank: info ? info.rank : null,
+      source: info ? info.source : null,
+    });
   }
   for (const k of Object.keys(byPos)) {
     byPos[k].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
