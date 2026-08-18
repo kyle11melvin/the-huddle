@@ -25,6 +25,7 @@ import { gameStatesFrom } from "../api/espn-write.js";
 import { storage, probeStorage, STORAGE_MESSAGE } from "../src/storage.js";
 import { isAuthorized } from "../api/_auth.js";
 import { readFileSync } from "node:fs";
+import { captureCalibration, calibrationStats, calibrationSummary } from "../src/calibration.js";
 import { currentMatchupPeriod } from "../api/espn.js";
 
 let failures = 0;
@@ -728,6 +729,75 @@ check(
   "isAuthorized accepts the exact token and rejects a same-length impostor",
   isAuthorized({ headers: { "x-huddle-token": "z".repeat(64) } }) === true &&
     isAuthorized({ headers: { "x-huddle-token": "y".repeat(64) } }) === false
+);
+
+// ---- 23. calibration ledger: refresh before kickoff, freeze at it ----
+// The freeze is the whole point. Letting a projection update after kickoff
+// would grade the model against a number it revised with hindsight.
+const calPlayer = { id: "c1", name: "Ledger Guy", team: "KC", pos: "WR", espnId: "7001", status: "" };
+const calState = (proj, gameState, actual) => ({
+  week: "1",
+  players: { c1: calPlayer },
+  analytics: { c1: { 1: { proj, projSource: "espn" } } },
+  byes: {},
+  calibration: {},
+  espn: {
+    myTeamId: 7,
+    games: { KC: { state: gameState } },
+    teams: [
+      {
+        id: 7,
+        roster: [{ espnId: "7001", name: "Ledger Guy", pos: "WR", team: "KC", slot: "WR", proj, actual }],
+      },
+    ],
+  },
+});
+
+// pre-kickoff: projection tracks the latest number
+let s1 = calState(11, "pre", null);
+let r1 = captureCalibration(s1, "1");
+check("pre-kickoff projection is captured", r1.calibration["1"].c1.proj === 11, JSON.stringify(r1.calibration["1"].c1));
+check("pre-kickoff row is not locked", r1.calibration["1"].c1.locked === false);
+
+// still pre-kickoff, better number arrives (props post) → it updates
+let s2 = { ...calState(14, "pre", null), calibration: r1.calibration };
+let r2 = captureCalibration(s2, "1");
+check("projection keeps refreshing until kickoff", r2.calibration["1"].c1.proj === 14, `got ${r2.calibration["1"].c1.proj}`);
+
+// kickoff → freeze
+let s3 = { ...calState(14, "in", null), calibration: r2.calibration };
+let r3 = captureCalibration(s3, "1");
+check("kickoff locks the row", r3.calibration["1"].c1.locked === true);
+
+// a later (hindsight-tainted) projection must NOT overwrite the frozen one
+let s4 = { ...calState(3, "in", null), calibration: r3.calibration };
+let r4 = captureCalibration(s4, "1");
+check(
+  "a post-kickoff projection change cannot rewrite history",
+  r4.calibration["1"].c1.proj === 14,
+  `got ${r4.calibration["1"].c1.proj} — hindsight leaked into the ledger`
+);
+
+// final → grade against the frozen projection
+let s5 = { ...calState(3, "post", 22.4), calibration: r4.calibration };
+let r5 = captureCalibration(s5, "1");
+const row = r5.calibration["1"].c1;
+check("final records the actual", row.actual === 22.4 && r5.graded === 1, JSON.stringify(row));
+check("the graded pair is the frozen projection, not the late one", row.proj === 14 && row.actual === 22.4);
+
+// preseason / non-numeric weeks aren't gradeable
+check(
+  "a non-numeric week captures nothing",
+  captureCalibration({ ...calState(11, "pre", null), week: "PRE" }, "PRE").captured === 0
+);
+
+// stats + the deliberate refusal to judge on thin data
+const stats = calibrationStats(r5);
+check("stats count tracked and graded rows", stats.tracked === 1 && stats.graded === 1, JSON.stringify(stats));
+check(
+  "no verdict is published below the sample threshold",
+  calibrationSummary(r5) === null,
+  "a hit-rate off one game is exactly the overconfidence this ledger exists to catch"
 );
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

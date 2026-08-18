@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } f
 import { storage, HUDDLE_KEY, probeStorage, STORAGE_MESSAGE } from "./storage.js";
 import { beginDragAutoScroll, stopDragAutoScroll } from "./dragScroll.js";
 import { useCoarsePointer } from "./useCoarsePointer.js";
+import { captureCalibration, calibrationStats, calibrationSummary } from "./calibration.js";
 import { teamOf, headshotUrl, teamLogoUrl } from "./data/teams.js";
 import { searchFreeAgents, FREE_AGENTS } from "./data/freeAgents.js";
 import {
@@ -1580,6 +1581,8 @@ export default function App() {
   const week = state.week;
   const { counts, total, irUsed } = useMemo(() => rosterCounts(state), [state]);
   const calibration = useMemo(() => callCalibration(state.calls), [state.calls]);
+  const ledger = useMemo(() => calibrationStats(state), [state.calibration]);
+  const ledgerVerdict = useMemo(() => calibrationSummary(state), [state.calibration]);
 
   /** Ownership from the live ESPN snapshot when we have one, else the static transcription. */
   // Keyed on state.espn, not state: ownership only changes when a sync lands.
@@ -1929,8 +1932,12 @@ export default function App() {
             if (!silent) flash(res.error);
             return s;
           }
+          // Sync is the only moment we hold both a fresh projection and a
+          // fresh actual, so the ledger folds in here. Projections keep
+          // refreshing until kickoff, then freeze; actuals land at final.
+          const cal = captureCalibration(res.state, res.state.week);
           flash(summaryToText(res.summary));
-          return res.state;
+          return { ...res.state, calibration: cal.calibration };
         });
       } catch (e) {
         if (aliveRef.current && !silent) flash(`ESPN sync failed: ${e.message}`);
@@ -2715,6 +2722,34 @@ export default function App() {
 
         {tab === "log" && (
           <div className="tab-panel" key="log">
+            {/* Capture-only for now. The verdict needs a season; showing a
+                hit-rate off three games would be exactly the overconfidence
+                this ledger exists to measure. */}
+            <SectionHeader kicker="Model accuracy" title="Calibration Ledger" count={ledger.tracked} />
+            <div className="hint-card subtle">
+              Every projection this app makes is frozen at kickoff and compared with the real result. The engine's
+              volatility, injury and correlation constants are labelled in the code as educated guesses — this is the
+              data that will replace them.{" "}
+              {ledgerVerdict ? (
+                <>
+                  So far: <strong>{ledgerVerdict.n} graded</strong>, average miss{" "}
+                  <strong>{ledgerVerdict.mae} pts</strong>, bias{" "}
+                  <strong>
+                    {ledgerVerdict.bias > 0 ? "+" : ""}
+                    {ledgerVerdict.bias}
+                  </strong>{" "}
+                  (projections run {ledgerVerdict.bias > 0 ? "low" : "high"}), and{" "}
+                  <strong>{ledgerVerdict.bandHitRate}%</strong> of results landed inside the floor–ceiling band vs{" "}
+                  {ledgerVerdict.bandTarget}% expected.
+                </>
+              ) : (
+                <>
+                  <strong>{ledger.graded} graded</strong> of {ledger.tracked} captured across{" "}
+                  {ledger.weeks.length} week{ledger.weeks.length === 1 ? "" : "s"} — too few to judge the model yet.
+                </>
+              )}
+            </div>
+
             <SectionHeader kicker="Decision archive" title="Game Log" count={state.calls.length} />
             <CallForm state={state} week={week} onAdd={onAddCall} />
             {state.calls.length === 0 && (
@@ -2931,6 +2966,37 @@ export default function App() {
 
         {tab === "intel" && (
           <div className="tab-panel" key="intel">
+            {/* ORDER MATTERS HERE. Team Strength and Bye Cliffs are small and
+                fixed-height; Beat Wire is up to 10 cards (~1500px on a phone)
+                and varies with the news day. Fixed-value content that answers
+                a question goes first; the browsable feed goes last. Putting
+                the feed on top meant that on a heavy news day you never
+                scrolled far enough to reach the panel worth reading. */}
+            <SectionHeader kicker="Where you're thin" title="Team Strength" />
+            <StrengthCard state={state} onOpenData={() => setDataOpen(true)} />
+
+            {cliffs.some((c) => c.cliff) && (
+              <>
+                <SectionHeader kicker="Plan ahead" title="Bye Cliffs" />
+                <div className="hint-card subtle">
+                  Weeks where several of your players sit out at once — waiver help is cheapest{" "}
+                  <strong>before</strong> everyone else needs it too.
+                </div>
+                <div className="stack">
+                  {cliffs
+                    .filter((c) => c.cliff)
+                    .map((c) => (
+                      <div key={c.week} className="card cliff-row">
+                        <span className="cliff-week">WK {c.week}</span>
+                        <span className="cliff-body">
+                          <strong>{c.players.length} players out:</strong> {c.players.join(", ")}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </>
+            )}
+
             <SectionHeader kicker="Camp buzz & breaking reports" title="Beat Wire" />
             <div className="hint-card">
               The NFL news wire, cross-checked against your league every time you open the app. Low-rostered names in
@@ -2986,30 +3052,6 @@ export default function App() {
               })}
             </div>
 
-            {cliffs.some((c) => c.cliff) && (
-              <>
-                <SectionHeader kicker="Plan ahead" title="Bye Cliffs" />
-                <div className="hint-card subtle">
-                  Weeks where several of your players sit out at once — waiver help is cheapest{" "}
-                  <strong>before</strong> everyone else needs it too.
-                </div>
-                <div className="stack">
-                  {cliffs
-                    .filter((c) => c.cliff)
-                    .map((c) => (
-                      <div key={c.week} className="card cliff-row">
-                        <span className="cliff-week">WK {c.week}</span>
-                        <span className="cliff-body">
-                          <strong>{c.players.length} players out:</strong> {c.players.join(", ")}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </>
-            )}
-
-            <SectionHeader kicker="Where you're thin" title="Team Strength" />
-            <StrengthCard state={state} onOpenData={() => setDataOpen(true)} />
           </div>
         )}
 

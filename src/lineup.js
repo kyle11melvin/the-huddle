@@ -126,6 +126,10 @@ export function buildInitialState() {
     byesAuto: {}, // derived from the schedule feed; replaced wholesale each fetch
     byesManual: {}, // typed by a human; merged on top of byesAuto
     orphans: [], // players migrate couldn't place; surfaced, never deleted
+    // week -> playerId -> { proj, sd, playProb, locked, actual }. Frozen at
+    // kickoff, graded at final. Cannot be reconstructed after the fact, so it
+    // captures from week 1 whether or not anything reads it yet.
+    calibration: {},
     ecrIndex: {}, // normalized name -> rank, from pasted ranking sets
     analytics: {}, // playerId -> week -> { proj, dvp, ou, expertRanks, ... }
     matchups: {}, // week -> { oppTeam, live: { rowKey -> {scored, status, pctRemaining} } }
@@ -228,6 +232,7 @@ export function migrate(raw) {
           ? { ...raw.schedule, ...(legacyByes ? { fetchedAt: 0 } : {}) }
           : null,
       alertsDismissed: raw.alertsDismissed && typeof raw.alertsDismissed === "object" ? raw.alertsDismissed : {},
+      calibration: raw.calibration && typeof raw.calibration === "object" ? raw.calibration : {},
       orphans,
     };
   }
@@ -297,6 +302,7 @@ export function migrate(raw) {
     espn: raw.espn && typeof raw.espn === "object" ? raw.espn : null,
     schedule: raw.schedule && typeof raw.schedule === "object" ? raw.schedule : null,
     alertsDismissed: raw.alertsDismissed && typeof raw.alertsDismissed === "object" ? raw.alertsDismissed : {},
+    calibration: raw.calibration && typeof raw.calibration === "object" ? raw.calibration : {},
   };
 }
 
