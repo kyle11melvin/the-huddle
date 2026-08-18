@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from "react";
-import { storage, HUDDLE_KEY } from "./storage.js";
+import { storage, HUDDLE_KEY, probeStorage, STORAGE_MESSAGE } from "./storage.js";
 import { beginDragAutoScroll, stopDragAutoScroll } from "./dragScroll.js";
 import { teamOf, headshotUrl, teamLogoUrl } from "./data/teams.js";
 import { searchFreeAgents, FREE_AGENTS } from "./data/freeAgents.js";
@@ -1323,7 +1323,16 @@ function StrengthCard({ state, onOpenData }) {
 
 export default function App() {
   const [loaded, setLoaded] = useState(false);
-  const [saveError, setSaveError] = useState(false);
+  // null = saving fine. Otherwise { reason, name } naming the actual cause.
+  const [saveError, setSaveError] = useState(null);
+
+  // Probe on load rather than waiting for a failed write. A browser that
+  // can't store anything should say so on arrival, not after you've spent
+  // ten minutes setting a lineup that was never going to persist.
+  useEffect(() => {
+    const probe = probeStorage();
+    if (!probe.ok) setSaveError({ reason: probe.reason, name: probe.name });
+  }, []);
   const [tab, setTab] = useState("roster");
   const [state, setState] = useState(buildInitialState);
   const [notice, setNotice] = useState("");
@@ -1482,9 +1491,9 @@ export default function App() {
     (async () => {
       try {
         const res = await storage.set(HUDDLE_KEY, JSON.stringify(state));
-        setSaveError(!res);
-      } catch {
-        setSaveError(true);
+        setSaveError(res.ok ? null : { reason: res.reason, name: res.name });
+      } catch (e) {
+        setSaveError({ reason: "unknown", name: e && e.name });
       }
     })();
     // Mirror to the server only when we own the team. Debounced inside.
@@ -2425,14 +2434,24 @@ export default function App() {
                   className={`badge-sync ${
                     saveError || syncStatus === "error" ? "err" : link ? "live" : "ok"
                   } clickable`}
-                  title={syncError || (link ? `Team code ${link.id} — tap to manage` : "Saved on this device")}
+                  title={
+                    (saveError && (STORAGE_MESSAGE[saveError.reason] || STORAGE_MESSAGE.unknown)) ||
+                    syncError ||
+                    (link ? `Team code ${link.id} — tap to manage` : "Saved on this device")
+                  }
                   onClick={() => setDataOpen(true)}
                   role="button"
                   tabIndex={0}
                 >
                   <span className="pip" />
                   {saveError
-                    ? "SAVE ERROR"
+                    ? saveError.reason === "private"
+                      ? "PRIVATE MODE"
+                      : saveError.reason === "blocked"
+                      ? "STORAGE BLOCKED"
+                      : saveError.reason === "full"
+                      ? "DISK FULL"
+                      : "NOT SAVING"
                     : !loaded
                     ? "LOADING"
                     : syncStatus === "error"
@@ -2499,7 +2518,12 @@ export default function App() {
 
         {saveError && (
           <div className="hint-card" style={{ borderColor: "var(--negative)", color: "var(--negative)" }}>
-            Save failed — your last change may not have been stored.
+            <strong>{STORAGE_MESSAGE[saveError.reason] || STORAGE_MESSAGE.unknown}</strong>
+            {saveError.name && (
+              <span style={{ display: "block", marginTop: 6, opacity: 0.75, fontSize: 11 }}>
+                Browser reported: {saveError.name}
+              </span>
+            )}
           </div>
         )}
 

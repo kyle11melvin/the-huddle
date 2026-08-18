@@ -22,6 +22,7 @@ import { migrate, addCall, callCalibration, applyWin, revertWin } from "../src/l
 import { applyEspnSync } from "../src/espnSync.js";
 import { deriveSchedule } from "../api/schedule.js";
 import { gameStatesFrom } from "../api/espn-write.js";
+import { storage, probeStorage, STORAGE_MESSAGE } from "../src/storage.js";
 import { currentMatchupPeriod } from "../api/espn.js";
 
 let failures = 0;
@@ -612,6 +613,75 @@ check(
 // and dropped — 0.4ms stringify + 0.1ms setItem on a 66 KB payload is not a
 // bottleneck, and debouncing would only add a window to lose a write. There is
 // no debounce to assert against; the write stays immediate.
+
+// ---- 21. a failed save must name its own cause ----
+// The banner used to say "SAVE ERROR" and swallow the exception, so the
+// failure erased the only evidence of why it happened.
+const mkErr = (name, message = "") => Object.assign(new Error(message), { name });
+const fakeWindow = (impl) => {
+  global.window = { localStorage: impl };
+  return () => delete global.window;
+};
+
+// Safari private browsing: setItem exists, then throws quota with a zero quota,
+// so even a one-byte probe fails → "private", not "full".
+let restore = fakeWindow({
+  setItem() {
+    throw mkErr("QuotaExceededError", "The quota has been exceeded.");
+  },
+  removeItem() {},
+  getItem: () => null,
+});
+let res = await storage.set("k", "v");
+check("private browsing is reported as private, not disk-full", res.ok === false && res.reason === "private", `got ${JSON.stringify(res)}`);
+check("probeStorage agrees the browser can't store anything", probeStorage().ok === false, JSON.stringify(probeStorage()));
+restore();
+
+// Genuinely full: a tiny write succeeds, the real payload doesn't → "full".
+let big = true;
+restore = fakeWindow({
+  setItem(k) {
+    if (k === "huddle-probe") return; // small write is fine
+    if (big) throw mkErr("QuotaExceededError", "exceeded");
+  },
+  removeItem() {},
+  getItem: () => null,
+});
+res = await storage.set("huddle-data", "x".repeat(10));
+check("a full disk is reported as full, not private", res.ok === false && res.reason === "full", `got ${JSON.stringify(res)}`);
+restore();
+
+// Storage switched off for the site.
+restore = fakeWindow({
+  setItem() {
+    throw mkErr("SecurityError", "The operation is insecure.");
+  },
+  removeItem() {},
+  getItem: () => null,
+});
+res = await storage.set("k", "v");
+check("blocked storage is reported as blocked", res.ok === false && res.reason === "blocked", `got ${JSON.stringify(res)}`);
+restore();
+
+// Healthy browser.
+const store = new Map();
+restore = fakeWindow({
+  setItem: (k, v) => store.set(k, v),
+  removeItem: (k) => store.delete(k),
+  getItem: (k) => store.get(k) ?? null,
+});
+res = await storage.set("huddle-data", "payload");
+check("a healthy write reports ok and persists", res.ok === true && store.get("huddle-data") === "payload");
+check("probeStorage passes on a healthy browser and cleans up", probeStorage().ok === true && !store.has("huddle-probe"));
+restore();
+
+// Every reason must have human-readable copy — a missing key would render blank.
+check(
+  "every failure reason has a plain-English message",
+  ["private", "blocked", "full", "unavailable", "unknown"].every(
+    (r) => typeof STORAGE_MESSAGE[r] === "string" && STORAGE_MESSAGE[r].length > 20
+  )
+);
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);
