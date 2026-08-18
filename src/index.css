@@ -1389,6 +1389,105 @@ select option {
 
 /* ------------------------------------------------------------- move sheet -- */
 
+/* ---- Today: the "am I OK?" card ----
+   Phone-first. Everything that decides the week sits above the fold, and the
+   verdict is legible from the colour of the left edge before any text is read. */
+.today-card {
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-left: 4px solid var(--border-hi);
+  border-radius: 14px;
+  padding: 16px 16px 14px;
+  margin-bottom: 18px;
+}
+.today-card.ok { border-left-color: var(--positive); }
+.today-card.warn { border-left-color: var(--gold); }
+.today-card.bad { border-left-color: var(--negative); }
+
+.today-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.today-headline {
+  font-family: var(--font-display);
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  line-height: 1.1;
+  margin-top: 2px;
+}
+.today-clock { text-align: right; flex-shrink: 0; }
+.today-clock-num {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--gold);
+}
+.today-clock-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+
+.today-list { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.today-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(10, 14, 23, 0.4);
+  min-height: 44px;
+}
+.today-row.bad { border-color: rgba(239, 68, 68, 0.35); }
+.today-slot {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  min-width: 34px;
+  color: var(--text-dim);
+}
+.today-name { font-weight: 700; font-size: 14px; }
+.today-why { margin-left: auto; font-size: 11.5px; color: var(--text-dim); text-align: right; }
+
+.today-action {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 182, 18, 0.35);
+  background: rgba(255, 182, 18, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.today-action-text { flex: 1; min-width: 190px; font-size: 13.5px; line-height: 1.45; }
+.today-action-why { color: var(--text-dim); font-size: 12px; }
+.today-apply { min-height: 44px; padding: 0 20px; flex-shrink: 0; }
+
+.today-doubts { margin-top: 11px; display: flex; flex-wrap: wrap; gap: 6px; }
+.today-doubt {
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-hi);
+  color: var(--text-dim);
+}
+.today-doubt.d { border-color: rgba(239, 68, 68, 0.4); }
+.today-doubt.q { border-color: rgba(255, 182, 18, 0.4); }
+
+.today-opp { margin-top: 11px; font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
+
+@media (max-width: 640px) {
+  .today-headline { font-size: 21px; }
+  .today-why { display: block; margin-left: 46px; text-align: left; width: 100%; }
+  .today-row { flex-wrap: wrap; }
+  .today-apply { width: 100%; }
+}
+
 /* Two projections shown side by side — the gap is information, not noise. */
 .lab-sources {
   display: flex;

@@ -268,6 +268,9 @@ export default async function handler(req, res) {
             state: stateRaw,
             pctRemaining: Math.round(pctRemaining * 100) / 100,
             detail: (st.type && st.type.shortDetail) || "",
+            // Absolute kickoff, so the client can run a real countdown instead
+            // of reprinting ESPN's display string.
+            startTime: ev.date || (comp && comp.date) || null,
           };
         }
       }

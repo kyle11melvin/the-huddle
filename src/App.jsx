@@ -87,7 +87,7 @@ import {
   setMatchupOpponent,
   setLiveEntry,
 } from "./lineup.js";
-import Gameday from "./components/Gameday.jsx";
+import Today from "./components/Today.jsx";
 import { fetchLeague, applyEspnSync, summaryToText, liveOwner, searchLeaguePlayers } from "./espnSync.js";
 import {
   fetchSchedule,
@@ -1369,7 +1369,7 @@ export default function App() {
     const probe = probeStorage();
     if (!probe.ok) setSaveError({ reason: probe.reason, name: probe.name });
   }, []);
-  const [tab, setTab] = useState("roster");
+  const [tab, setTab] = useState("today");
   const [state, setState] = useState(buildInitialState);
   const [notice, setNotice] = useState("");
   const [modalId, setModalId] = useState(null);
@@ -2021,7 +2021,7 @@ export default function App() {
   // Landing on Gameday always shows a fresh picture — roster moves made in
   // ESPN's own app appear within seconds, not after the 10-minute gate.
   useEffect(() => {
-    if (tab !== "gameday" || !state.espn || viewingShared) return;
+    if (tab !== "today" || !state.espn || viewingShared) return;
     if (Date.now() - (state.espn.fetchedAt || 0) > 2 * 60 * 1000) syncEspn(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
@@ -2453,6 +2453,33 @@ export default function App() {
    *  so the owner badge is the "don't bother" signal). */
   const wireSearch = leagueSearch;
 
+  const alertStrip =
+    alerts.length > 0 ? (
+      <div className="alert-strip">
+        {alerts.slice(0, 4).map((a) => (
+          <div key={a.id} className={`alert-card ${a.level}`}>
+            <span className="alert-icon">{a.icon}</span>
+            <div className="alert-body-wrap">
+              <div className="alert-title">{a.title}</div>
+              <div className="alert-body">{a.body}</div>
+            </div>
+            <div className="alert-actions">
+              {a.tab !== tab && (
+                <button className="chip-btn" onClick={() => setTab(a.tab)}>
+                  View
+                </button>
+              )}
+              {a.dismissible && (
+                <button className="btn-ghost" onClick={() => dismissAlert(a.id)} aria-label="Dismiss alert">
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    ) : null;
+
   const rowProps = {
     week,
     byes: state.byes || {},
@@ -2558,9 +2585,11 @@ export default function App() {
       <nav className="tabs-wrap">
         <div className="tabs">
           {[
+            // Today is first and default: it answers the question that used to
+            // take three tabs. It absorbs Gameday rather than sitting beside it.
+            ["today", "Today"],
             ["roster", "Roster"],
             ["lab", "Start/Sit"],
-            ["gameday", "Gameday"],
             ["intel", "Intel"],
             ["watch", "Watchlist"],
             ["waivers", "Waivers"],
@@ -2574,31 +2603,11 @@ export default function App() {
       </nav>
 
       <main className="content">
-        {alerts.length > 0 && (
-          <div className="alert-strip">
-            {alerts.slice(0, 4).map((a) => (
-              <div key={a.id} className={`alert-card ${a.level}`}>
-                <span className="alert-icon">{a.icon}</span>
-                <div className="alert-body-wrap">
-                  <div className="alert-title">{a.title}</div>
-                  <div className="alert-body">{a.body}</div>
-                </div>
-                <div className="alert-actions">
-                  {a.tab !== tab && (
-                    <button className="chip-btn" onClick={() => setTab(a.tab)}>
-                      View
-                    </button>
-                  )}
-                  {a.dismissible && (
-                    <button className="btn-ghost" onClick={() => dismissAlert(a.id)} aria-label="Dismiss alert">
-                      ✕
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* On Today the VERDICT is the alert. Planning-horizon banners (bye
+            cliffs weeks out) are useful but must not push "am I OK right now"
+            below the fold on a phone — measured, they cost 249px above it.
+            Everywhere else they stay on top, unchanged. */}
+        {tab !== "today" && alertStrip}
 
         {saveError && (
           <div className="hint-card" style={{ borderColor: "var(--negative)", color: "var(--negative)" }}>
@@ -2768,16 +2777,19 @@ export default function App() {
           </div>
         )}
 
-        {tab === "gameday" && (
-          <Gameday
-            key="gameday"
+        {tab === "today" && (
+          <Today
+            key="today"
             state={state}
             week={week}
+            onApplyMove={applyMove}
             onSetLive={onSetLive}
             onSetOpponent={onSetOpponent}
             onRefresh={syncEspn}
+            onOpenPlayer={setModalId}
           />
         )}
+        {tab === "today" && alertStrip}
 
         {tab === "log" && (
           <div className="tab-panel" key="log">
