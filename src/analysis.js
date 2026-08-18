@@ -9,7 +9,7 @@
 // little more wrong.
 // ============================================================================
 
-import { SLOT_DEFS, findLocation, slotAccepts, POSITIONS } from "./lineup.js";
+import { SLOT_DEFS, findLocation, slotAccepts, POSITIONS, bestLineupFrom } from "./lineup.js";
 import { LEAGUE_ROSTERS, MY_TEAM } from "./data/leagueRosters.js";
 import { pointDistribution, PLAY_PROB } from "./analytics.js";
 import { normName } from "./espnSync.js";
@@ -190,33 +190,14 @@ export function suggestLineup(state, week, oppDists = null) {
   for (const s of SLOT_DEFS) for (const id of state.lineup[s.key]) if (id) pool.push(id);
   for (const id of state.bench) if (id) pool.push(id);
 
-  const order = ["QB", "D/ST", "K", "TE", "RB", "WR", "FLEX"];
-  const slots = [];
-  for (const key of order) {
-    const def = SLOT_DEFS.find((s) => s.key === key);
-    for (let i = 0; i < def.count; i++) slots.push({ key, index: i });
-  }
-
-  const used = new Set();
-  const best = {};
-  for (const slot of slots) {
-    let pick = null;
-    let pickScore = -Infinity;
-    for (const id of pool) {
-      if (used.has(id)) continue;
-      const p = state.players[id];
-      if (!p || !slotAccepts(slot.key, p.pos)) continue;
-      const sc = scorePlayer(p, week, byes, state);
-      if (sc > pickScore) {
-        pickScore = sc;
-        pick = id;
-      }
-    }
-    if (pick && pickScore > -Infinity) {
-      used.add(pick);
-      best[`${slot.key}:${slot.index}`] = pick;
-    }
-  }
+  // Same primitive the opponent side uses — one optimizer, two lineups.
+  const { bySlot: best } = bestLineupFrom(
+    pool.map((id) => ({
+      id,
+      pos: state.players[id]?.pos,
+      score: scorePlayer(state.players[id], week, byes, state),
+    }))
+  );
 
   // Fantasy scoring only cares WHICH players start, not which RB sits in RB1
   // vs RB2. Diffing the sets (rather than each slot) keeps a pure rotation

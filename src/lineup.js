@@ -67,6 +67,55 @@ export function slotAccepts(slotKey, pos) {
 /** Zone sizes are league settings, not constants — ESPN reports them in
  *  mSettings.rosterSettings.lineupSlotCounts and plenty of leagues run 7
  *  bench spots. The exported constants are the fallback, not the truth. */
+/**
+ * Greedy optimal starting lineup from an arbitrary candidate set.
+ *
+ * Extracted so BOTH sides of a matchup can use the same optimizer. It used to
+ * exist only inside suggestLineup, which meant the app optimized your lineup
+ * and then simulated against whatever slots your opponent happened to have
+ * set — stale OUT players included. Every win probability in the app was
+ * computed against a lineup its owner would obviously fix before kickoff.
+ *
+ * Slots fill most-restrictive-first so FLEX takes what's left rather than
+ * stealing a player a dedicated slot needed.
+ *
+ * @param {Array<{id, pos, score}>} candidates — score is any comparable
+ *        quantity (points, points×10); -Infinity means "cannot start".
+ * @param {Set<string>} [locked] — ids already committed to a slot (their game
+ *        has kicked off), keyed "SLOT:index" in `pinned`.
+ * @param {Object} [pinned] — { "WR:0": id } forced placements.
+ */
+export function bestLineupFrom(candidates, pinned = {}) {
+  const order = ["QB", "D/ST", "K", "TE", "RB", "WR", "FLEX"];
+  const slots = [];
+  for (const key of order) {
+    const def = SLOT_DEFS.find((s) => s.key === key);
+    for (let i = 0; i < def.count; i++) slots.push({ key, index: i });
+  }
+
+  const bySlot = { ...pinned };
+  const used = new Set(Object.values(pinned));
+  for (const slot of slots) {
+    const k = `${slot.key}:${slot.index}`;
+    if (bySlot[k]) continue; // locked in by kickoff
+    let pick = null;
+    let best = -Infinity;
+    for (const c of candidates) {
+      if (used.has(c.id)) continue;
+      if (!slotAccepts(slot.key, c.pos)) continue;
+      if (c.score > best) {
+        best = c.score;
+        pick = c;
+      }
+    }
+    if (pick && best > -Infinity) {
+      used.add(pick.id);
+      bySlot[k] = pick.id;
+    }
+  }
+  return { bySlot, starterIds: new Set(Object.values(bySlot)) };
+}
+
 export function emptyZones(benchSize = BENCH_SIZE, irSize = IR_SIZE) {
   const lineup = {};
   for (const s of SLOT_DEFS) lineup[s.key] = Array(s.count).fill(null);

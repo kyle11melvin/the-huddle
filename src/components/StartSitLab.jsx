@@ -12,6 +12,7 @@ import {
   simulateSwap,
   strategyAdvice,
   opponentDistributions,
+  opponentLineups,
 } from "../simulate.js";
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { findLocation } from "../lineup.js";
@@ -64,7 +65,20 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
   // Opponent side of the simulation — the one canonical builder shared with
   // the optimizer and Gameday (live ESPN starters, injury-priced; static
   // roster + rank curve as the offline fallback).
-  const oppDists = useMemo(() => opponentDistributions(state, week, oppTeam), [state, week, oppTeam]);
+  // Both opponent lineups. The primary number assumes they tidy up before
+  // kickoff; the secondary is what they have set right now. Showing only the
+  // blend would hide the fact that they might fix it — which is the
+  // actionable part.
+  const oppBoth = useMemo(() => opponentLineups(state, week, oppTeam), [state, week, oppTeam]);
+  const oppDists = useMemo(
+    () => opponentDistributions(state, week, oppTeam, "likely"),
+    [state, week, oppTeam]
+  );
+  const simActual = useMemo(
+    () => (oppBoth && oppBoth.differs && mine.dists.length ? simulateMatchup(mine.dists, oppBoth.actual) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [oppBoth, mine]
+  );
 
   const mine = useMemo(() => lineupDistributions(state, state.lineup, week), [state, week]);
   const sim = useMemo(
@@ -246,6 +260,42 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
               </div>
             </div>
           </div>
+          {/* Both numbers, never just the blend — the gap IS the information. */}
+          {simActual && oppBoth && oppBoth.differs && (
+            <div className="sim-both">
+              <div className="sim-both-row">
+                <span className="sim-both-pct">{pct(sim.winProb)}</span>
+                <span className="sim-both-label">against their <strong>likely</strong> lineup</span>
+              </div>
+              <div className="sim-both-row muted">
+                <span className="sim-both-pct">{pct(simActual.winProb)}</span>
+                <span className="sim-both-label">against what they have <strong>set right now</strong></span>
+              </div>
+              <div className="sim-both-note">
+                {oppBoth.changes
+                  .filter((c) => c.out)
+                  .slice(0, 2)
+                  .map((c, i) => (
+                    <div key={i}>
+                      {oppTeam} is starting <strong>{c.out.name}</strong>
+                      {c.out.injuryStatus ? ` (${c.out.injuryStatus})` : ""}
+                      {c.in ? (
+                        <>
+                          {" "}
+                          over <strong>{c.in.name}</strong>
+                        </>
+                      ) : null}
+                      .
+                    </div>
+                  ))}
+                <div className="sim-both-hint">
+                  {oppBoth.anyLocked
+                    ? "Some of their players are locked in — those slots can't change now."
+                    : "They can still fix this before kickoff, so the top number is the one to plan against."}
+                </div>
+              </div>
+            </div>
+          )}
           {advice && <div className={`sim-advice ${advice.mode}`}>{advice.text}</div>}
 
           {/* The verdict's action lives right here — no trip to the Roster tab. */}

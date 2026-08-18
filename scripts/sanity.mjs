@@ -18,7 +18,8 @@ import {
   lineupDistributions,
   sumMeans,
 } from "../src/simulate.js";
-import { migrate, addCall, callCalibration, applyWin, revertWin } from "../src/lineup.js";
+import { migrate, addCall, callCalibration, applyWin, revertWin, bestLineupFrom } from "../src/lineup.js";
+import { opponentLineups, opponentDistributions } from "../src/simulate.js";
 import { applyEspnSync } from "../src/espnSync.js";
 import { deriveSchedule } from "../api/schedule.js";
 import { gameStatesFrom } from "../api/espn-write.js";
@@ -890,6 +891,120 @@ check("an unrankable player returns null rather than a bare number", liveRankInf
 check(
   "every source has a human label",
   ["espn", "fp", "ecr"].every((s) => RANK_SOURCE_LABEL[s] && RANK_SOURCE_SHORT[s])
+);
+
+// ---- 26. opponent lineup realism ----
+// The app used to simulate against whatever slots the opponent happened to
+// have set — a stale OUT player included — so every win probability was
+// computed against a lineup its owner would obviously fix before kickoff.
+const oppEntry = (name, pos, slot, proj, injuryStatus = "", team = "KC") => ({
+  name,
+  pos,
+  slot,
+  proj,
+  actual: null,
+  espnId: name.replace(/\W/g, ""),
+  injuryStatus,
+  team,
+  percentOwned: 50,
+});
+const mkOppState = (games = {}) => ({
+  week: "1",
+  matchups: { 1: { oppTeam: "Rivals" } },
+  schedule: null,
+  players: {},
+  lineup: {},
+  ecrIndex: {},
+  espn: {
+    myTeamId: 1,
+    games,
+    teams: [
+      {
+        id: 2,
+        name: "Rivals",
+        mapped: "Rivals",
+        roster: [
+          oppEntry("Opp QB", "QB", "QB", 18),
+          oppEntry("Hurt Starter", "WR", "WR", 11, "OUT"),
+          oppEntry("Fine WR", "WR", "WR", 12),
+          oppEntry("Third WR", "WR", "WR", 9),
+          oppEntry("Opp TE", "TE", "TE", 8),
+          oppEntry("Opp RB1", "RB", "RB", 14),
+          oppEntry("Opp RB2", "RB", "RB", 10),
+          oppEntry("Opp FLEX", "RB", "FLEX", 9),
+          oppEntry("Opp DST", "D/ST", "D/ST", 7),
+          oppEntry("Opp K", "K", "K", 8),
+          // on their bench and clearly better than the OUT starter
+          oppEntry("Benched Stud", "WR", "BE", 15),
+        ],
+      },
+    ],
+  },
+});
+
+const both = opponentLineups(mkOppState(), "1", "Rivals");
+const nameOf = (ds) => ds.map((d) => d.name).sort();
+check("opponent lineups are reported both ways", !!both && both.differs === true, JSON.stringify(both && both.differs));
+check(
+  "the OUT player is in their ACTUAL lineup",
+  nameOf(both.actual).includes("Hurt Starter"),
+  JSON.stringify(nameOf(both.actual))
+);
+check(
+  "the OUT player is NOT in their likely lineup — the bench stud starts instead",
+  !nameOf(both.likely).includes("Hurt Starter") && nameOf(both.likely).includes("Benched Stud"),
+  JSON.stringify(nameOf(both.likely))
+);
+check(
+  "the swap they'd make is named, so the UI can explain it",
+  both.changes.some((c) => c.out && c.out.name === "Hurt Starter"),
+  JSON.stringify(both.changes.map((c) => [c.out && c.out.name, c.in && c.in.name]))
+);
+// an OUT player scores 0, so removing him RAISES their expected total
+check(
+  "their likely lineup outscores the one they have set",
+  sumMeans(both.likely) > sumMeans(both.actual),
+  `likely ${sumMeans(both.likely)} vs actual ${sumMeans(both.actual)}`
+);
+
+// once a game kicks off, that slot can't change — the two lineups converge
+const locked = opponentLineups(mkOppState({ KC: { state: "in" } }), "1", "Rivals");
+check(
+  "a kicked-off slot is pinned to reality, not optimized away",
+  nameOf(locked.likely).includes("Hurt Starter") && locked.anyLocked === true,
+  `likely ${JSON.stringify(nameOf(locked.likely))}, anyLocked ${locked.anyLocked}`
+);
+
+// and the default the app simulates against is the LIKELY one
+check(
+  "opponentDistributions defaults to the likely lineup",
+  !opponentDistributions(mkOppState(), "1", "Rivals").some((d) => d.name === "Hurt Starter")
+);
+check(
+  "…but the actual lineup is still available on request",
+  opponentDistributions(mkOppState(), "1", "Rivals", "actual").some((d) => d.name === "Hurt Starter")
+);
+
+// the shared primitive really is shared
+const picked = bestLineupFrom([
+  { id: "a", pos: "QB", score: 10 },
+  { id: "b", pos: "QB", score: 25 },
+  { id: "c", pos: "WR", score: 12 },
+]);
+check(
+  "bestLineupFrom takes the better QB and fills what it can",
+  picked.bySlot["QB:0"] === "b" && picked.starterIds.has("c"),
+  JSON.stringify(picked.bySlot)
+);
+check(
+  "bestLineupFrom honours pinned slots",
+  bestLineupFrom(
+    [
+      { id: "a", pos: "QB", score: 10 },
+      { id: "b", pos: "QB", score: 25 },
+    ],
+    { "QB:0": "a" }
+  ).bySlot["QB:0"] === "a"
 );
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

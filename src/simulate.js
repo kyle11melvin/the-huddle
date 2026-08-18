@@ -20,7 +20,7 @@
 // probability cares about.
 // ============================================================================
 
-import { SLOT_DEFS, findLocation, slotAccepts } from "./lineup.js";
+import { SLOT_DEFS, findLocation, slotAccepts, bestLineupFrom } from "./lineup.js";
 import { pointDistribution } from "./analytics.js";
 import { LEAGUE_ROSTERS } from "./data/leagueRosters.js";
 import { espnTeamRoster } from "./espnSync.js";
@@ -185,28 +185,105 @@ export const rankToPoints = (rank) =>
  * Live ESPN starters + projections when synced; static-roster rank estimates
  * as the offline fallback.
  */
-export function opponentDistributions(state, week, oppTeamOverride) {
+/**
+ * Stable identity for an opponent roster entry.
+ *
+ * espnId FIRST: the normalized name strips every non-letter, so two players
+ * whose names differ only by a digit or suffix collapse to the same key —
+ * and bestLineupFrom would then treat them as one player and silently drop
+ * the other from the lineup. Same duplicate-identity class as finding 12e.
+ */
+const oppKey = (e) =>
+  (e && e.espnId ? `id:${e.espnId}` : `nm:${(e && e.name ? e.name : "").toLowerCase().replace(/[^a-z]/g, "")}`);
+
+/** One opponent roster entry → a distribution, injury-priced. */
+const oppDist = (state, week, e) => {
+  const playProb = OPP_PLAY_PROB[e.injuryStatus] ?? 1;
+  return {
+    id: oppKey(e),
+    name: e.name,
+    team: e.team || null,
+    pos: e.pos,
+    opp: nflOppOf(state, e.team, week),
+    mean: Math.round(e.proj * playProb * 10) / 10,
+    condMean: e.proj,
+    sd: e.proj * (CVS[e.pos] ?? 0.55),
+    playProb,
+    slot: e.slot,
+    injuryStatus: e.injuryStatus,
+  };
+};
+
+/**
+ * BOTH opponent lineups: the one they have set, and the one they'd most
+ * likely start if they tidied up before kickoff.
+ *
+ * Why both rather than a single blended number: "58% against their likely
+ * lineup, 71% against what they have set" tells you they might fix it — which
+ * is actionable. A blend hides that entirely.
+ *
+ * A player whose game has already kicked off CANNOT be moved, so those slots
+ * are pinned to reality and only the still-unlocked slots get optimized. That
+ * makes the two lineups converge naturally as Sunday progresses.
+ *
+ * @returns {{actual, likely, differs, changes, anyLocked}|null}
+ */
+export function opponentLineups(state, week, oppTeamOverride) {
+  const oppTeam = oppTeamOverride || (state.matchups && state.matchups[week] && state.matchups[week].oppTeam) || "";
+  if (!oppTeam) return null;
+  const live = espnTeamRoster(state, oppTeam);
+  if (!live) return null;
+
+  const usable = live.filter((e) => e.slot !== "IR" && Number.isFinite(e.proj) && e.proj > 0);
+  const actualStarters = usable.filter((e) => e.slot !== "BE");
+  const actual = actualStarters.map((e) => oppDist(state, week, e));
+
+  // Pin every started player to the slot they're actually in — locked by
+  // kickoff, not a choice their manager still has.
+  const games = (state.espn && state.espn.games) || {};
+  const isLocked = (e) => {
+    const g = games[e.team];
+    return !!g && (g.state === "in" || g.state === "post");
+  };
+  const pinned = {};
+  const cursor = {};
+  for (const e of actualStarters) {
+    if (!isLocked(e)) continue;
+    const key = e.slot;
+    cursor[key] = cursor[key] || 0;
+    pinned[`${key}:${cursor[key]++}`] = oppKey(e);
+  }
+
+  const byId = new Map(usable.map((e) => [oppKey(e), e]));
+  const candidates = usable.map((e) => {
+    const d = oppDist(state, week, e);
+    return { id: d.id, pos: e.pos, score: d.mean };
+  });
+  const { starterIds } = bestLineupFrom(candidates, pinned);
+  const likely = [...starterIds].map((id) => oppDist(state, week, byId.get(id))).filter(Boolean);
+
+  const actualIds = new Set(actual.map((d) => d.id));
+  const benched = actual.filter((d) => !starterIds.has(d.id));
+  const promoted = likely.filter((d) => !actualIds.has(d.id));
+  return {
+    actual,
+    likely,
+    differs: benched.length > 0 || promoted.length > 0,
+    changes: benched.map((out, i) => ({ out, in: promoted[i] || null })),
+    anyLocked: Object.keys(pinned).length > 0,
+    oppTeam,
+  };
+}
+
+export function opponentDistributions(state, week, oppTeamOverride, mode = "likely") {
   const oppTeam = oppTeamOverride || (state.matchups && state.matchups[week] && state.matchups[week].oppTeam) || "";
   if (!oppTeam) return [];
 
   const live = espnTeamRoster(state, oppTeam);
   if (live) {
-    return live
-      .filter((e) => e.slot !== "BE" && e.slot !== "IR" && Number.isFinite(e.proj) && e.proj > 0)
-      .map((e) => {
-        const playProb = OPP_PLAY_PROB[e.injuryStatus] ?? 1;
-        return {
-          id: (e.name || "").toLowerCase().replace(/[^a-z]/g, ""),
-          name: e.name,
-          team: e.team || null,
-          pos: e.pos,
-          opp: nflOppOf(state, e.team, week),
-          mean: Math.round(e.proj * playProb * 10) / 10,
-          condMean: e.proj,
-          sd: e.proj * (CVS[e.pos] ?? 0.55),
-          playProb,
-        };
-      });
+    const both = opponentLineups(state, week, oppTeam);
+    if (both) return mode === "actual" ? both.actual : both.likely;
+    return [];
   }
 
   const oppRoster = LEAGUE_ROSTERS.find((t) => t.team === oppTeam);
