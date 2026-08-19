@@ -22,6 +22,7 @@ import { migrate, addCall, callCalibration, applyWin, revertWin, bestLineupFrom 
 import { opponentLineups, opponentDistributions } from "../src/simulate.js";
 import { matchPlayer, parseRankings, planEcrUpdates, parseProjections } from "../src/importer.js";
 import { projWeights } from "../src/calibration.js";
+import { formatCountdown, untilKick } from "../src/timeUntil.js";
 import { applyEspnSync } from "../src/espnSync.js";
 import { deriveSchedule } from "../api/schedule.js";
 import { gameStatesFrom } from "../api/espn-write.js";
@@ -1188,6 +1189,22 @@ check(
   weeklyProjBasis({ stats: [{ statSourceId: 1, statSplitTypeId: 0, appliedTotal: 217.6 }] }, 1) === "season/17",
   "this is the switch that moved a player 45% with no news behind it"
 );
+
+// ---- 29. the kickoff countdown ----
+// It read "611h 42m" three weeks out, which is technically correct and
+// unreadable. Boundaries are where time formatting goes wrong, so they're
+// pinned rather than eyeballed.
+const MIN = 60000, HOUR = 60 * MIN, DAY = 24 * HOUR;
+check("the real case: 611h 42m now reads in days", formatCountdown(611 * HOUR + 42 * MIN) === "25d 11h 42m", `got ${formatCountdown(611 * HOUR + 42 * MIN)}`);
+check("under an hour shows minutes only", formatCountdown(42 * MIN) === "42m", `got ${formatCountdown(42 * MIN)}`);
+check("59 minutes stays minutes", formatCountdown(59 * MIN) === "59m", `got ${formatCountdown(59 * MIN)}`);
+check("exactly 60 minutes rolls to hours", formatCountdown(60 * MIN) === "1h 0m", `got ${formatCountdown(60 * MIN)}`);
+check("under a day shows hours + minutes, no days", formatCountdown(23 * HOUR + 59 * MIN) === "23h 59m", `got ${formatCountdown(23 * HOUR + 59 * MIN)}`);
+check("exactly 24h rolls to days", formatCountdown(DAY) === "1d 0h 0m", `got ${formatCountdown(DAY)}`);
+check("a past kickoff returns null, not a negative clock", formatCountdown(-5 * MIN) === null && formatCountdown(0) === null);
+check("garbage in returns null", formatCountdown(NaN) === null && formatCountdown(undefined) === null);
+check("untilKick accepts an ISO string", untilKick(new Date(Date.now() + 2 * HOUR + 14 * MIN).toISOString()) === "2h 14m");
+check("untilKick on an unparseable date returns null", untilKick("not-a-date") === null && untilKick(null) === null);
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);

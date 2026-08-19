@@ -22,6 +22,7 @@ import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { effectiveStatus, suggestLineup } from "../analysis.js";
 import { opponentDistributions, opponentLineups } from "../simulate.js";
 import { anyGameLive } from "../espnSync.js";
+import { formatCountdown } from "../timeUntil.js";
 
 const STATUS_COPY = {
   O: "is OUT",
@@ -32,16 +33,6 @@ const STATUS_COPY = {
 };
 const DEFINITE = new Set(["O", "IR", "BYE"]);
 
-/** "2h 14m" / "8m" / null once it's kicked off. */
-function untilKick(iso, now) {
-  if (!iso) return null;
-  const ms = new Date(iso).getTime() - now;
-  if (!Number.isFinite(ms) || ms <= 0) return null;
-  const mins = Math.floor(ms / 60000);
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
 
 export default function Today({ state, week, onApplyMove, onSetLive, onSetOpponent, onRefresh, onOpenPlayer }) {
   // A clock, not a render loop: 30s granularity is plenty for a countdown
@@ -108,7 +99,8 @@ export default function Today({ state, week, onApplyMove, onSetLive, onSetOppone
 
   const live = anyGameLive(state);
   const topMove = moves.find((m) => m.mandatory) || moves[0] || null;
-  const countdown = nextKick ? untilKick(new Date(nextKick.t).toISOString(), now) : null;
+  // nextKick.t is already a timestamp — no ISO round-trip needed.
+  const countdown = nextKick ? formatCountdown(nextKick.t - now) : null;
 
   const problems = blockers.length + emptySlots;
   const verdict = problems > 0 ? "bad" : topMove ? "warn" : "ok";
