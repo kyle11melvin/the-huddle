@@ -732,7 +732,26 @@ export function setCallOutcome(state, id, outcome, resultNote) {
   };
 }
 
-/** Where your calls actually land, split by how sure you were. */
+/**
+ * Where your calls actually land, split by how sure you were.
+ *
+ * The confidence split is the whole point: "what's my record" is a scoreboard,
+ * but "do my 5-star calls beat my 2-star calls" asks whether your certainty
+ * carries information. If both hit the same rate, the certainty is noise and
+ * should stop being trusted. If they separate, your read is real.
+ *
+ * COUNTERPART TO src/calibration.js — see the note at the top of that file.
+ * This grades YOU against the model; the ledger grades the MODEL against
+ * reality. Keeping the judges separate is what stops the model from
+ * certifying its own advice. Do not fold these together.
+ *
+ * PLANNED (see HANDOFF.md §"Auto-grading the Game Log", awaiting real games):
+ * outcomes get graded on Δ win probability at decision time, not points — a
+ * high-floor start when you're favoured is correct process even in the weeks
+ * it loses, and grading on points would train you to chase outcomes. The raw
+ * point result gets stored alongside anyway, so calls can be re-examined if
+ * the ledger later shows the judge was biased.
+ */
 export function callCalibration(calls) {
   const graded = (calls || []).filter((c) => c.outcome === "right" || c.outcome === "wrong");
   if (!graded.length) return null;

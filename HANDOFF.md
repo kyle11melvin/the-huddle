@@ -150,6 +150,37 @@ It also prices, in this order: **byes** (→ 0), **injury** as a bimodal mixture
 
 ---
 
+## 7b. Auto-grading the Game Log — decided, not yet built
+
+Deliberately waiting for real games. The design is settled; don't re-open it.
+
+Today every Game Log outcome is marked RIGHT/WRONG by hand, which is the main
+reason the feature gets abandoned by Week 5. The app knows the actual scores,
+so most calls can grade themselves. Three constraints, all load-bearing:
+
+**Grade on Δ win probability at decision time, not points.** Starting the
+high-floor player when you're favoured is correct process even in the weeks it
+loses. Grading on raw points would mark you wrong for playing it right, and
+the calibration data would then teach you to chase outcomes — the opposite of
+what the log is for.
+
+**The two calibration systems must stay separate.** `src/calibration.js`
+grades the MODEL against actual results; `lineup.js callCalibration` grades
+the USER against the model. Process-grading is only defensible because
+something independent is checking whether the model deserves to be the judge.
+Merge them and the loop is circular: a biased model would certify its own
+advice forever and never be shown wrong. Both files now carry this warning in
+their headers — keep it there.
+
+**Store the raw point outcome alongside the process grade**, even though the
+UI shows the process one. It costs nothing, and if the ledger later reveals
+the model is biased, past calls need re-examining against a judge that has
+since been shown untrustworthy. Throwing the points away makes that
+impossible.
+
+Leave genuinely subjective calls (a trade, a stash) to manual grading —
+"did it work" isn't a point total for those.
+
 ## 8. How this collaboration works
 
 Cowork reviews and writes scoped, numbered prompts split into reviewable commits. Claude Code implements, measures, and pushes back. Two conventions have earned their keep and should survive:

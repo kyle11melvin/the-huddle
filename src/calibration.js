@@ -16,6 +16,25 @@
 //
 // The analysis can wait for the offseason. The capture cannot: a week that
 // goes ungraded is gone, so this has to be running from week 1.
+//
+// ---------------------------------------------------------------------------
+// DO NOT MERGE THIS WITH lineup.js callCalibration. They look similar and are
+// opposites, and collapsing them would quietly break both.
+//
+//   THIS file grades the MODEL against reality.      Judge = actual results.
+//   callCalibration grades the USER against the model. Judge = the model.
+//
+// That split is load-bearing. Grading start/sit calls on process — did the
+// decision raise win probability at the time it was made — is only defensible
+// because something ELSE is independently checking whether the model deserves
+// to be the judge. If the model both advises the decisions and scores them,
+// with nothing auditing it against actual outcomes, the loop is circular: it
+// can never be shown to be wrong, and a biased model would certify its own
+// advice indefinitely.
+//
+// So: the ledger must never take the model's own numbers as its yardstick,
+// and callCalibration must never be "simplified" into reading from here.
+// Two systems, two different judges, on purpose.
 // ============================================================================
 
 import { pointDistribution, playerAnalytics, DEFAULT_PROJ_WEIGHTS } from "./analytics.js";
