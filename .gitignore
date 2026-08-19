@@ -6,8 +6,3 @@ dist
 
 .vercel
 
-# TEMPORARY — the gh CLI OAuth app lacks the `workflow` scope, so pushing
-# .github/workflows/* is rejected. The file is written and ready. To enable:
-#   gh auth refresh -h github.com -s workflow
-# then delete these three lines and commit .github/workflows/ci.yml
-.github/
