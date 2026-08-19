@@ -14,7 +14,7 @@
 // shown underneath. All inputs are live-synced; nothing here is typed in.
 // ============================================================================
 
-import { positionNeeds, liveRankInfo } from "./analysis.js";
+import { positionNeeds, positionNeedPoints, liveRankInfo } from "./analysis.js";
 import { normName } from "./espnSync.js";
 import { nextOpponents, byeCliffs, rosterCompetition, rosWeeks } from "./scheduleSync.js";
 import { SLOT_DEFS, slotAccepts } from "./lineup.js";
@@ -188,11 +188,18 @@ export function watchIntel(state, entry, owner) {
     : [];
   const collidingCliffs = hasNflTeam ? cliffs.filter((c) => c.week === byeWk).map((c) => c.week) : [];
 
-  // Fit: how many position-ranks better than my group's standard at his slot.
+  // Fit, in POINTS. Was `need - rank` across mixed rank scales — see
+  // positionNeedPoints. A projection-order rank and a pasted expert rank are
+  // different units, so differencing them produced a confident number with no
+  // consistent meaning. Points come from one choke point and one unit.
+  const needPts = pos ? positionNeedPoints(state, week)[pos] ?? null : null;
+  const upgradePoints =
+    proj != null && needPts != null ? Math.round((proj - needPts) * 10) / 10 : null;
+  const isUpgrade = upgradePoints != null && upgradePoints > 0;
+  // Kept for the card's "vs your WRs" copy only — never for a decision.
   const needs = positionNeeds(state);
   const need = pos ? needs[pos] ?? null : null;
   const upgradeRanks = rank != null && need != null ? Math.round(need - rank) : null;
-  const isUpgrade = upgradeRanks != null && upgradeRanks > 0;
 
   const rivals = pos ? rosterCompetition(state, pos) || [] : [];
   // Only rivals who can still pay count as competition. Unknown budget
@@ -209,7 +216,9 @@ export function watchIntel(state, entry, owner) {
   else if (!hasNflTeam) tier = "noteam";
   else if (isUpgrade && liveRivals.length > 0) tier = "priority";
   else if (isUpgrade) tier = "upgrade";
-  else if ((owned != null && owned < 60 && coveredCliffs.length > 0) || (upgradeRanks != null && upgradeRanks > -8))
+  // "Close enough to be worth holding": within ~2 points of your group's
+  // standard, in points rather than a rank distance that meant three things.
+  else if ((owned != null && owned < 60 && coveredCliffs.length > 0) || (upgradePoints != null && upgradePoints > -2))
     tier = "stash";
   else tier = "monitor";
 
@@ -253,6 +262,8 @@ export function watchIntel(state, entry, owner) {
     owned,
     rank,
     rankSource: rankInfo ? rankInfo.source : null,
+    upgradePoints,
+    needPts,
     pointsAdded: Math.round(pointsAdded),
     replacesPoints: replaces,
     handcuffFor,

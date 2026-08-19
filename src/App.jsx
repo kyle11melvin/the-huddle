@@ -3325,10 +3325,13 @@ export default function App({ initialTab } = {}) {
                             <em>rostered</em>
                             {wi.owned != null ? `${Math.round(wi.owned)}%` : "—"}
                           </span>
-                          {wi.upgradeRanks != null && (
-                            <span className={`wi-metric ${wi.upgradeRanks > 0 ? "up" : "down"}`}>
+                          {/* Points, not rank distance — the ranks came from
+                              three different scales and the difference of a
+                              mixed average was a number with no fixed unit. */}
+                          {wi.upgradePoints != null && (
+                            <span className={`wi-metric ${wi.upgradePoints > 0 ? "up" : "down"}`}>
                               <em>vs your {wi.pos}s</em>
-                              {wi.upgradeRanks > 0 ? `+${wi.upgradeRanks} better` : `${wi.upgradeRanks}`}
+                              {wi.upgradePoints > 0 ? `+${wi.upgradePoints} pts` : `${wi.upgradePoints} pts`}
                             </span>
                           )}
                           {wi.bid != null && !owner && (

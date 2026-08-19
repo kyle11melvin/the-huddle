@@ -31,7 +31,7 @@ import { isAuthorized } from "../api/_auth.js";
 import { readFileSync } from "node:fs";
 import { captureCalibration, calibrationStats, calibrationSummary } from "../src/calibration.js";
 import { priceBid, demandFactor, weakestReplaceablePoints } from "../src/watchlist.js";
-import { liveRankInfo, RANK_SOURCE_LABEL, RANK_SOURCE_SHORT } from "../src/analysis.js";
+import { liveRankInfo, RANK_SOURCE_LABEL, RANK_SOURCE_SHORT, positionNeedPoints, positionNeeds } from "../src/analysis.js";
 import { currentMatchupPeriod, weeklyProj } from "../api/espn.js";
 const weeklyProjBasis = (p, wk) => weeklyProj(p, wk).basis;
 
@@ -1205,6 +1205,42 @@ check("a past kickoff returns null, not a negative clock", formatCountdown(-5 * 
 check("garbage in returns null", formatCountdown(NaN) === null && formatCountdown(undefined) === null);
 check("untilKick accepts an ISO string", untilKick(new Date(Date.now() + 2 * HOUR + 14 * MIN).toISOString()) === "2h 14m");
 check("untilKick on an unparseable date returns null", untilKick("not-a-date") === null && untilKick(null) === null);
+
+// ---- 30. position need in points, not mixed rank scales ----
+const needState = {
+  week: "1",
+  players: {
+    a: { id: "a", name: "Good WR", team: "KC", pos: "WR", status: "" },
+    b: { id: "b", name: "Mid WR", team: "BUF", pos: "WR", status: "" },
+    q: { id: "q", name: "My QB", team: "JAX", pos: "QB", status: "" },
+  },
+  lineup: { QB: ["q"], RB: [null, null], WR: ["a", "b", null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  bench: [null], ir: [null],
+  analytics: { a: { 1: { proj: 16, projSource: "espn" } }, b: { 1: { proj: 8, projSource: "espn" } }, q: { 1: { proj: 20, projSource: "espn" } } },
+  byes: {}, espn: null, ecrIndex: {},
+};
+const np = positionNeedPoints(needState, "1");
+check(
+  "need is the average of the top N by POINTS, zero-filled for missing depth",
+  // WR depth 4: 16, 8, 0, 0 → 6.0
+  np.WR === 6 && np.QB === 20,
+  JSON.stringify(np)
+);
+check(
+  "a position with nobody scores 0, not a sentinel rank",
+  np.TE === 0 && np["D/ST"] === 0,
+  `TE ${np.TE}, D/ST ${np["D/ST"]}`
+);
+check(
+  "every value is in points, so a difference has one unit",
+  Object.values(np).every((v) => Number.isFinite(v) && v >= 0 && v < 60),
+  JSON.stringify(np)
+);
+// the old rank version is still exported for display copy, and still ranks
+check("the rank version still returns rank-scale numbers for display", (() => {
+  const r = positionNeeds(needState);
+  return Number.isFinite(r.WR) && r.WR > 100;
+})());
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);

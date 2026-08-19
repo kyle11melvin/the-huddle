@@ -470,6 +470,41 @@ export function positionNeeds(state) {
 }
 
 /**
+ * How weak each position group is, in PROJECTED POINTS.
+ *
+ * Replaces the rank-averaging version above for anything that compares one
+ * player against your group. The old one averaged ranks whose sources differ
+ * per player — a player inside ESPN's top-350 pool resolves to a
+ * projection-order rank, one outside it falls back to a preseason ECR string,
+ * and a pasted expert set overrides some but not all. Averaging those is
+ * adding numbers from three different scales, and then `upgradeRanks`
+ * differenced that mixed average against a single-source rank.
+ *
+ * Points make the question moot rather than patching it: every entry is the
+ * same unit, from the same choke point (pointDistribution), already
+ * injury-and-bye priced. A missing player scores 0 — replacement level is
+ * nothing, which is exactly what an empty slot is worth.
+ */
+export function positionNeedPoints(state, week) {
+  const DEPTH = { QB: 1, RB: 3, WR: 4, TE: 1, "D/ST": 1, K: 1 };
+  const byPos = {};
+  for (const p of Object.values(state.players || {})) {
+    const loc = findLocation(state, p.id);
+    if (!loc || loc.zone === "ir") continue;
+    const d = pointDistribution(p, week, state);
+    (byPos[p.pos] = byPos[p.pos] || []).push(d ? d.mean : 0);
+  }
+  const needs = {};
+  for (const pos of POSITIONS) {
+    const depth = DEPTH[pos] || 1;
+    const top = (byPos[pos] || []).sort((a, b) => b - a).slice(0, depth);
+    while (top.length < depth) top.push(0); // no player = zero points, not "rank 250"
+    needs[pos] = Math.round((top.reduce((a, b) => a + b, 0) / depth) * 10) / 10;
+  }
+  return needs;
+}
+
+/**
  * Waiver targets scored by fit to YOUR roster, not by raw rank — a mid WR is
  * worth more to a team that's 10th of 10 at WR than the best available K is.
  * Only players who would genuinely upgrade the position group are suggested.
