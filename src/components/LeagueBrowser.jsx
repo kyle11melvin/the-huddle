@@ -3,11 +3,8 @@ import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { teamOf, teamLogoUrl, headshotUrl } from "../data/teams.js";
 import { espnTeamRoster, normName } from "../espnSync.js";
 import { scheduleOpp } from "../scheduleSync.js";
+import { SLOT_COLOR } from "../constants.js";
 
-const SLOT_COLOR = {
-  QB: "#ff5c6c", RB: "#2ed584", WR: "#5b8cff", TE: "#a78bfa",
-  FLEX: "#8b93a1", "D/ST": "#8b93a1", K: "#8b93a1", BN: "#64708a", IR: "#c05a68",
-};
 
 const SLOT_ORDER = { QB: 0, RB: 1, WR: 2, TE: 3, FLEX: 4, "D/ST": 5, K: 6, BE: 7, BN: 7, IR: 8 };
 const STARTER_SLOTS = ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "FLEX", "D/ST", "K"];

@@ -10,13 +10,21 @@ import StartSitLab from "../src/components/StartSitLab.jsx";
 import DataPanel from "../src/components/DataPanel.jsx";
 import LeagueBrowser from "../src/components/LeagueBrowser.jsx";
 import ErrorBoundary from "../src/ErrorBoundary.jsx";
+import RosterRow from "../src/components/RosterRow.jsx";
+import { MoveSheet, PlayerModal, AddPlayerModal } from "../src/components/modals/index.jsx";
 
 const noop = () => {};
 
 /** Full roster, live snapshot, an opponent, an OUT starter, a bench upgrade. */
 export function makeState() {
+  // weeks is POPULATED on purpose. A render check only covers the branches
+  // the fixture reaches: with weeks empty, PlayerModal's matchup-grade branch
+  // never rendered, and a missing <Stars> import passed smoke while crashing
+  // in the app. Same reason notes/ecr are non-empty.
   const mk = (id, name, team, pos, status = "") => ({
-    id, name, team, pos, ecr: "", status, espnId: id, notes: "", weeks: {},
+    id, name, team, pos, ecr: `${pos}12`, status, espnId: id,
+    notes: "camp report: looked sharp",
+    weeks: { 1: { opp: "vs CLE", matchup: 4 } },
   });
   const P = {
     qb: mk("qb", "Trevor Lawrence", "JAX", "QB"),
@@ -92,6 +100,16 @@ export function screens(state) {
     ["Data panel", DataPanel, { state, onClose: noop, onApplyEcr: noop, onApplyByes: noop, onSetBye: noop, onImportTeam: noop, onApplyProps: noop, onApplyProjections: noop, flash: noop, link: null, syncStatus: "", syncError: "", onGoLive: noop, onStopLive: noop, onJoinTeam: noop, onRefreshLive: noop, liveUrl: "" }],
     ["League browser", LeagueBrowser, { state, ecrIndex: {}, interested: state.watch, onToggleInterest: noop }],
     ["Error boundary (passthrough)", ErrorBoundary, { children: React.createElement("div", null, "ok") }],
+    // Modals and rows render ONLY on interaction, so <App/> alone never
+    // reaches them — an extraction that dropped an import shipped a crash
+    // that opened with the player modal and no check saw it. Rendered
+    // directly now.
+    ["Player modal", PlayerModal, { state, playerId: "wr1", week, onClose: noop, onStatus: noop, onWeek: noop, onMoveOpen: noop, onDrop: noop, onEdit: noop }],
+    ["Move sheet", MoveSheet, { state, playerId: "b1", week, onClose: noop, onMove: noop, coarse: false }],
+    ["Move sheet (touch)", MoveSheet, { state, playerId: "b1", week, onClose: noop, onMove: noop, coarse: true }],
+    ["Add player modal", AddPlayerModal, { state, onClose: noop, onAdd: noop }],
+    ["Roster row (filled)", RosterRow, { dest: { zone: "lineup", slotKey: "WR", index: 0 }, player: state.players.wr1, week, byes: state.byes, oppFor: () => "vs CLE", projFor: () => 14.2, index: 0, dragId: null, legalKeys: new Set(), onOpen: noop, onBadge: noop, onDragStart: noop, onDragEnd: noop, onDrop: noop, coarse: false }],
+    ["Roster row (empty slot)", RosterRow, { dest: { zone: "bench", index: 3 }, player: null, week, byes: state.byes, oppFor: () => "", projFor: () => null, index: 1, dragId: null, legalKeys: new Set(), onOpen: noop, onBadge: noop, onDragStart: noop, onDragEnd: noop, onDrop: noop, coarse: true }],
   ];
 }
 

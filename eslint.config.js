@@ -43,6 +43,12 @@ export default [
       "react/jsx-uses-vars": "error",
       "react/jsx-uses-react": "error",
 
+      // A component used in JSX but never imported. Base `no-undef` does NOT
+      // catch this — it doesn't treat a JSXIdentifier as a variable reference —
+      // so an extraction that forgot one import passed lint clean and crashed
+      // at runtime ("Stars is not defined", opening the player modal).
+      "react/jsx-no-undef": "error",
+
       // A non-breaking space is load-bearing in the paste parsers — they strip
       // it out of copied HTML on purpose — so flag the invisible ones that
       // aren't inside a string or regex, not the deliberate ones.
