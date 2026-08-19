@@ -188,6 +188,16 @@ export function buildInitialState() {
   };
 }
 
+/**
+ * The effective bye map every reader consumes: auto-derived values from the
+ * schedule feed, with genuinely-manual entries layered on top.
+ *
+ * Declared here, above migrate(), because migrate calls it — a const used
+ * before its declaration is the temporal-dead-zone shape that blanked the
+ * Start/Sit tab, and it stays lint-enforced now.
+ */
+export const resolveByes = (auto, manual) => normalizeByes({ ...(auto || {}), ...(manual || {}) });
+
 /** Accepts v1 (starters/bench arrays) or v2 and always returns a valid v2 state. */
 export function migrate(raw) {
   if (!raw || typeof raw !== "object") return buildInitialState();
@@ -787,8 +797,6 @@ export function toggleInterest(state, { name, team, pos, note }) {
  * when auto and manual shared one map, a bad auto value was indistinguishable
  * from a human correction and shadowed every later good fetch forever.
  */
-export const resolveByes = (auto, manual) => normalizeByes({ ...(auto || {}), ...(manual || {}) });
-
 /** Manual bye entry — a human typing it is the only thing that lands here. */
 export function setBye(state, team, week) {
   const byesManual = { ...(state.byesManual || {}) };

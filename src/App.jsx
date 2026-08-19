@@ -1357,7 +1357,13 @@ function StrengthCard({ state, onOpenData }) {
 
 // ---------------------------------------------------------------------- app ---
 
-export default function App() {
+/**
+ * @param {{initialTab?: string}} props — initialTab exists so the render smoke
+ * test can mount every tab. Without it the tab is internal state, SSR always
+ * renders the default, and a per-tab test silently checks the same screen
+ * seven times. Unused in the app itself.
+ */
+export default function App({ initialTab } = {}) {
   const [loaded, setLoaded] = useState(false);
   // null = saving fine. Otherwise { reason, name } naming the actual cause.
   const [saveError, setSaveError] = useState(null);
@@ -1369,7 +1375,7 @@ export default function App() {
     const probe = probeStorage();
     if (!probe.ok) setSaveError({ reason: probe.reason, name: probe.name });
   }, []);
-  const [tab, setTab] = useState("today");
+  const [tab, setTab] = useState(initialTab || "today");
   const [state, setState] = useState(buildInitialState);
   const [notice, setNotice] = useState("");
   const [modalId, setModalId] = useState(null);
@@ -1746,6 +1752,48 @@ export default function App() {
   // 30s edge cache so a cached pre-write snapshot can never revert the app.
   const lastWriteRef = useRef(0);
 
+  // -- ESPN sync --
+  const [espnBusy, setEspnBusy] = useState(false);
+  const syncEspn = useCallback(
+    async (silent = false, fresh = false) => {
+      if (espnBusy) return;
+      setEspnBusy(true);
+      try {
+        if (!aliveRef.current) return;
+        // Recent write → always bypass the edge cache; a cached pre-write
+        // snapshot would revert the lineup we just changed.
+        const data = await fetchLeague(fresh || Date.now() - lastWriteRef.current < 90 * 1000);
+        if (data.configured === false) {
+          if (!silent) flash(data.reason || "ESPN sync isn't configured yet.");
+          return;
+        }
+        setState((s) => {
+          const res = applyEspnSync(s, data, MY_TEAM);
+          if (res.error) {
+            if (!silent) flash(res.error);
+            return s;
+          }
+          // Sync is the only moment we hold both a fresh projection and a
+          // fresh actual, so the ledger folds in here. Projections keep
+          // refreshing until kickoff, then freeze; actuals land at final.
+          const cal = captureCalibration(res.state, res.state.week);
+          const withCal = { ...res.state, calibration: cal.calibration };
+          flash(summaryToText(res.summary));
+          // Refit the blend weights here rather than inside pointDistribution:
+          // that function runs hundreds of thousands of times per simulation
+          // and must stay a pure lookup.
+          return { ...withCal, projWeights: projWeights(withCal) };
+        });
+      } catch (e) {
+        if (aliveRef.current && !silent) flash(`ESPN sync failed: ${e.message}`);
+      } finally {
+        if (aliveRef.current) setEspnBusy(false);
+      }
+    },
+    [espnBusy, flash]
+  );
+
+
   // -- roster ops (all synchronous against current state so errors surface now) --
   const doMove = useCallback(
     async (id, dest) => {
@@ -1925,46 +1973,6 @@ export default function App() {
     [flash]
   );
 
-  // -- ESPN sync --
-  const [espnBusy, setEspnBusy] = useState(false);
-  const syncEspn = useCallback(
-    async (silent = false, fresh = false) => {
-      if (espnBusy) return;
-      setEspnBusy(true);
-      try {
-        if (!aliveRef.current) return;
-        // Recent write → always bypass the edge cache; a cached pre-write
-        // snapshot would revert the lineup we just changed.
-        const data = await fetchLeague(fresh || Date.now() - lastWriteRef.current < 90 * 1000);
-        if (data.configured === false) {
-          if (!silent) flash(data.reason || "ESPN sync isn't configured yet.");
-          return;
-        }
-        setState((s) => {
-          const res = applyEspnSync(s, data, MY_TEAM);
-          if (res.error) {
-            if (!silent) flash(res.error);
-            return s;
-          }
-          // Sync is the only moment we hold both a fresh projection and a
-          // fresh actual, so the ledger folds in here. Projections keep
-          // refreshing until kickoff, then freeze; actuals land at final.
-          const cal = captureCalibration(res.state, res.state.week);
-          const withCal = { ...res.state, calibration: cal.calibration };
-          flash(summaryToText(res.summary));
-          // Refit the blend weights here rather than inside pointDistribution:
-          // that function runs hundreds of thousands of times per simulation
-          // and must stay a pure lookup.
-          return { ...withCal, projWeights: projWeights(withCal) };
-        });
-      } catch (e) {
-        if (aliveRef.current && !silent) flash(`ESPN sync failed: ${e.message}`);
-      } finally {
-        if (aliveRef.current) setEspnBusy(false);
-      }
-    },
-    [espnBusy, flash]
-  );
 
   // Refresh from ESPN on load — silently, and never while viewing someone
   // else's shared team (their data isn't ours to overwrite).

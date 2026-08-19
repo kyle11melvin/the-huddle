@@ -15,6 +15,16 @@ const POS_TOKENS = { QB: "QB", RB: "RB", WR: "WR", TE: "TE", K: "K", DST: "D/ST"
 
 export const normKey = (s) => (s || "").toLowerCase().replace(/[^a-z]/g, "");
 
+// Declared before its first use, deliberately. A const referenced above its
+// declaration is a temporal-dead-zone crash waiting for someone to call it
+// during module init — the exact class of bug that blanked Start/Sit.
+const TEAM_ABBRS = new Set(Object.keys(TEAMS));
+const TEAM_ALIASES = { JAC: "JAX", WAS: "WSH", LA: "LAR", SD: "LAC", OAK: "LV", STL: "LAR", ARZ: "ARI", BLT: "BAL", HST: "HOU", CLV: "CLE" };
+export const canonTeam = (t) => {
+  const up = (t || "").toUpperCase();
+  return TEAM_ABBRS.has(up) ? up : TEAM_ALIASES[up] || null;
+};
+
 /** Split a display name into a comparable {initial, last}. */
 export function nameParts(raw) {
   const cleaned = (raw || "")
@@ -131,13 +141,6 @@ export function matchPlayer(rawName, players, hints = {}) {
   if (d) return d;
   return { match: null, ambiguous: false };
 }
-
-const TEAM_ABBRS = new Set(Object.keys(TEAMS));
-const TEAM_ALIASES = { JAC: "JAX", WAS: "WSH", LA: "LAR", SD: "LAC", OAK: "LV", STL: "LAR", ARZ: "ARI", BLT: "BAL", HST: "HOU", CLV: "CLE" };
-export const canonTeam = (t) => {
-  const up = (t || "").toUpperCase();
-  return TEAM_ABBRS.has(up) ? up : TEAM_ALIASES[up] || null;
-};
 
 /**
  * Parse a ranking table. Handles rows like:
@@ -330,7 +333,7 @@ export function parseProjections(text, rosterPlayers = []) {
     if (col) {
       const f = splitCsvLine(line);
       name = f[col.name] || "";
-      proj = parseFloat(String(f[col.proj] || "").replace(/[^0-9.\-]/g, ""));
+      proj = parseFloat(String(f[col.proj] || "").replace(/[^0-9.-]/g, ""));
       team = col.team >= 0 ? canonTeam(f[col.team]) || "" : "";
       pos = col.pos >= 0 ? POS_TOKENS[(f[col.pos] || "").toUpperCase().replace(/\d+$/, "")] || "" : "";
       stars = col.stars >= 0 ? parseStars(f[col.stars]) : null;
@@ -426,7 +429,7 @@ function splitCells(line) {
 
 const toNum = (t) => {
   if (isBlankToken(t)) return null;
-  const n = parseFloat(String(t).replace(/[^0-9.\-]/g, ""));
+  const n = parseFloat(String(t).replace(/[^0-9.-]/g, ""));
   return Number.isFinite(n) ? n : null;
 };
 

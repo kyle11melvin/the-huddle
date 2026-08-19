@@ -74,16 +74,19 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
     () => opponentDistributions(state, week, oppTeam, "likely"),
     [state, week, oppTeam]
   );
-  const simActual = useMemo(
-    () => (oppBoth && oppBoth.differs && mine.dists.length ? simulateMatchup(mine.dists, oppBoth.actual) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [oppBoth, mine]
-  );
-
+  // `mine` MUST be declared before anything that names it — including a
+  // dependency array, which is evaluated at the useMemo call itself. This was
+  // shipped with simActual above this line and threw
+  // "Cannot access 'mine' before initialization" on first render, blanking
+  // the Start/Sit tab.
   const mine = useMemo(() => lineupDistributions(state, state.lineup, week), [state, week]);
   const sim = useMemo(
     () => (mine.dists.length && oppDists.length ? simulateMatchup(mine.dists, oppDists) : null),
     [mine, oppDists]
+  );
+  const simActual = useMemo(
+    () => (oppBoth && oppBoth.differs && mine.dists.length ? simulateMatchup(mine.dists, oppBoth.actual) : null),
+    [oppBoth, mine]
   );
   const advice = sim ? strategyAdvice(sim.winProb) : null;
 
