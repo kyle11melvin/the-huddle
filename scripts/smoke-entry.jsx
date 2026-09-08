@@ -77,7 +77,7 @@ export function makeState() {
       fetchedAt: Date.now(), currentWeek: 1, myTeamId: 7, scoring: { passTd: 6, int: -3, reception: 1 },
       leagueFaab: 100, games,
       teams: [
-        { id: 7, name: "Maye-Be This Is Our Year", mapped: "Maye-Be This Is Our Year", record: { w: 0, l: 0, t: 0 }, faabSpent: 1, roster: [] },
+        { id: 7, name: "Brock Hard", mapped: "Brock Hard", record: { w: 0, l: 0, t: 0 }, faabSpent: 1, roster: [] },
         { id: 2, name: "Rivals", mapped: "Rivals", record: { w: 0, l: 0, t: 0 }, faabSpent: 0, roster: oppRoster },
       ],
       matchups: [{ home: 7, away: 2, homeScore: 0, awayScore: 0 }],

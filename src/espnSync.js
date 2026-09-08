@@ -61,9 +61,17 @@ export async function fetchLeague(fresh = false) {
   return r.json();
 }
 
-export function findMyEspnTeam(data, myTeamName) {
+export function findMyEspnTeam(data, myTeamName, myTeamId = null) {
+  const teams = data.teams || [];
+  // ESPN team ids are stable; names are not — a rename on ESPN used to make
+  // every sync fail here. The id stored by a previous sync wins; the name is
+  // only the bootstrap for the first-ever sync.
+  if (myTeamId != null) {
+    const byId = teams.find((t) => t.id === myTeamId);
+    if (byId) return byId;
+  }
   const k = normName(myTeamName);
-  return (data.teams || []).find((t) => normName(t.name) === k) || null;
+  return teams.find((t) => normName(t.name) === k) || null;
 }
 
 /**
@@ -71,7 +79,7 @@ export function findMyEspnTeam(data, myTeamName) {
  * a human-readable summary of what changed.
  */
 export function applyEspnSync(state, data, myTeamName) {
-  const me = findMyEspnTeam(data, myTeamName);
+  const me = findMyEspnTeam(data, myTeamName, state.espn ? state.espn.myTeamId : null);
   if (!me) {
     return { state, error: `Couldn't find "${myTeamName}" among the ${data.teams?.length ?? 0} ESPN teams.` };
   }

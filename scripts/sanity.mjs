@@ -220,6 +220,31 @@ check(
   `overflow ${JSON.stringify(syncFallback.summary.overflow)}, players ${Object.keys(syncFallback.state.players).length}`
 );
 
+// ---- 6b. a team rename on ESPN must not kill every future sync ----
+// findMyEspnTeam used to match on name alone, so renaming the fantasy team on
+// ESPN made applyEspnSync error forever. Once a sync has stored myTeamId that
+// id wins; the name is only the bootstrap for the first-ever sync.
+const renamed = (name) => {
+  const d = mkData({ 20: 7, 21: 2 });
+  return { ...d, teams: [{ ...d.teams[0], name }] };
+};
+check("a completed sync stores the ESPN team id", sync7.state.espn.myTeamId === 7, `stored ${sync7.state.espn.myTeamId}`);
+const renamedSync = applyEspnSync(sync7.state, renamed("Some Flashy New Name"), "Test Team");
+check(
+  "a renamed ESPN team still resolves via the stored id",
+  !renamedSync.error && renamedSync.state.espn.myTeamId === 7,
+  renamedSync.error || `myTeamId ${renamedSync.state.espn.myTeamId}`
+);
+check(
+  "the sync against the renamed team actually lands",
+  seated(renamedSync.state) === 9 && renamedSync.summary.overflow.length === 0,
+  `seated ${seated(renamedSync.state)}/9`
+);
+check(
+  "a first-ever sync (no stored id) still requires the name to match",
+  !!applyEspnSync(baseState, renamed("Some Flashy New Name"), "Test Team").error
+);
+
 // ---- 7. schedule completeness: one failed week must not fake a bye ----
 const week = (n) => ({
   events: Array.from({ length: 16 }, (_, g) => ({

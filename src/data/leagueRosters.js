@@ -14,7 +14,7 @@
 // then bench, then IR — but only name/team/pos are load-bearing here.)
 // ============================================================================
 
-export const MY_TEAM = "Maye-Be This Is Our Year";
+export const MY_TEAM = "Brock Hard";
 
 export const LEAGUE_ROSTERS = [
   {
