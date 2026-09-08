@@ -23,6 +23,16 @@ import { effectiveStatus, suggestLineup } from "../analysis.js";
 import { opponentDistributions, opponentLineups } from "../simulate.js";
 import { anyGameLive } from "../espnSync.js";
 import { formatCountdown } from "../timeUntil.js";
+import { buildLockSweep } from "../lockSweep.js";
+import { pointDistribution } from "../analytics.js";
+
+const RISK_COPY = {
+  out: "OUT — scores 0 unless swapped",
+  bye: "on bye — scores 0",
+  empty: "empty slot — nobody scoring",
+  high: "doubtful",
+  watch: "questionable",
+};
 
 const STATUS_COPY = {
   O: "is OUT",
@@ -80,6 +90,33 @@ export default function Today({ state, week, onApplyMove, onSetLive, onSetOppone
     }
     return { blockers, doubts, emptySlots };
   }, [state.lineup, state.players, state.byes, week]);
+
+  // Per-player lock triage — READ ONLY, it proposes nothing automatically.
+  // Projections come through pointDistribution so replacement deltas are
+  // injury- and bye-priced like every other number in the app.
+  const sweep = useMemo(() => {
+    const projections = {};
+    const ids = [];
+    for (const s of SLOT_DEFS) for (const id of state.lineup[s.key] || []) if (id) ids.push(id);
+    for (const id of state.bench || []) if (id) ids.push(id);
+    for (const id of ids) {
+      const d = state.players[id] && pointDistribution(state.players[id], week, state);
+      if (d) projections[id] = d.mean;
+    }
+    return buildLockSweep({
+      roster: {
+        lineup: state.lineup,
+        bench: state.bench,
+        players: state.players,
+        byes: state.byes || {},
+        week,
+        projections,
+      },
+      games: (state.espn && state.espn.games) || {},
+      now,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.lineup, state.bench, state.players, state.byes, state.analytics, state.espn, state.projWeights, week, now]);
 
   // Next kickoff among starters whose game hasn't begun.
   const nextKick = useMemo(() => {
@@ -199,6 +236,55 @@ export default function Today({ state, week, onApplyMove, onSetLive, onSetOppone
           </div>
         )}
       </div>
+
+      {/* Lock sweep — per-player locks mean per-player deadlines. Read-only:
+          every row is a decision left to the human, never an auto-swap. When
+          everything is clear it still says so, in one quiet line. */}
+      {sweep.length === 0 ? (
+        <div className="locksweep-clear">Lock sweep: all 10 starters are clear — nothing needs a swap before kickoff.</div>
+      ) : (
+        <div className="locksweep-card">
+          <div className="section-kicker">Lock sweep · {sweep.length} slot{sweep.length === 1 ? "" : "s"} to check</div>
+          <div className="today-list">
+            {sweep.map((a) => {
+              const timing = a.kickoffUnknown
+                ? "kickoff time unknown"
+                : a.locksAt != null
+                ? (() => {
+                    const cd = formatCountdown(a.locksAt - now);
+                    return cd ? `locks in ${cd}` : "locking now";
+                  })()
+                : null;
+              const inner = (
+                <>
+                  <span className="today-slot">{a.slot}</span>
+                  <span className="today-name">{a.playerName || "Empty slot"}</span>
+                  <span className="today-why">
+                    {RISK_COPY[a.risk]}
+                    {timing ? ` · ${timing}` : ""}
+                  </span>
+                  <span className="locksweep-repl">
+                    {a.replacements.length
+                      ? `Bench: ${a.replacements
+                          .map((r) => `${r.name}${r.delta != null ? ` (${r.delta >= 0 ? "+" : ""}${r.delta.toFixed(1)})` : ""}`)
+                          .join(" · ")}`
+                      : "no eligible bench replacement"}
+                  </span>
+                </>
+              );
+              return a.playerId ? (
+                <button key={a.id} className={`today-row locksweep-row ${a.risk}`} onClick={() => onOpenPlayer(a.playerId)}>
+                  {inner}
+                </button>
+              ) : (
+                <div key={a.id} className={`today-row locksweep-row ${a.risk}`}>
+                  {inner}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* The board. Same component as before — one screen, two modes. */}
       <Gameday
