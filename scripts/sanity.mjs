@@ -33,6 +33,7 @@ import { captureCalibration, calibrationStats, calibrationSummary } from "../src
 import { priceBid, demandFactor, weakestReplaceablePoints } from "../src/watchlist.js";
 import { liveRankInfo, RANK_SOURCE_LABEL, RANK_SOURCE_SHORT, positionNeedPoints, positionNeeds } from "../src/analysis.js";
 import { currentMatchupPeriod, weeklyProj } from "../api/espn.js";
+import { buildLockSweep } from "../src/lockSweep.js";
 const weeklyProjBasis = (p, wk) => weeklyProj(p, wk).basis;
 
 let failures = 0;
@@ -1241,6 +1242,182 @@ check("the rank version still returns rank-scale numbers for display", (() => {
   const r = positionNeeds(needState);
   return Number.isFinite(r.WR) && r.WR > 100;
 })());
+
+// ---- 31. lock sweep ----
+// Per-player locks with Lineup Protection OFF: seven starters lock at once
+// Sunday 10:00 AM PT, inactives drop 90 minutes before kickoff, and an
+// inactive starter scores zero with no auto-swap. The sweep is the pre-lock
+// checklist, so its failure modes are pinned hard:
+//   - a locked player is noise (unactionable), so he's excluded
+//   - a MISSING kickoff time must never drop a genuinely OUT starter
+//   - everything keys on player id — duplicate-name merging already shipped
+//     as a bug in this repo once (see espnSync resolveExisting)
+// Each check runs through a try/catch so "returns X without throwing" can
+// fail honestly instead of killing the suite.
+const lsTry = (name, fn) => {
+  try {
+    const [ok, detail] = fn();
+    check(name, ok, detail);
+  } catch (e) {
+    check(name, false, `threw: ${e && e.message}`);
+  }
+};
+
+const LS_NOW = Date.parse("2026-09-13T17:00:00Z"); // a Sunday, 10:00 AM PT
+const lsKick = (mins) => new Date(LS_NOW + mins * 60000).toISOString();
+
+/** Ten healthy starters + five bench, everyone kicking off in 3 hours. */
+function lsBase() {
+  const players = {};
+  const projections = {};
+  const mk = (id, name, team, pos, status = "", proj = 10) => {
+    players[id] = { id, name, team, pos, status };
+    projections[id] = proj;
+  };
+  mk("qb1", "Kyler Murray", "ARI", "QB", "", 20);
+  mk("rb1", "Bijan Robinson", "ATL", "RB", "", 18);
+  mk("rb2", "Chase Brown", "CIN", "RB", "", 15);
+  mk("wr1", "Tee Higgins", "CIN", "WR", "", 14);
+  mk("wr2", "Michael Thomas", "NO", "WR", "", 12);
+  mk("wr3", "Parker Washington", "JAX", "WR", "", 9);
+  mk("te1", "Brock Bowers", "LV", "TE", "", 13);
+  mk("fx1", "Javonte Williams", "DAL", "RB", "", 11);
+  mk("dst1", "Steelers D/ST", "PIT", "D/ST", "", 8);
+  mk("k1", "Cameron Dicker", "LAC", "K", "", 8);
+  mk("bn1", "Quentin Johnston", "LAC", "WR", "", 11);
+  mk("bn2", "Tyjae Spears", "TEN", "RB", "", 12);
+  mk("bn3", "Jake Browning", "CIN", "QB", "", 17);
+  mk("bn4", "Jets D/ST", "NYJ", "D/ST", "", 6);
+  mk("bn5", "Romeo Doubs", "GB", "WR", "", 5);
+  const games = {};
+  for (const t of ["ARI", "ATL", "CIN", "NO", "JAX", "LV", "DAL", "PIT", "LAC", "TEN", "NYJ", "GB"]) {
+    games[t] = { state: "pre", pctRemaining: 1, detail: "", startTime: lsKick(180) };
+  }
+  return {
+    roster: {
+      lineup: { QB: ["qb1"], RB: ["rb1", "rb2"], WR: ["wr1", "wr2", "wr3"], TE: ["te1"], FLEX: ["fx1"], "D/ST": ["dst1"], K: ["k1"] },
+      bench: ["bn1", "bn2", "bn3", "bn4", "bn5", null],
+      players,
+      byes: {},
+      week: 2,
+      projections,
+    },
+    games,
+  };
+}
+
+lsTry("a starter past his startTime is excluded — locked means unactionable", () => {
+  const f = lsBase();
+  f.roster.players.wr1.status = "O"; // CIN kicked off 30 minutes ago
+  f.roster.players.wr2.status = "O"; // NO kicks in 3 hours
+  f.games.CIN = { state: "pre", startTime: lsKick(-30) }; // stale 'pre' state — the clock decides
+  const out = buildLockSweep({ roster: f.roster, games: f.games, now: LS_NOW });
+  return [out.length === 1 && out[0].playerId === "wr2", `got ${out.length} alert(s): ${out.map((a) => a.playerId).join(", ")}`];
+});
+
+lsTry("a bench player whose game already kicked off is not offered", () => {
+  const f = lsBase();
+  f.roster.players.wr2.status = "O";
+  f.games.LAC = { state: "in", startTime: lsKick(-10) }; // bn1's game is live
+  const out = buildLockSweep({ roster: f.roster, games: f.games, now: LS_NOW });
+  const a = out.find((x) => x.playerId === "wr2");
+  const ids = a ? a.replacements.map((r) => r.id) : [];
+  return [!!a && !ids.includes("bn1") && ids.includes("bn5"), `replacements: ${ids.join(", ") || "(none)"}`];
+});
+
+lsTry('a starter on bye appears as "bye"', () => {
+  const f = lsBase();
+  f.roster.byes = { NO: 2 };
+  delete f.games.NO; // bye teams have no game on the scoreboard
+  const out = buildLockSweep({ roster: f.roster, games: f.games, now: LS_NOW });
+  const a = out.find((x) => x.playerId === "wr2");
+  return [
+    !!a && a.risk === "bye" && a.minutesToLock === null && a.kickoffUnknown === false,
+    a ? `risk ${a.risk}, minutesToLock ${a.minutesToLock}, kickoffUnknown ${a.kickoffUnknown}` : "wr2 missing",
+  ];
+});
+
+lsTry("FLEX offers RB and WR but not the higher-projected QB", () => {
+  const f = lsBase();
+  f.roster.players.fx1.status = "O";
+  // bn3 (QB, 17 pts) out-projects every eligible option — only eligibility can keep him out
+  const out = buildLockSweep({ roster: f.roster, games: f.games, now: LS_NOW });
+  const a = out.find((x) => x.playerId === "fx1");
+  const ids = a ? a.replacements.map((r) => r.id) : [];
+  return [
+    !!a && ids.length === 2 && ids[0] === "bn2" && ids[1] === "bn1" && a.replacements.every((r) => r.pos !== "QB"),
+    `replacements: ${ids.join(", ") || "(none)"}`,
+  ];
+});
+
+lsTry("the D/ST slot offers only a D/ST", () => {
+  const f = lsBase();
+  f.roster.players.dst1.status = "O";
+  const out = buildLockSweep({ roster: f.roster, games: f.games, now: LS_NOW });
+  const a = out.find((x) => x.playerId === "dst1");
+  const ids = a ? a.replacements.map((r) => r.id) : [];
+  return [
+    !!a && ids.length === 1 && ids[0] === "bn4" && a.replacements.every((r) => r.pos === "D/ST"),
+    `replacements: ${ids.join(", ") || "(none)"}`,
+  ];
+});
+
+lsTry("a missing startTime on an OUT starter still alerts, flagged kickoffUnknown", () => {
+  // The worst failure mode: silently dropping a genuinely OUT starter over a
+  // missing timestamp. Both flavours — a null startTime and no game entry.
+  const f = lsBase();
+  f.roster.players.wr2.status = "O";
+  f.games.NO = { state: "pre", startTime: null };
+  const nullTime = buildLockSweep({ roster: f.roster, games: f.games, now: LS_NOW }).find((x) => x.playerId === "wr2");
+  delete f.games.NO;
+  const noEntry = buildLockSweep({ roster: f.roster, games: f.games, now: LS_NOW }).find((x) => x.playerId === "wr2");
+  const good = (a) => !!a && a.risk === "out" && a.minutesToLock === null && a.kickoffUnknown === true;
+  return [good(nullTime) && good(noEntry), `null startTime: ${JSON.stringify(nullTime || null)}; no entry: ${JSON.stringify(noEntry || null)}`];
+});
+
+lsTry("two players sharing a name resolve independently — id, never name", () => {
+  const f = lsBase();
+  f.roster.players.wr2.status = "O"; // Michael Thomas, NO
+  f.roster.players.bn1.name = "Michael Thomas"; // healthy LAC WR, same name, different id
+  const out = buildLockSweep({ roster: f.roster, games: f.games, now: LS_NOW });
+  const ids = out.map((a) => a.playerId);
+  const a = out.find((x) => x.playerId === "wr2");
+  const offered = a ? a.replacements.map((r) => r.id) : [];
+  // exactly one alert (the OUT id), and the same-named healthy player is still a valid replacement
+  return [
+    out.length === 1 && ids[0] === "wr2" && offered.includes("bn1"),
+    `alerts: ${ids.join(", ")}; replacements: ${offered.join(", ") || "(none)"}`,
+  ];
+});
+
+lsTry("an empty games object returns [] without throwing", () => {
+  const f = lsBase();
+  const out = buildLockSweep({ roster: f.roster, games: {}, now: LS_NOW });
+  return [Array.isArray(out) && out.length === 0, `got ${JSON.stringify(out)}`];
+});
+
+lsTry("soonest lock first; unknown kickoffs lead (can't be ruled out), no-lock rows trail", () => {
+  const f = lsBase();
+  f.roster.players.wr2.status = "O"; // NO, +180m
+  f.roster.players.wr1.status = "O"; // CIN, move to +60m
+  f.roster.players.te1.status = "O"; // LV, kickoff unknown
+  f.games.CIN = { state: "pre", startTime: lsKick(60) };
+  f.games.LV = { state: "pre", startTime: null };
+  f.roster.lineup.K = [null]; // empty slot: never locks, sorts last
+  const out = buildLockSweep({ roster: f.roster, games: f.games, now: LS_NOW });
+  const order = out.map((a) => a.playerId || a.risk).join(",");
+  const wr1 = out.find((a) => a.playerId === "wr1");
+  return [order === "te1,wr1,wr2,empty" && wr1.minutesToLock === 60, `order ${order}; wr1 minutesToLock ${wr1 && wr1.minutesToLock}`];
+});
+
+lsTry('DOUBTFUL is "high", QUESTIONABLE is "watch", healthy is excluded', () => {
+  const f = lsBase();
+  f.roster.players.rb1.status = "D";
+  f.roster.players.te1.status = "Q";
+  const out = buildLockSweep({ roster: f.roster, games: f.games, now: LS_NOW });
+  const risks = Object.fromEntries(out.map((a) => [a.playerId, a.risk]));
+  return [out.length === 2 && risks.rb1 === "high" && risks.te1 === "watch", JSON.stringify(risks)];
+});
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);
