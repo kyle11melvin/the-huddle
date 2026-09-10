@@ -95,14 +95,31 @@ export default function DataPanel({
     else setJoinCode("");
   };
 
-  const doImportLink = () => {
+  // asMine=true adopts the snapshot as THIS device's team, so it persists and
+  // the device can keep syncing on its own. asMine=false is the read-only
+  // look at someone else's team, which must not touch your saved copy.
+  const doImportLink = (asMine) => {
     const m = /[#&]team=([A-Za-z0-9\-_]+)/.exec(importLink.trim()) || [null, importLink.trim()];
+    let incoming;
     try {
-      const incoming = decodeShare(m[1]);
-      onImportTeam(incoming);
+      incoming = decodeShare(m[1]);
     } catch {
       flash("That doesn't look like a valid Huddle share link.");
+      return;
     }
+    // Adopting replaces whatever this device already has, and the only copy of
+    // that is local — so confirm before overwriting it, and say what's landing.
+    if (asMine) {
+      const count = Object.keys(incoming.players || {}).length;
+      const mine = Object.keys(state.players || {}).length;
+      const ok = window.confirm(
+        `Replace this device's team (${mine} players) with the snapshot (${count} players)?\n\n` +
+          `The snapshot becomes this device's own team and saves here. Anything currently on this device that isn't in the snapshot is lost.`
+      );
+      if (!ok) return;
+    }
+    onImportTeam(incoming, asMine);
+    setImportLink("");
   };
 
   // ---- rankings ----
@@ -281,14 +298,27 @@ export default function DataPanel({
                 onChange={(e) => setImportLink(e.target.value)}
                 placeholder="Paste a huddle snapshot link…"
               />
-              <button
-                className="btn-secondary"
-                style={{ marginTop: 10 }}
-                onClick={doImportLink}
-                disabled={!importLink.trim()}
-              >
-                Load team
-              </button>
+              <p className="panel-note">
+                Loading <strong>your own</strong> snapshot onto another device — your phone, say — needs{" "}
+                <em>this is my team</em>, or it won't save and disappears on the next reload. Use{" "}
+                <em>view only</em> for a league-mate's team, which leaves your own untouched.
+              </p>
+              <div className="badge-row" style={{ marginTop: 10 }}>
+                <button
+                  className="btn-primary"
+                  onClick={() => doImportLink(true)}
+                  disabled={!importLink.trim()}
+                >
+                  This is my team
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => doImportLink(false)}
+                  disabled={!importLink.trim()}
+                >
+                  View only
+                </button>
+              </div>
 
               <div className="modal-section-label">Huddle write token</div>
               <p className="panel-note">
