@@ -90,6 +90,13 @@ select option {
 .hero {
   position: relative;
   overflow: hidden;
+  /* Installed on an iPhone home screen the app runs under a translucent status
+     bar (apple-mobile-web-app-status-bar-style: black-translucent, with
+     viewport-fit=cover), which is what lets the navy gradient run full-bleed to
+     the top edge. Without this inset the clock and battery sit on top of the
+     kicker and title. Resolves to 0px everywhere else, so the browser layout is
+     unchanged. */
+  padding-top: env(safe-area-inset-top, 0px);
   background:
     radial-gradient(ellipse 90% 120% at 15% -20%, rgba(79, 127, 255, 0.32), transparent 55%),
     radial-gradient(ellipse 70% 100% at 85% -30%, rgba(255, 182, 18, 0.16), transparent 50%),

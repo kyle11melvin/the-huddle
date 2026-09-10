@@ -5,6 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0A0E17" />
     <meta name="description" content="The Huddle — Whales Vagina Fantasy FB team HQ. Roster, scouting notes, waivers, and FAAB tracking." />
+
+    <!-- Installable app. `display: standalone` in the manifest is what drops the
+         browser chrome; the apple-* metas are what make iOS honour it, since
+         iOS Safari still reads its own vendor-prefixed tags. Both spellings of
+         the capable meta are present on purpose: the unprefixed one is the
+         standard, the apple one is what actually works today.
+
+         NOTE: on iOS a home-screen app gets its OWN storage, separate from the
+         browser it was added from. A device set up in the browser will start
+         empty inside the installed app — the team snapshot and the Huddle token
+         both have to be entered again there. That is expected, not a bug.
+
+         The icons referenced here do not exist yet; see public/icons/README.md.
+         Until they land iOS falls back to a screenshot of the page. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- black-translucent lets the navy ground run under the status bar, so the
+         app reads as full-bleed rather than sitting below a white strip. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Huddle" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏈</text></svg>" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
