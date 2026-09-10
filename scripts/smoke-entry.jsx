@@ -12,6 +12,7 @@ import LeagueBrowser from "../src/components/LeagueBrowser.jsx";
 import ErrorBoundary from "../src/ErrorBoundary.jsx";
 import RosterRow from "../src/components/RosterRow.jsx";
 import { MoveSheet, PlayerModal, AddPlayerModal } from "../src/components/modals/index.jsx";
+import ProjectionGauge from "../src/components/ProjectionGauge.jsx";
 
 const noop = () => {};
 
@@ -113,6 +114,16 @@ export function screens(state) {
     ["Move sheet", MoveSheet, { state, playerId: "b1", week, onClose: noop, onMove: noop, coarse: false }],
     ["Move sheet (touch)", MoveSheet, { state, playerId: "b1", week, onClose: noop, onMove: noop, coarse: true }],
     ["Add player modal", AddPlayerModal, { state, onClose: noop, onAdd: noop }],
+    // Real numbers off the live roster, chosen to stress the geometry rather
+    // than flatter it. Bijan is the healthy case; Bowers is the one where
+    // mean (3.7) falls BELOW his own floor (6.0) because playProb is 0.25, so
+    // the needle sits outside the band and the ghost needle has to explain it.
+    ["Projection gauge (healthy)", ProjectionGauge, { mean: 24.7, condMean: 24.7, sd: 13.5, playProb: 1 }],
+    ["Projection gauge (needle outside band)", ProjectionGauge, { mean: 3.7, condMean: 14.9, sd: 8.9, playProb: 0.25 }],
+    // Floor clamps at 0 rather than going negative, and the needle pins to the
+    // dial end rather than swinging off it.
+    ["Projection gauge (low, wide)", ProjectionGauge, { mean: 3.6, condMean: 3.6, sd: 2.7, playProb: 1 }],
+    ["Projection gauge (over scale)", ProjectionGauge, { mean: 44, condMean: 44, sd: 6, playProb: 1 }],
     ["Roster row (filled)", RosterRow, { dest: { zone: "lineup", slotKey: "WR", index: 0 }, player: state.players.wr1, week, byes: state.byes, oppFor: () => "vs CLE", projFor: () => 14.2, index: 0, dragId: null, legalKeys: new Set(), onOpen: noop, onBadge: noop, onDragStart: noop, onDragEnd: noop, onDrop: noop, coarse: false }],
     ["Roster row (empty slot)", RosterRow, { dest: { zone: "bench", index: 3 }, player: null, week, byes: state.byes, oppFor: () => "", projFor: () => null, index: 1, dragId: null, legalKeys: new Set(), onOpen: noop, onBadge: noop, onDragStart: noop, onDragEnd: noop, onDrop: noop, coarse: true }],
   ];

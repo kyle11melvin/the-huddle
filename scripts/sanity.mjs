@@ -1273,5 +1273,44 @@ check("the rank version still returns rank-scale numbers for display", (() => {
   return Number.isFinite(r.WR) && r.WR > 100;
 })());
 
+// ---- 31. projection gauge geometry ----
+// Rendering it proves nothing about where the needle points. These are the
+// properties a render check can't see.
+const { gaugeGeometry, angleFor, MAX: GAUGE_MAX } = await import("../src/gaugeGeometry.js");
+
+check("the dial is a fixed 0-40 for every position, so needle position is comparable", GAUGE_MAX === 40);
+check("0 sits at the left end and the max at the right end", angleFor(0) === 180 && angleFor(GAUGE_MAX) === 360);
+check(
+  "an over-scale value pins to the dial end instead of swinging past it",
+  angleFor(44) === 360 && angleFor(1000) === 360,
+  `got ${angleFor(44)} / ${angleFor(1000)}`
+);
+check("a negative value pins to the left end rather than wrapping", angleFor(-5) === 180);
+
+// Bijan, off the live roster: healthy, so both needles coincide and no ghost.
+const gHealthy = gaugeGeometry({ mean: 24.7, condMean: 24.7, sd: 13.5, playProb: 1 });
+check("a healthy player draws no ghost needle", gHealthy.ghost === null && !gHealthy.uncertain);
+check(
+  "floor and ceiling are condMean -/+ sd",
+  gHealthy.floor === 11.2 && gHealthy.ceiling === 38.2,
+  `${gHealthy.floor} .. ${gHealthy.ceiling}`
+);
+check("a healthy needle sits inside its own band", !gHealthy.needleOutsideBand);
+
+// Brock Bowers: 14.9 if he plays, playProb 0.25 -> mean 3.7, BELOW his floor.
+// This is the case the ghost needle exists for; it must not be smoothed away.
+const gDoubt = gaugeGeometry({ mean: 3.7, condMean: 14.9, sd: 8.9, playProb: 0.25 });
+check("a doubtful player draws a ghost needle at condMean", gDoubt.ghost === angleFor(14.9));
+check(
+  "the needle is allowed OUTSIDE the band when playProb drags mean below the floor",
+  gDoubt.needleOutsideBand && 3.7 < gDoubt.floor,
+  `mean 3.7 vs floor ${gDoubt.floor}`
+);
+check("the ghost sits to the right of the real needle in that case", gDoubt.ghost > gDoubt.needle);
+
+// A wide sd on a small projection would put the floor below zero.
+const gLow = gaugeGeometry({ mean: 3, condMean: 3, sd: 5, playProb: 1 });
+check("the floor clamps at 0 rather than going negative", gLow.floor === 0, `got ${gLow.floor}`);
+
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);
