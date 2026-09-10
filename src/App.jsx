@@ -815,10 +815,33 @@ export default function App({ initialTab } = {}) {
             setLoaded(true);
             return;
           }
-          // The published team no longer exists — following it forever would
-          // trap the user on a dead snapshot. Unlink and fall back to local.
-          clearLink();
-          setLink(null);
+          // notFound. What that costs depends entirely on which side we're on.
+          //
+          // OWNER: clearLink() erases the write key, and that key exists
+          // NOWHERE else — not in a backup, not in the API (which returns only
+          // {id, state, updatedAt}), not on the server (which stores only its
+          // SHA-256). Destroying an unrecoverable credential on the strength of
+          // ONE read is a trade that can never be worth it: a notFound can be
+          // transient — an outage, a bad deploy, eventual consistency in the
+          // blob listing — while the loss is permanent. This exact path cost a
+          // real write key, after which the only recovery was deleting the blob
+          // out-of-band and re-claiming the id.
+          //
+          // So keep the stored link, say so loudly, and publish nothing:
+          // remoteVerified stays false, so the save effect won't mirror the
+          // local copy over whatever may come back.
+          if (saved.mode === "owner" && saved.key) {
+            setSyncStatus("error");
+            setSyncError(
+              `Team ${saved.id} didn't load — keeping this device's write key and not syncing. Reload to retry.`
+            );
+          } else {
+            // VIEWER: nothing irreplaceable is stored (viewer links carry no
+            // key), and following a team that no longer exists pins the user to
+            // a stale snapshot forever. Releasing them is the right call here.
+            clearLink();
+            setLink(null);
+          }
         } catch (e) {
           // remoteVerified stays false, so the local copy shown here is NOT
           // mirrored back over the server's — which may well be newer.
@@ -908,8 +931,10 @@ export default function App({ initialTab } = {}) {
         const res = await fetchTeam(link.id);
         if (stopped) return;
         if (res.notFound) {
-          // Followed team was unpublished — release the user instead of
-          // silently pinning them to a stale copy.
+          // Safe to clear here, unlike the owner path in the load chain: this
+          // effect returns early unless mode === "viewer", and viewer links
+          // carry no key — there is nothing unrecoverable to destroy. Keep that
+          // guard above if this is ever refactored.
           clearLink();
           setLink(null);
           setViewingShared(false);
@@ -1634,6 +1659,21 @@ export default function App({ initialTab } = {}) {
   );
 
   const stopLive = useCallback(() => {
+    // Turning sync off looks reversible and isn't: clearLink() takes the write
+    // key with it, and nothing anywhere else has a copy. "Stop live sync" reads
+    // like a toggle, so say plainly that it's one-way before doing it.
+    const current = loadLink();
+    if (current && current.mode === "owner" && current.key) {
+      const ok = window.confirm(
+        `Turn off live sync for team ${current.id}?\n\n` +
+          `This device's WRITE KEY is deleted along with it, and there is no other copy — ` +
+          `not in a backup, not on the server, which only stores its hash. ` +
+          `Without it nothing can ever publish to ${current.id} again.\n\n` +
+          `If you might want this team back, cancel and copy the key from "Write key" first.\n\n` +
+          `Turn it off anyway?`
+      );
+      if (!ok) return;
+    }
     syncer.current.cancel();
     setRemoteVerified(false);
     clearLink();
