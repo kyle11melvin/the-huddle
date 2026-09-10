@@ -1557,6 +1557,13 @@ export default function App({ initialTab } = {}) {
 
   // -- live sync --
   const goLive = useCallback(async () => {
+    // Defence in depth: the panel only offers this when there's no link, but
+    // minting on top of an existing one would orphan a real team, so refuse
+    // rather than trust the caller.
+    const existing = loadLink();
+    if (existing && existing.id) {
+      return { error: `This device is already linked to team ${existing.id}.` };
+    }
     const next = { id: newTeamId(), key: newWriteKey(), mode: "owner" };
     setSyncStatus("saving");
     try {
@@ -1578,6 +1585,53 @@ export default function App({ initialTab } = {}) {
       return { error: e.message };
     }
   }, [state, flash]);
+
+  /**
+   * Reconnect a device to a team it already owns, using the code + write key.
+   *
+   * Without this the ONLY action a device with no huddle-link could take was
+   * goLive, which mints a brand-new id — so losing (or never having) the link
+   * silently orphaned the real team and published a fresh document instead.
+   * That happened three times across three devices before this existed.
+   *
+   * The key is verified by writing back the state we just read: the server
+   * rejects a wrong key with 403, and a correct one rewrites the document with
+   * byte-identical content, so a failed guess costs nothing and a successful
+   * one can't clobber anything.
+   */
+  const reconnectTeam = useCallback(
+    async (rawCode, rawKey) => {
+      const code = String(rawCode || "").trim().toLowerCase().replace(/.*[?&]team=/, "");
+      const key = String(rawKey || "").trim();
+      if (!/^[a-z0-9]{6,32}$/.test(code)) return { error: "That doesn't look like a team code." };
+      if (!key) return { error: "Paste the write key for that team." };
+      try {
+        const res = await fetchTeam(code);
+        if (res.notFound) return { error: "No team with that code." };
+        // Throws in a dev build (DEV_READ_ONLY) — the catch surfaces that.
+        await pushTeam(code, key, res.state);
+        const nextLink = { id: code, key, mode: "owner" };
+        saveLink(nextLink);
+        setLink(nextLink);
+        setState(migrate(res.state));
+        setRemoteVerified(true);
+        setViewingShared(false);
+        setSyncStatus("saved");
+        setSyncError("");
+        setDataOpen(false);
+        flash(`Reconnected to team ${code} — this device owns it again.`);
+        return {};
+      } catch (e) {
+        // 403 is the interesting one: the code is real, the key is not.
+        return {
+          error: /belongs to someone else/i.test(e.message)
+            ? "That write key doesn't match this team code."
+            : e.message,
+        };
+      }
+    },
+    [flash]
+  );
 
   const stopLive = useCallback(() => {
     syncer.current.cancel();
@@ -2845,6 +2899,7 @@ export default function App({ initialTab } = {}) {
           onGoLive={goLive}
           onStopLive={stopLive}
           onJoinTeam={joinTeam}
+          onReconnectTeam={reconnectTeam}
           onRefreshLive={refreshLive}
           liveUrl={link ? liveShareUrl(link.id) : ""}
         />

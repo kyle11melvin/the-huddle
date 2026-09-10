@@ -97,7 +97,12 @@ export function screens(state) {
     ["Today (Command Center)", Today, { state, week, onApplyMove: noop, onSetLive: noop, onSetOpponent: noop, onRefresh: noop, onOpenPlayer: noop }],
     ["Gameday board", Gameday, { state, week, onSetLive: noop, onSetOpponent: noop, onRefresh: noop }],
     ["Start/Sit Lab", StartSitLab, { state, week, onImport: noop, onApplySwap: noop, flash: noop }],
-    ["Data panel", DataPanel, { state, onClose: noop, onApplyEcr: noop, onApplyByes: noop, onSetBye: noop, onImportTeam: noop, onApplyProps: noop, onApplyProjections: noop, flash: noop, link: null, syncStatus: "", syncError: "", onGoLive: noop, onStopLive: noop, onJoinTeam: noop, onRefreshLive: noop, liveUrl: "" }],
+    ["Data panel", DataPanel, { state, onClose: noop, onApplyEcr: noop, onApplyByes: noop, onSetBye: noop, onImportTeam: noop, onApplyProps: noop, onApplyProjections: noop, flash: noop, link: null, syncStatus: "", syncError: "", onGoLive: noop, onStopLive: noop, onJoinTeam: noop, onReconnectTeam: noop, onRefreshLive: noop, liveUrl: "" }],
+    // link:null only ever rendered the "not published yet" branch, so the
+    // owner and viewer halves of this panel — team code, write key, follow
+    // status — shipped unrendered by any check. Both are covered now.
+    ["Data panel (owner, live)", DataPanel, { state, onClose: noop, onApplyEcr: noop, onApplyByes: noop, onSetBye: noop, onImportTeam: noop, onApplyProps: noop, onApplyProjections: noop, flash: noop, link: { id: "abc123xy", key: "k".repeat(32), mode: "owner" }, syncStatus: "saved", syncError: "", onGoLive: noop, onStopLive: noop, onJoinTeam: noop, onReconnectTeam: noop, onRefreshLive: noop, liveUrl: "https://example.test/?team=abc123xy" }],
+    ["Data panel (viewer, following)", DataPanel, { state, onClose: noop, onApplyEcr: noop, onApplyByes: noop, onSetBye: noop, onImportTeam: noop, onApplyProps: noop, onApplyProjections: noop, flash: noop, link: { id: "abc123xy", mode: "viewer" }, syncStatus: "", syncError: "", onGoLive: noop, onStopLive: noop, onJoinTeam: noop, onReconnectTeam: noop, onRefreshLive: noop, liveUrl: "https://example.test/?team=abc123xy" }],
     ["League browser", LeagueBrowser, { state, ecrIndex: {}, interested: state.watch, onToggleInterest: noop }],
     ["Error boundary (passthrough)", ErrorBoundary, { children: React.createElement("div", null, "ok") }],
     // Modals and rows render ONLY on interaction, so <App/> alone never

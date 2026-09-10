@@ -31,6 +31,7 @@ export default function DataPanel({
   onGoLive,
   onStopLive,
   onJoinTeam,
+  onReconnectTeam,
   onRefreshLive,
   liveUrl,
 }) {
@@ -41,6 +42,10 @@ export default function DataPanel({
   const [copiedWhich, setCopiedWhich] = useState("");
   const [importLink, setImportLink] = useState("");
   const [joinCode, setJoinCode] = useState("");
+  const [reconnectCode, setReconnectCode] = useState("");
+  const [reconnectKey, setReconnectKey] = useState("");
+  const [showReconnect, setShowReconnect] = useState(false);
+  const [showKey, setShowKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   // Keyed on what share.js actually encodes, not the whole state — this
@@ -78,12 +83,52 @@ export default function DataPanel({
   };
   const copy = () => copyText(link, "snapshot");
 
+  // What this device is about to publish, in the terms that actually tell you
+  // whether it's the right copy. A stale device reads "PRE / never" here —
+  // which is exactly the tell that was missing when this minted a new team
+  // from a preseason snapshot.
+  const publishPreview = useMemo(() => {
+    const players = Object.keys(state.players || {}).length;
+    const synced = state.espn && state.espn.fetchedAt ? new Date(state.espn.fetchedAt) : null;
+    return {
+      week: state.week ?? "—",
+      players,
+      notes: Object.values(state.players || {}).filter((p) => (p.notes || "").trim()).length,
+      watch: (state.watch || []).length,
+      synced: synced ? synced.toLocaleString() : "never",
+      stale: !synced || state.week === "PRE",
+    };
+  }, [state]);
+
   const doGoLive = async () => {
+    const p = publishPreview;
+    const ok = window.confirm(
+      `Publish THIS device's team as a new team code?\n\n` +
+        `week ${p.week} · ${p.players} players · ${p.notes} notes · ${p.watch} on the watchlist\n` +
+        `last ESPN sync: ${p.synced}\n\n` +
+        (p.stale
+          ? `WARNING: this copy looks stale — it has never synced ESPN, or is still on preseason. Publishing it creates a SEPARATE team, it does not connect to one you already have.\n\n`
+          : `This creates a SEPARATE new team. If you already have a team code, use "Reconnect a team you own" instead.\n\n`) +
+        `Continue?`
+    );
+    if (!ok) return;
     setBusy(true);
     setErr("");
     const res = await onGoLive();
     setBusy(false);
     if (res?.error) setErr(res.error);
+  };
+
+  const doReconnect = async () => {
+    setBusy(true);
+    setErr("");
+    const res = await onReconnectTeam(reconnectCode, reconnectKey);
+    setBusy(false);
+    if (res?.error) setErr(res.error);
+    else {
+      setReconnectCode("");
+      setReconnectKey("");
+    }
   };
 
   const doJoin = async () => {
@@ -187,13 +232,71 @@ export default function DataPanel({
                     </div>
                   </div>
                   <p className="panel-note">
-                    Turn it on and you get a <strong>short team code</strong>. Anyone with the code sees your team as
-                    it is right now — not a frozen copy — and your own phone and laptop stay in step. Only this device
-                    can make changes.
+                    Publishing gives you a <strong>short team code</strong>, and anyone with it sees your team as it
+                    is right now rather than a frozen copy. Only the device that published it can make changes —
+                    the write key never leaves that device.
                   </p>
+
+                  <div className="modal-section-label">This device would publish</div>
+                  <div className="panel-meta">
+                    week {publishPreview.week} · {publishPreview.players} players · {publishPreview.notes} notes ·{" "}
+                    {publishPreview.watch} on the watchlist
+                    <br />
+                    last ESPN sync: {publishPreview.synced}
+                  </div>
+                  {publishPreview.stale && (
+                    <p className="form-error" style={{ marginTop: 8 }}>
+                      This copy looks stale — no ESPN sync yet, or still on preseason. If your real team is somewhere
+                      else, publishing here creates a second, separate team rather than connecting to it.
+                    </p>
+                  )}
+
                   <button className="btn-primary" onClick={doGoLive} disabled={busy}>
-                    {busy ? "Publishing…" : "⚡ Turn on live sync"}
+                    {busy ? "Publishing…" : "⚡ Publish as a NEW team"}
                   </button>
+
+                  <div className="modal-section-label" style={{ marginTop: 18 }}>
+                    Already have a team code?
+                  </div>
+                  <p className="panel-note">
+                    If you published this team from another device, reconnect with its code and write key instead —
+                    publishing again would create a duplicate and leave the original orphaned.
+                  </p>
+                  {!showReconnect ? (
+                    <button className="btn-secondary" onClick={() => setShowReconnect(true)}>
+                      Reconnect a team you own
+                    </button>
+                  ) : (
+                    <>
+                      <div className="code-box">
+                        <input
+                          value={reconnectCode}
+                          onChange={(e) => setReconnectCode(e.target.value)}
+                          placeholder="team code"
+                        />
+                      </div>
+                      <div className="code-box" style={{ marginTop: 8 }}>
+                        <input
+                          value={reconnectKey}
+                          onChange={(e) => setReconnectKey(e.target.value)}
+                          placeholder="write key"
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                      </div>
+                      <div className="panel-meta">
+                        The write key is on the device that published the team, under its team code.
+                      </div>
+                      <button
+                        className="btn-primary"
+                        style={{ marginTop: 10 }}
+                        onClick={doReconnect}
+                        disabled={busy || !reconnectCode.trim() || !reconnectKey.trim()}
+                      >
+                        {busy ? "Checking…" : "Reconnect"}
+                      </button>
+                    </>
+                  )}
                   {err && <div className="form-error">{err}</div>}
                 </>
               )}
@@ -217,6 +320,24 @@ export default function DataPanel({
                     <span className="team-code">{syncLink.id}</span>
                     <button className="btn-secondary" onClick={() => copyText(syncLink.id, "code")}>
                       {copied && copiedWhich === "code" ? "Copied ✓" : "Copy code"}
+                    </button>
+                  </div>
+
+                  <div className="modal-section-label">Write key</div>
+                  <p className="panel-note">
+                    This device only. It's what proves you own the code — needed to reconnect on another device, and
+                    the one thing that can't be recovered if this browser's data is cleared. Keep a copy somewhere
+                    safe; share the code freely, never this.
+                  </p>
+                  <div className="code-box">
+                    <span className="team-code">
+                      {showKey ? syncLink.key : "•".repeat(Math.min((syncLink.key || "").length, 32))}
+                    </span>
+                    <button className="btn-secondary" onClick={() => setShowKey((v) => !v)}>
+                      {showKey ? "Hide" : "Reveal"}
+                    </button>
+                    <button className="btn-secondary" onClick={() => copyText(syncLink.key, "key")}>
+                      {copied && copiedWhich === "key" ? "Copied ✓" : "Copy key"}
                     </button>
                   </div>
 
