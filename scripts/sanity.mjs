@@ -1228,7 +1228,13 @@ check("under a day shows hours + minutes, no days", formatCountdown(23 * HOUR + 
 check("exactly 24h rolls to days", formatCountdown(DAY) === "1d 0h 0m", `got ${formatCountdown(DAY)}`);
 check("a past kickoff returns null, not a negative clock", formatCountdown(-5 * MIN) === null && formatCountdown(0) === null);
 check("garbage in returns null", formatCountdown(NaN) === null && formatCountdown(undefined) === null);
-check("untilKick accepts an ISO string", untilKick(new Date(Date.now() + 2 * HOUR + 14 * MIN).toISOString()) === "2h 14m");
+// Pin `now` rather than letting it default to Date.now(). Building the ISO
+// string and reading the clock inside untilKick are two separate reads, and a
+// single millisecond between them turns 8040000ms into 8039999ms — which
+// floors to "2h 13m" and fails. Measured at roughly 1 run in 5 under load.
+// untilKick takes `now` for exactly this reason; the test just wasn't using it.
+const kickNow = Date.UTC(2026, 8, 10, 12, 0, 0);
+check("untilKick accepts an ISO string", untilKick(new Date(kickNow + 2 * HOUR + 14 * MIN).toISOString(), kickNow) === "2h 14m");
 check("untilKick on an unparseable date returns null", untilKick("not-a-date") === null && untilKick(null) === null);
 
 // ---- 30. position need in points, not mixed rank scales ----
