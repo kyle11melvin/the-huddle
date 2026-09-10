@@ -1529,12 +1529,28 @@ export default function App({ initialTab } = {}) {
     [flash]
   );
 
+  /**
+   * Load a snapshot link.
+   *
+   * `asMine` is the whole point of the distinction. viewingShared blocks the
+   * localStorage write (see the save effect), which is correct for a
+   * league-mate's snapshot — it must never overwrite your own saved team. But
+   * it's exactly wrong for loading YOUR OWN snapshot onto YOUR OWN second
+   * device: the team would render, then vanish on the next reload, and the
+   * device could never persist its own ESPN syncs either.
+   *
+   * So the caller says which it is, and the default stays the safe one.
+   */
   const onImportTeam = useCallback(
-    (incoming) => {
+    (incoming, asMine = false) => {
       setState(migrate(incoming));
       setDataOpen(false);
-      setViewingShared(true);
-      flash("Loaded shared team.");
+      setViewingShared(!asMine);
+      flash(
+        asMine
+          ? "Loaded onto this device — it's yours now and saves here."
+          : "Loaded shared team — view only, your own team is untouched."
+      );
     },
     [flash]
   );
