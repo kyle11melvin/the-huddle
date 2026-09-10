@@ -2038,13 +2038,19 @@ export default function App({ initialTab } = {}) {
                     ? "SYNC ERROR"
                     : syncStatus === "readonly"
                     ? "DEV READ-ONLY"
-                    : link
+                    : // No link at all. This used to read "SYNCED", which on a
+                    // device with no live sync says the opposite of the truth —
+                    // it only ever meant "saved locally, nothing erroring", but
+                    // green + SYNCED reads as "publishing fine". Name the actual
+                    // state instead; the three sync states below are the ones
+                    // allowed to talk about syncing.
+                    link
                     ? link.mode === "owner"
                       ? syncStatus === "saving"
                         ? "SYNCING"
                         : "LIVE"
                       : "FOLLOWING"
-                    : "SYNCED"}
+                    : "THIS DEVICE"}
                 </span>
               </div>
             </div>
