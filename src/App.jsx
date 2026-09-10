@@ -710,6 +710,15 @@ export default function App({ initialTab } = {}) {
   // Finger vs mouse — decides the move affordance, never the layout.
   const coarse = useCoarsePointer();
   const [link, setLink] = useState(null); // live-sync identity, if any
+  // Have we actually SEEN the server's copy of this team in this session?
+  //
+  // The invariant: never push a document we haven't successfully read first.
+  // setLink() runs before the load fetch, so a failed read used to leave
+  // owner-mode writes armed over whatever stale copy localStorage happened to
+  // hold — and the very next state change mirrored that stale copy over the
+  // newer server one. One offline reload was enough to lose everything typed
+  // on another device since.
+  const [remoteVerified, setRemoteVerified] = useState(false);
   const [syncStatus, setSyncStatus] = useState("idle");
   const [syncError, setSyncError] = useState("");
   const [claimForm, setClaimForm] = useState({
@@ -783,6 +792,7 @@ export default function App({ initialTab } = {}) {
             const nextLink = mine ? saved : { id: code, mode: "viewer" };
             setLink(nextLink);
             saveLink(nextLink);
+            setRemoteVerified(true); // read succeeded — writing back is safe
             setViewingShared(!mine);
             setLoaded(true);
             return;
@@ -801,6 +811,7 @@ export default function App({ initialTab } = {}) {
           if (!res.notFound) {
             setState(migrate(res.state));
             setViewingShared(saved.mode !== "owner");
+            setRemoteVerified(true); // read succeeded — writing back is safe
             setLoaded(true);
             return;
           }
@@ -809,7 +820,9 @@ export default function App({ initialTab } = {}) {
           clearLink();
           setLink(null);
         } catch (e) {
-          setSyncError(`${e.message} — showing your local copy.`);
+          // remoteVerified stays false, so the local copy shown here is NOT
+          // mirrored back over the server's — which may well be newer.
+          setSyncError(`${e.message} — showing your local copy, not syncing until it loads.`);
         }
       }
 
@@ -864,11 +877,14 @@ export default function App({ initialTab } = {}) {
         setSaveError({ reason: "unknown", name: e && e.name });
       }
     })();
-    // Mirror to the server only when we own the team. Debounced inside.
-    if (link && link.mode === "owner" && link.key) {
+    // Mirror to the server only when we own the team AND we've seen the
+    // server's copy this session. Without the second condition a failed load
+    // (offline, blip, 5xx) leaves the stale local copy armed to overwrite a
+    // newer server one on the next keystroke.
+    if (link && link.mode === "owner" && link.key && remoteVerified) {
       syncer.current.queue(link.id, link.key, state);
     }
-  }, [loaded, state, link, viewingShared]);
+  }, [loaded, state, link, viewingShared, remoteVerified]);
 
   // Unmount: stop the toast timer and cancel the queued network sync so
   // neither fires against a dead component.
@@ -1531,6 +1547,10 @@ export default function App({ initialTab } = {}) {
       await pushTeam(next.id, next.key, state);
       saveLink(next);
       setLink(next);
+      // A fresh claim IS the first write to an id that has no server copy to
+      // clobber, so this counts as verified — otherwise going live would
+      // publish once and then never mirror another change.
+      setRemoteVerified(true);
       setViewingShared(false);
       setSyncStatus("saved");
       setSyncError("");
@@ -1545,6 +1565,7 @@ export default function App({ initialTab } = {}) {
 
   const stopLive = useCallback(() => {
     syncer.current.cancel();
+    setRemoteVerified(false);
     clearLink();
     setLink(null);
     setViewingShared(false);
