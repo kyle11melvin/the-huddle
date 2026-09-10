@@ -13,6 +13,34 @@
 const LINK_KEY = "huddle-link"; // { id, key, mode: "owner" | "viewer" }
 const WRITE_DEBOUNCE_MS = 2500;
 
+// Vite's dev server has no /api routes, so dev must talk to PRODUCTION — the
+// same fallback espnSync.js, espnWrite.js and scheduleSync.js already use.
+// This module was the one that never got it, so in dev every /api/team call
+// hit localhost: the GET was served the api/team.js SOURCE as a JS module
+// (200, text/javascript) and threw in r.json(), and the PUT 404'd. The read
+// failure is why dev silently fell back to a stale localStorage copy.
+//
+// Read defensively: unlike the other modules, which evaluate import.meta.env
+// inside a function that SSR never calls, these are module-level constants —
+// and `import.meta.env` is undefined under the render smoke test's esbuild
+// bundle, so a bare .DEV throws on import and takes every screen down with it.
+const IS_DEV = !!(import.meta.env && import.meta.env.DEV);
+const API_BASE = IS_DEV ? "https://the-huddle-hq.vercel.app" : "";
+
+// ...but reads and writes do NOT get the same treatment. Reading production is
+// what makes dev useful; writing to it is what makes dev dangerous. localhost
+// carries its own localStorage copy that goes stale the moment anything
+// changes on another device, and a push from here overwrites the real team
+// document — scouting notes, ECR strings, claims, the call log — with that
+// stale copy. There is no undo: the blob is the only server-side copy.
+//
+// So dev reads live and never writes. Enforced at BOTH write paths, because
+// there are two: the debounced syncer below (fires on every edit) and
+// goLive(), which calls pushTeam directly.
+export const DEV_READ_ONLY = IS_DEV;
+export const DEV_READ_ONLY_MSG =
+  "Dev build — reading the live team, not writing to it. Your league copy is untouched.";
+
 export function loadLink() {
   try {
     const raw = window.localStorage.getItem(LINK_KEY);
@@ -50,7 +78,7 @@ export const newTeamId = () => randomString(8);
 export const newWriteKey = () => randomString(32);
 
 export async function fetchTeam(id) {
-  const r = await fetch(`/api/team?id=${encodeURIComponent(id)}`, { cache: "no-store" });
+  const r = await fetch(`${API_BASE}/api/team?id=${encodeURIComponent(id)}`, { cache: "no-store" });
   if (r.status === 404) return { notFound: true };
   if (!r.ok) {
     const body = await r.json().catch(() => ({}));
@@ -60,7 +88,10 @@ export async function fetchTeam(id) {
 }
 
 export async function pushTeam(id, key, state) {
-  const r = await fetch(`/api/team?id=${encodeURIComponent(id)}`, {
+  // Backstop for the direct caller (goLive). The syncer refuses earlier, in
+  // queue(), so a dev session doesn't generate a failed write per keystroke.
+  if (DEV_READ_ONLY) throw new Error(DEV_READ_ONLY_MSG);
+  const r = await fetch(`${API_BASE}/api/team?id=${encodeURIComponent(id)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", "X-Huddle-Key": key },
     body: JSON.stringify({ state }),
@@ -101,6 +132,15 @@ export function createSyncer(onStatus) {
 
   return {
     queue(id, key, state) {
+      // Refuse before anything is queued rather than letting flush() throw:
+      // the caller queues on every state change, and a rejected write per
+      // keystroke would flood the status badge with errors that aren't ones.
+      // "readonly" is a distinct status, NOT "saved" — the badge must never
+      // claim a write happened when none did.
+      if (DEV_READ_ONLY) {
+        onStatus("readonly", DEV_READ_ONLY_MSG);
+        return;
+      }
       pending = { id, key, state };
       clearTimeout(timer);
       timer = setTimeout(flush, WRITE_DEBOUNCE_MS);

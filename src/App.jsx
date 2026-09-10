@@ -751,7 +751,10 @@ export default function App({ initialTab } = {}) {
   if (!syncer.current) {
     syncer.current = createSyncer((status, detail) => {
       setSyncStatus(status);
-      setSyncError(status === "error" ? detail || "Sync failed" : "");
+      // "readonly" (dev) is not a failure, so it must not read as one — but it
+      // still carries its reason into the badge tooltip, because "LIVE with
+      // nothing being written" is exactly the silent lie worth avoiding.
+      setSyncError(status === "error" ? detail || "Sync failed" : status === "readonly" ? detail || "" : "");
     });
   }
 
@@ -1872,7 +1875,13 @@ export default function App({ initialTab } = {}) {
                 </button>
                 <span
                   className={`badge-sync ${
-                    saveError || syncStatus === "error" ? "err" : link ? "live" : "ok"
+                    saveError || syncStatus === "error"
+                      ? "err"
+                      : syncStatus === "readonly"
+                      ? "ok"
+                      : link
+                      ? "live"
+                      : "ok"
                   } clickable`}
                   title={
                     (saveError && (STORAGE_MESSAGE[saveError.reason] || STORAGE_MESSAGE.unknown)) ||
@@ -1896,6 +1905,8 @@ export default function App({ initialTab } = {}) {
                     ? "LOADING"
                     : syncStatus === "error"
                     ? "SYNC ERROR"
+                    : syncStatus === "readonly"
+                    ? "DEV READ-ONLY"
                     : link
                     ? link.mode === "owner"
                       ? syncStatus === "saving"
