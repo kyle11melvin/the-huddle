@@ -3757,3 +3757,37 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   color: var(--gold);
   font-variant-numeric: tabular-nums;
 }
+
+/* ============================================================================
+   DATA PROVENANCE WARNING
+   Shown when the numbers on screen are not what the reader would assume —
+   rank estimates standing in for projections, or a sync that stopped hours
+   ago. Loud on purpose: the failure mode this exists for is plausible numbers
+   with nothing to indicate anything degraded.
+   ============================================================================ */
+
+.data-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 182, 18, 0.09);
+  border: 1px solid rgba(255, 182, 18, 0.34);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.data-warn-tag {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--gold);
+  color: #1a1204;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}

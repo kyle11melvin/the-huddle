@@ -12,6 +12,9 @@ import {
   simulateSwap,
   strategyAdvice,
   opponentDistributions,
+  opponentSource,
+  espnAgeMs,
+  STALE_AFTER_MS,
   opponentLineups,
 } from "../simulate.js";
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
@@ -74,6 +77,22 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
     () => opponentDistributions(state, week, oppTeam, "likely"),
     [state, week, oppTeam]
   );
+
+  // Asked of the code that builds the numbers, not inferred from state.espn
+  // being present — see opponentSource() in simulate.js for why that inference
+  // is wrong in exactly the case that matters.
+  const labProvenance = useMemo(() => {
+    const src = opponentSource(state, week, oppTeam);
+    const age = espnAgeMs(state);
+    if (src === "estimated") {
+      return "Opponent scores are estimated from expert ranks and are NOT injury-adjusted — a ruled-out starter still counts as healthy. Treat the number as directional and re-sync ESPN.";
+    }
+    if (src === "live" && age != null && age > STALE_AFTER_MS) {
+      const hrs = Math.floor(age / 3600000);
+      return `Both sides run on real ESPN projections, but the last sync was ${hrs >= 24 ? `${Math.floor(hrs / 24)}d` : `${hrs}h`} ago — refresh before acting on a close call.`;
+    }
+    return "Both sides run on real ESPN projections; FantasyPros pastes add expert-rank uncertainty on top.";
+  }, [state, week, oppTeam]);
   // `mine` MUST be declared before anything that names it — including a
   // dependency array, which is evaluated at the useMemo call itself. This was
   // shipped with simActual above this line and threw
@@ -346,9 +365,7 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
 
           <div className="sim-fine">
             {mine.missing.length > 0 && `No projection for ${mine.missing.join(", ")}. `}
-            {state.espn
-              ? "Both sides run on real ESPN projections; FantasyPros pastes add expert-rank uncertainty on top."
-              : "Opponent scores are estimated from expert ranks until ESPN sync is connected — treat the number as directional."}
+            {labProvenance}
           </div>
         </div>
       )}

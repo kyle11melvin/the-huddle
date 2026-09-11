@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
-import { simulateLive, liveNarrative, liveProjection } from "../simulate.js";
+import { simulateLive, liveNarrative, liveProjection, opponentSource, espnAgeMs, STALE_AFTER_MS } from "../simulate.js";
 import { teamLogoUrl } from "../data/teams.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
 import { scheduleOpp } from "../scheduleSync.js";
@@ -353,6 +353,32 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
   );
   const narrative = useMemo(() => liveNarrative(sim), [sim]);
 
+  // Say what the numbers on screen actually ARE. Asked directly of the code
+  // that produces them, never inferred from `state.espn` being present — that
+  // blob outlives the sync that filled it, which is how a screen ends up
+  // claiming real projections while running rank estimates.
+  const oppProvenance = useMemo(() => {
+    const src = opponentSource(state, week, oppTeam);
+    const age = espnAgeMs(state);
+    if (src === "estimated") {
+      return {
+        tag: "NOT SYNCED",
+        warn:
+          "Opponent projections are estimated from expert ranks, and are not adjusted for injuries — a ruled-out starter is still valued as if healthy. Re-sync ESPN for real numbers.",
+        fine: "Your side uses real projections; the opponent's are rank estimates.",
+      };
+    }
+    if (src === "live" && age != null && age > STALE_AFTER_MS) {
+      const hrs = Math.floor(age / 3600000);
+      return {
+        tag: "STALE",
+        warn: `Last ESPN sync was ${hrs >= 24 ? `${Math.floor(hrs / 24)}d` : `${hrs}h`} ago. Scores and projections are frozen at that moment — tap ⟳ ESPN to refresh.`,
+        fine: "Both sides use real ESPN projections, from the last sync.",
+      };
+    }
+    return { tag: "", warn: "", fine: "Both sides use real ESPN projections." };
+  }, [state, week, oppTeam]);
+
   const Row = ({ row, side }) => {
     const l = resolveLive(row);
     const status = l.status || "notStarted";
@@ -511,12 +537,16 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
             </div>
           </div>
           {viewingMine && narrative && <div className="gd-narrative">{narrative}</div>}
+          {viewingMine && oppProvenance.warn && (
+            <div className="data-warn">
+              <span className="data-warn-tag">{oppProvenance.tag}</span>
+              <span>{oppProvenance.warn}</span>
+            </div>
+          )}
           {viewingMine && (
             <div className="sim-fine">
               Your range if the week finished a thousand different ways: {sim.myP10}–{sim.myP90}.{" "}
-              {state.espn
-                ? "Both sides use real ESPN projections."
-                : "Opponent projections are estimated from expert ranks until ESPN sync is connected."}
+              {oppProvenance.fine}
             </div>
           )}
         </div>
