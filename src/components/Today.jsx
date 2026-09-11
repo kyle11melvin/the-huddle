@@ -34,7 +34,7 @@ const STATUS_COPY = {
 const DEFINITE = new Set(["O", "IR", "BYE"]);
 
 
-export default function Today({ state, week, onApplyMove, onSetLive, onSetOpponent, onRefresh, onOpenPlayer }) {
+export default function Today({ state, week, onApplyMove, onSetLive, onSetOpponent, onRefresh, onOpenPlayer, onOpenRow }) {
   // A clock, not a render loop: 30s granularity is plenty for a countdown
   // measured in hours and costs nothing.
   const [now, setNow] = useState(() => Date.now());
@@ -207,6 +207,7 @@ export default function Today({ state, week, onApplyMove, onSetLive, onSetOppone
         onSetLive={onSetLive}
         onSetOpponent={onSetOpponent}
         onRefresh={onRefresh}
+        onOpenRow={onOpenRow}
       />
     </div>
   );

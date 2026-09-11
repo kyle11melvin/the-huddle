@@ -2293,6 +2293,7 @@ export default function App({ initialTab } = {}) {
             onSetLive={onSetLive}
             onSetOpponent={onSetOpponent}
             onRefresh={syncEspn}
+            onOpenPlayer={setModalId}
             onOpenRow={openRow}
           />
         )}

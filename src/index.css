@@ -3429,12 +3429,12 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   display: grid;
   grid-template-columns: 1fr auto auto auto 1fr;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .h2h-nm {
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 14.5px;
   font-weight: 700;
   text-transform: uppercase;
   line-height: 1;
@@ -3460,13 +3460,13 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 
 .h2h-pr {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   text-align: right;
   color: var(--text);
-  min-width: 34px;
+  min-width: 30px;
 }
 
 .h2h-pr.r {
@@ -3688,12 +3688,12 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 /* The centre column carries the EDGE, not a third copy of the position. */
 .h2h-edge {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
-  letter-spacing: 0.03em;
-  padding: 4px 6px;
+  letter-spacing: 0.02em;
+  padding: 4px 5px;
   border-radius: 6px;
-  min-width: 46px;
+  min-width: 40px;
   text-align: center;
   white-space: nowrap;
 }
@@ -4493,4 +4493,66 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-muted);
+}
+
+/* Headshot on a board row. Small, circular, washed with the player's own team
+   colour so he reads against the row instead of floating on it. */
+.h2h-who {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.h2h-who.r {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.h2h-who:disabled {
+  cursor: default;
+}
+
+.h2h-who.spent .h2h-nm {
+  color: #63768f;
+}
+
+.h2h-face {
+  flex: none;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(90% 80% at 50% 118%, color-mix(in srgb, var(--team) 70%, transparent) 0%, transparent 76%),
+    linear-gradient(158deg, #253b5c 0%, #111d31 100%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.09) inset;
+}
+
+.h2h-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+/* A defense falls back to the team logo, which needs room to breathe rather
+   than being cropped like a face. */
+.h2h-face img.logo {
+  object-fit: contain;
+  padding: 4px;
+}
+
+.h2h-face.empty {
+  opacity: 0.25;
 }

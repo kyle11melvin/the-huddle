@@ -3,7 +3,7 @@ import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
 import { simulateLive, liveNarrative, liveProjection, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
-import { teamLogoUrl } from "../data/teams.js";
+import { teamLogoUrl, headshotUrl, teamOf } from "../data/teams.js";
 import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, kickoffLabel, opponentOf, pairingEdge } from "../headToHead.js";
 import { SLOT_COLOR } from "../constants.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
@@ -235,6 +235,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
           pos: p.pos,
           k: `me:${p.id}`,
           id: p.id,
+          espnId: p.espnId || "",
           // dist.mean is already injury-priced (expected points)
           proj: dist ? dist.mean : a && a.proj ? a.proj : null,
           simProj: dist ? dist.condMean ?? dist.mean : a && a.proj ? a.proj : null,
@@ -671,11 +672,13 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                 <div className="h2h-l1">
                   <button
                     type="button"
-                    className={`h2h-nm ${A && A.isFinal ? "spent" : ""}`}
+                    className={`h2h-who ${A && A.isFinal ? "spent" : ""}`}
                     onClick={() => A && onOpenRow && onOpenRow(A.row)}
                     disabled={!A}
+                    aria-label={A ? `Open ${A.row.name}` : "Empty slot"}
                   >
-                    {A ? shortName(A.row.name) : "Empty"}
+                    <Face row={A && A.row} />
+                    <span className="h2h-nm">{A ? shortName(A.row.name) : "Empty"}</span>
                   </button>
                   <Proj d={A} />
                   {(() => {
@@ -689,11 +692,13 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                   <Proj d={B} right />
                   <button
                     type="button"
-                    className={`h2h-nm r ${B && B.isFinal ? "spent" : ""}`}
+                    className={`h2h-who r ${B && B.isFinal ? "spent" : ""}`}
                     onClick={() => B && onOpenRow && onOpenRow(B.row)}
                     disabled={!B}
+                    aria-label={B ? `Open ${B.row.name}` : "Empty slot"}
                   >
-                    {B ? shortName(B.row.name) : "Empty"}
+                    <Face row={B && B.row} />
+                    <span className="h2h-nm">{B ? shortName(B.row.name) : "Empty"}</span>
                   </button>
                 </div>
 
@@ -820,6 +825,25 @@ function sideData(row, week, state) {
     logo: teamLogoUrl(row.team),
   };
 }
+
+/**
+ * Headshot on a board row. Falls back to the team logo when a player has no
+ * espnId (defenses), and to nothing when neither resolves — never a broken
+ * image, which reads as a bug rather than as missing data.
+ */
+const Face = ({ row }) => {
+  const [failed, setFailed] = useState(false);
+  if (!row) return <span className="h2h-face empty" />;
+  const src = row.espnId ? headshotUrl(row.espnId) : teamLogoUrl(row.team);
+  const team = teamOf(row.team);
+  return (
+    <span className="h2h-face" style={{ "--team": (team && team.primary) || "#2a3b57" }}>
+      {src && !failed ? (
+        <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} className={row.espnId ? "" : "logo"} />
+      ) : null}
+    </span>
+  );
+};
 
 const Proj = ({ d, right }) => {
   if (!d) return <span className="h2h-pr" />;
