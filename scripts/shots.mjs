@@ -129,6 +129,19 @@ for (const base of CASES.filter((c) => c.component === "card" && c.palette === "
   CASES.push({ ...base, file: base.file.replace(".png", "-ref.png"), palette: "ref" });
 }
 
+const noop = () => {};
+const realState = liveState();
+const firstPlayerId = Object.keys(realState.players)[0];
+for (const [file, key, props] of [
+  ["screen-today.png", "today", { state: realState, week: "1", onApplyMove: noop, onSetLive: noop, onSetOpponent: noop, onRefresh: noop, onOpenPlayer: noop }],
+  ["screen-lab.png", "lab", { state: realState, week: "1", onImport: noop, onApplySwap: noop, flash: noop }],
+  ["screen-league.png", "league", { state: realState, ecrIndex: realState.ecrIndex || {}, interested: realState.watch || [], onToggleInterest: noop }],
+  ["screen-data.png", "data", { state: realState, onClose: noop, onApplyEcr: noop, onApplyByes: noop, onSetBye: noop, onImportTeam: noop, onApplyProps: noop, onApplyProjections: noop, flash: noop, link: { id: "kmzrw943", key: "k".repeat(32), mode: "owner" }, syncStatus: "saved", syncError: "", onGoLive: noop, onStopLive: noop, onJoinTeam: noop, onReconnectTeam: noop, onRefreshLive: noop, liveUrl: "https://example.test/?team=kmzrw943" }],
+  ["screen-modal.png", "modal", { state: realState, playerId: firstPlayerId, week: "1", onClose: noop, onStatus: noop, onWeek: noop, onMoveOpen: noop, onDrop: noop, onEdit: noop }],
+]) {
+  CASES.push({ file, component: key, props, palette: "current" });
+}
+
 CASES.push({
   file: "gameday-unsynced.png",
   component: "gameday",
@@ -155,8 +168,17 @@ await build({
   external: ["react", "react-dom", "react-dom/server"],
   logLevel: "error",
 });
-const { ProjectionGauge, PlayerCard, Gameday } = await import(`${pathToFileURL(resolve(BUNDLE)).href}?t=${Date.now()}`);
-const COMPONENTS = { gauge: ProjectionGauge, card: PlayerCard, gameday: Gameday };
+const M = await import(`${pathToFileURL(resolve(BUNDLE)).href}?t=${Date.now()}`);
+const COMPONENTS = {
+  gauge: M.ProjectionGauge,
+  card: M.PlayerCard,
+  gameday: M.Gameday,
+  today: M.Today,
+  lab: M.StartSitLab,
+  league: M.LeagueBrowser,
+  data: M.DataPanel,
+  modal: M.PlayerModal,
+};
 
 mkdirSync(OUT_DIR, { recursive: true });
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: "new" });
