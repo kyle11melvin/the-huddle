@@ -165,3 +165,51 @@ card should show instead of three empty tiles.
 The projected-points number now overlaps the gauge arc, crosses the
 needle, and crowds the word PROJECTED. Reduce roughly 25% and re-check
 against the approved gauge reference.
+
+## Matchup board rebuild — captured Sept 11, late
+
+Kyle's review of the shipped board. An approved reference is coming; build
+against that, not against this list. Captured so nothing is lost.
+
+**The anchor problem is the root, and everything else falls out of it.**
+Kyle read the live board and concluded he was the OPPONENT. He isn't —
+`myTeamId` is 7, Brock Hard, and `liveNarrative()` reads entirely from
+`sim.myNow` / `sim.myLeft` / `sim.winProb`, all built from his lineup. The
+logic is correct and self-consistent.
+
+But the person who built the app could not tell which side was his. The hero
+prints two names with no marker; the only "YOU" badge sits on a small league
+card above, next to the opponent's name listed first. Sections each decide
+independently where "my team" goes: the mini card one way, the hero another,
+the rows another.
+
+**Fix: one concept of "my team", threaded through every section. Sleeper's
+convention — always on the left, always marked.** Perspective, bar direction
+and column order all stop being separate questions.
+
+Then, in Kyle's order:
+
+1. **Own matchup pinned to the top**, full width. It currently sits a third of
+   the way down, below four cards of other people's 0-0 games. Collapse the
+   rest into a compact league strip underneath.
+
+2. **Two headers for one matchup.** The hero shows the names, then a second
+   card immediately repeats them with records and yet-to-play — "yet to play"
+   appears twice in 200 pixels. Fold records and the positional breakdown into
+   the hero; delete the second card.
+
+3. **Invert the numeric hierarchy.** The score is the biggest thing on screen
+   and the least useful: at 10:33 Friday, `0` and `8` tell you nothing.
+   Projection and players-remaining are what matter.
+
+4. **A stray blue.** The Today pill and both `proj` numbers are iOS system
+   blue. The app moved to `#e8b95a`; that blue was never part of it.
+
+5. **Four typefaces on one screen** — condensed caps for names, monospace for
+   proj and FINAL, regular sans for game times, rounded for tabs. The monospace
+   in particular makes the numbers read like debug output.
+
+6. **The three states still don't separate enough.** A pre-kickoff projection
+   and a final score get nearly the same treatment, and the FINAL badge sits in
+   a shared bar so it is unclear whose it is. The progress tracks with the
+   helmets are unreadable — the fill direction isn't legible.

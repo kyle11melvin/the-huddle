@@ -7,6 +7,8 @@ from `main` (pushing to `main` deploys to production).
 
 Before doing anything, read in this order:
 
+0. **`docs/HANDOFF-TOMORROW.md`** — if it exists, the most recent session's
+   handoff. Start there.
 1. **`docs/QUEUE.md`** — what is and isn't done. The live list.
 2. **`docs/STATUS.md`** — handoff: branch state, what shipped, what's open.
 3. **`docs/DESIGN.md`** — locked visual decisions. Don't re-litigate them.
