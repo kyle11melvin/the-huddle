@@ -19,8 +19,15 @@ import { DEFAULT_PROJ_WEIGHTS } from "./analytics.js";
 /** Statuses meaning "may not take the field" — a season rank stops applying. */
 const DOUBTFUL = new Set(["D", "O", "IR"]);
 
-/** 0-5 matchup stars -> a letter. 2-3 is the middle of the range, not a fail. */
-const GRADES = ["F", "D", "C", "B-", "B+", "A"];
+/**
+ * 1-5 matchup stars -> a word describing THE MATCHUP.
+ *
+ * Deliberately not a letter grade. A letter next to "RB2" reads as a verdict on
+ * the PLAYER — the app appearing to call the second-best back in football a D —
+ * when what it means is that he draws a defense that guts running backs. Naming
+ * the opponent read instead makes that unmistakable.
+ */
+const MATCHUP_WORD = { 1: "BRUTAL", 2: "TOUGH", 3: "NEUTRAL", 4: "GOOD", 5: "SMASH" };
 
 /**
  * The props edge: how much the market disagrees with expert projections.
@@ -66,13 +73,19 @@ export function playerCardData(state, player, week) {
   // opponent-defense rating docs/DESIGN.md specifies is NOT built — so this is
   // labelled as stars rather than dressed up as something it isn't.
   const stars = Number.isFinite(wd.matchup) ? wd.matchup : Number.isFinite(a && a.matchupStars) ? a.matchupStars : null;
+  // NO `points` FIELD, on purpose. The card used to print "+2.1 pts" beside
+  // this, which was fiction: matchupStars does not enter pointDistribution()
+  // at all. The only place it moves a number is the rank fallback in
+  // analysis.js, which zero players on a synced roster ever reach. Worse, the
+  // projection leads with Vegas props — and the book has ALREADY priced the
+  // opponent — so a matchup adjustment on top would penalise a player twice
+  // for the same defense. It is a read, not a contribution, and says so.
   const matchup =
     stars == null
       ? null
       : {
-          grade: GRADES[Math.max(0, Math.min(5, Math.round(stars)))],
-          points: Math.round(stars * 0.4 * 10) / 10,
-          detail: `${stars}/5 stars`,
+          grade: MATCHUP_WORD[Math.max(1, Math.min(5, Math.round(stars)))],
+          detail: `${stars}/5${wd.opp ? ` · ${wd.opp}` : ""}`,
         };
 
   const implied = state.espn && state.espn.impliedTotals && player.team ? state.espn.impliedTotals[player.team] : null;

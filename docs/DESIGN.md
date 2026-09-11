@@ -46,6 +46,44 @@ of the card, not something to paper over.
 `confident` (from `dispersion.spread < 0.4`) is the existing signal for how much
 the sources agree — a natural cue for how firmly to render the band.
 
+### Constraints the matchup model must satisfy
+
+Three findings, each of which would break a naive implementation. Written down
+because they are not visible from the code:
+
+**1. It currently affects nothing.** `matchupStars` does not enter
+`pointDistribution()` at all. The only place it moves a number is the rank
+fallback at `src/analysis.js:165`, which **zero of 16 players on a synced
+roster reach** — measured, not assumed. Until the real model exists the card
+must present it as a READ, never as a contribution. It printed "+2.1 pts" for a
+while; that was fiction.
+
+**2. Vegas already priced the opponent — do not charge twice.** Projections
+lead with Vegas props, and a book line for a player facing PIT *is* the line
+against PIT. Multiplying that by a separate matchup factor penalises him twice
+for the same defense. Any matchup adjustment has to know which projection
+source it is adjusting, and mostly the answer will be "don't".
+
+**3. Elite players are matchup-resistant; the effect is tier-dependent.**
+Kyle's framing: *"I'm not dropping Gibbs to RB30 because he plays a top-10 run
+defense."* Volume insulates workhorses — Gibbs gets his 20 touches against
+anyone, while a committee back in the same spot sees 8 and vanishes. A flat
+star rating applied uniformly across tiers is wrong no matter how it is
+displayed, and the error is largest exactly where it hurts most: the start/sit
+call on a stud.
+
+The likely correct shape is therefore NOT "scale the mean". It is either a
+tiebreaker between players already close on projection, or a **volatility**
+signal — a brutal matchup widens the range rather than lowering the centre,
+which is also what the gauge is built to show.
+
+### Naming
+
+The tile reads **BRUTAL / TOUGH / NEUTRAL / GOOD / SMASH**, not a letter grade.
+A letter beside "RB2" reads as a verdict on the PLAYER — the app appearing to
+call the second-best back in football a D — when it means he drew a defense
+that guts running backs. Name the opponent read and the ambiguity disappears.
+
 ## Typography and layout
 
 - **Oversized hero numbers** — the projection is the loudest thing on a card
@@ -86,7 +124,7 @@ gap is not obvious from reading the code:
 | input | today | gap |
 | --- | --- | --- |
 | props eV | `propsToPoints()` in `src/props.js` returns `{points, parts}` and is real. Lines are **pasted by hand** via `parseProps()`. | no automatic feed; `api/odds.js` exists but isn't wired to this |
-| matchup grade | a **manual 0–5 star** rating per player per week (`weeks[week].matchup`), nudging the projection by `×0.4` points in `src/analysis.js:165` | spec wants it **computed** from opponent defense. `src/importer.js:535` notes the schedule-adjusted DvP model needs real game logs — so early season it has almost nothing to work from and must either fall back or admit low confidence |
+| matchup grade | a **0–5 star** rating per player per week, imported. It moves NO number on a synced roster — see the constraints below | spec wants it **computed** from opponent defense. `src/importer.js:535` notes the schedule-adjusted DvP model needs real game logs — so early season it has almost nothing to work from and must either fall back or admit low confidence |
 | expert consensus | one pasted ranking set → per-player `ecr` string + `ecrIndex` | spec wants **three named sources aggregated**; disagreement between them is itself signal, same argument as the projection blend |
 | news | `api/news.js` pulls **ESPN's** public feed | spec names **FantasyPros** |
 
@@ -95,13 +133,17 @@ gap is not obvious from reading the code:
 Where a card element can be expressed in **fantasy points**, express it in
 points. `src/analysis.js` already made this call for position need — the sanity
 suite asserts *"every value is in points, so a difference has one unit"* — and
-the same reasoning applies here. A matchup worth `+2.1 pts` and props worth
-`+2.4 pts` can be compared and added; three stars and a rank cannot.
+the same reasoning applies here — but ONLY where the app actually computes a
+point value. The matchup tile is the counter-example: it briefly printed
+"+2.1 pts" for a contribution that does not exist, which is worse than showing
+a rank. Express in points what IS points; never manufacture a point value to
+satisfy the rule.
 
 Keep the native unit visible where it carries meaning a point value loses (the
 book spread, a rank, a percentage), but lead with the points.
 
 ## Dropped from the UI — do not reintroduce
 
+- letter grades on the matchup tile — see Naming above
 - the tagline **"WIN A BRIGHTER SUNDAY"**
 - the curved **"EXPECTED FANTASY RANGE"** label around the gauge

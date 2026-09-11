@@ -71,18 +71,17 @@ function Tile({ label, value, sub, tone = "" }) {
 }
 
 /**
- * A/B read as good, D/F as bad, C neutral.
- *
- * Grades are the one sanctioned exception to gold-only: a B+ and a D rendered
- * identically in gold defeats the entire purpose of a grade. Recorded as an
- * explicit carve-out in docs/DESIGN.md, not a drift.
+ * Semantic colour for the matchup read — the one sanctioned exception to
+ * gold-only, because SMASH and BRUTAL rendered identically in gold defeats the
+ * entire point. Recorded as an explicit carve-out in docs/DESIGN.md.
  */
-function gradeTone(grade) {
-  const letter = (grade || "").charAt(0).toUpperCase();
-  if (letter === "A" || letter === "B") return "pc-grade-good";
-  if (letter === "D" || letter === "F") return "pc-grade-bad";
-  return "";
-}
+const MATCHUP_TONE = {
+  SMASH: "pc-grade-good",
+  GOOD: "pc-grade-good",
+  NEUTRAL: "",
+  TOUGH: "pc-grade-bad",
+  BRUTAL: "pc-grade-bad",
+};
 
 export default function PlayerCard({
   player,
@@ -162,8 +161,8 @@ export default function PlayerCard({
         <Tile
           label="Matchup"
           value={matchup ? matchup.grade : null}
-          tone={matchup ? gradeTone(matchup.grade) : ""}
-          sub={matchup ? `${signed(matchup.points)} pts · ${matchup.detail}` : ""}
+          tone={matchup ? MATCHUP_TONE[matchup.grade] || "" : ""}
+          sub={matchup ? matchup.detail : ""}
         />
         <Tile
           label="Consensus"
