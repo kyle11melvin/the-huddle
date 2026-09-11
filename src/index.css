@@ -4611,3 +4611,47 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   color: var(--text-dim);
 }
 .week-opp-kick { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); }
+
+/* --------------------------------------------------- scouting report ------
+   The wire is additive: fresh FantasyPros items on top, the August seed note
+   demoted beneath. Every entry carries the date it was true, because undated
+   intel implies "now" and that is the failure this block exists to avoid. */
+.scout-item {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-hi);
+  border-radius: 12px;
+  padding: 12px 15px;
+  margin-bottom: 8px;
+}
+
+/* Injury and breaking are the two categories that change a lineup. */
+.scout-item.decision { border-left-color: var(--gold); }
+.scout-item.seed { border-left-color: var(--border-hi); opacity: 0.86; padding: 0; border: none; }
+
+.scout-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.scout-date { color: var(--text-muted); font-weight: 700; }
+.scout-src { color: var(--text-dim); margin-left: auto; }
+
+.scout-tag {
+  color: #16120a;
+  background: var(--gold);
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.scout-title { font-size: 13.5px; line-height: 1.5; color: var(--text); font-weight: 600; }
+.scout-impact { font-size: 12.5px; line-height: 1.6; color: var(--text-muted); margin-top: 6px; }
+
+.scout-item.seed .scout-head { padding: 0 2px; }

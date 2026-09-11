@@ -133,13 +133,26 @@ for (const base of CASES.filter((c) => c.component === "card" && c.palette === "
 
 const noop = () => {};
 const realState = liveState();
-const firstPlayerId = Object.keys(realState.players)[0];
+// The modal shot exists to show the Scouting Report, so it is aimed at a
+// player the wire has actually said something about, with the REAL feed
+// payload. Falls back to an empty wire when /tmp/fp.json is absent.
+const fpFixture = (() => {
+  try {
+    return JSON.parse(_rf("/tmp/fp.json", "utf8"));
+  } catch {
+    return { items: [], index: null };
+  }
+})();
+const wiredNames = new Set(fpFixture.items.filter((i) => i.name).map((i) => i.name));
+const firstPlayerId =
+  (Object.values(realState.players).find((p) => wiredNames.has(p.name)) || {}).id ||
+  Object.keys(realState.players)[0];
 for (const [file, key, props] of [
   ["screen-today.png", "today", { state: realState, week: "1", onApplyMove: noop, onSetLive: noop, onSetOpponent: noop, onRefresh: noop, onOpenPlayer: noop }],
   ["screen-lab.png", "lab", { state: realState, week: "1", onImport: noop, onApplySwap: noop, flash: noop }],
   ["screen-league.png", "league", { state: realState, ecrIndex: realState.ecrIndex || {}, interested: realState.watch || [], onToggleInterest: noop }],
   ["screen-data.png", "data", { state: realState, onClose: noop, onApplyEcr: noop, onApplyByes: noop, onSetBye: noop, onImportTeam: noop, onApplyProps: noop, onApplyProjections: noop, flash: noop, link: { id: "kmzrw943", key: "k".repeat(32), mode: "owner" }, syncStatus: "saved", syncError: "", onGoLive: noop, onStopLive: noop, onJoinTeam: noop, onReconnectTeam: noop, onRefreshLive: noop, liveUrl: "https://example.test/?team=kmzrw943" }],
-  ["screen-modal.png", "modal", { state: realState, playerId: firstPlayerId, week: "1", onClose: noop, onStatus: noop, onWeek: noop, onMoveOpen: noop, onDrop: noop, onEdit: noop }],
+  ["screen-modal.png", "modal", { state: realState, playerId: firstPlayerId, week: "1", onClose: noop, onStatus: noop, onWeek: noop, onMoveOpen: noop, onDrop: noop, onEdit: noop, fpNews: fpFixture.items, fpIndex: fpFixture.index }],
 ]) {
   CASES.push({ file, component: key, props, palette: "current", unpinModal: key === "modal" });
 }
@@ -249,21 +262,33 @@ for (const c of CASES) {
   // eslint-disable-next-line no-undef
   await page.evaluate(() => document.fonts.ready);
   // The modal is position:fixed with its own scroll container, so fullPage
-  // captures only the first screenful. Unpin it and let the page grow, or the
-  // shot can never show the matchup box that lives below the fold.
+  // captures only the first screenful and the shot can never show the
+  // Scouting Report that lives below the fold.
+  //
+  // This is a STYLESHEET, not inline styles, and it has to be: PlayerModal's
+  // own effect sets body.overflow = "hidden" on mount, which raced the inline
+  // version and produced a correct shot about half the time. !important in a
+  // late rule beats an element's inline style, so this always wins.
   if (c.unpinModal) {
-    // eslint-disable-next-line no-undef
-    await page.evaluate(() => {
-      const bd = document.querySelector(".modal-backdrop");
-      const m = document.querySelector(".modal");
-      if (bd) { bd.style.position = "static"; bd.style.alignItems = "flex-start"; }
-      document.documentElement.style.height = "auto";
-      document.body.style.height = "auto";
-      document.body.style.overflow = "visible";
-      if (m) { m.style.maxHeight = "none"; m.style.overflow = "visible"; }
+    /* eslint-disable no-undef -- this callback is serialised and run inside
+       Chrome, so `document` is the page's, not node's. */
+    await page.addStyleTag({
+      content: `
+        html, body { height: auto !important; overflow: visible !important; }
+        .modal-backdrop { position: static !important; align-items: flex-start !important; }
+        .modal { max-height: none !important; overflow: visible !important; }
+      `,
     });
+    // fullPage does not reliably pick up a height that only appeared after
+    // an unpin, so the viewport is grown to the content instead.
+    const h = await page.evaluate(() => document.documentElement.scrollHeight);
+    /* eslint-enable no-undef */
+    await page.setViewport({ width: 390, height: Math.ceil(h), deviceScaleFactor: 2 });
   }
   await page.screenshot({ path: `${OUT_DIR}/${c.file}`, fullPage: true });
+  // The viewport is shared across cases, so a grown one has to be put back or
+  // every later shot renders at the wrong width.
+  if (c.unpinModal) await page.setViewport({ width: 390, height: 700, deviceScaleFactor: 2 });
   console.log("wrote", `${OUT_DIR}/${c.file}`);
 }
 

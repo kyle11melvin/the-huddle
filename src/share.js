@@ -16,11 +16,24 @@
 
 import { SEED_STARTERS, SEED_BENCH } from "./data/seeds.js";
 
+/**
+ * The seed scout notes are August 2026 camp reports, written once and never
+ * re-dated. Anything the UI presents as intel has to carry the date it was
+ * true — undated text implies "now" — so this is the date they get.
+ */
+export const SEED_NOTE_DATE = "Aug 2026";
+
 const SEED_NOTES = (() => {
   const m = {};
   for (const p of [...SEED_STARTERS, ...SEED_BENCH]) m[p.id] = p.notes || "";
   return m;
 })();
+
+/** Is this note the shipped preseason seed, or something Kyle wrote himself? */
+export function isSeedNote(id, notes) {
+  return !!notes && SEED_NOTES[id] === notes;
+}
+
 
 function b64urlEncode(str) {
   const bytes = new TextEncoder().encode(str);

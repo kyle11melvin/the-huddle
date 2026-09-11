@@ -19,6 +19,7 @@ import DataPanel from "./components/DataPanel.jsx";
 import LeagueBrowser from "./components/LeagueBrowser.jsx";
 import StartSitLab from "./components/StartSitLab.jsx";
 import { setPlayerAnalytics, playerAnalytics, pointDistribution } from "./analytics.js";
+import { fetchFpPlayers, fetchFpNews, resolveFpIds } from "./fantasyPros.js";
 import { opponentDistributions } from "./simulate.js";
 import { propsToPoints, leagueScoring } from "./props.js";
 import { writeLineupMove } from "./espnWrite.js";
@@ -1381,6 +1382,45 @@ export default function App({ initialTab } = {}) {
       }
     })();
   }, [loaded]);
+
+  // ---- FantasyPros: canonical ids + the player-level news wire ----------
+  //
+  // Two fetches, once per session, both server-cached behind a durable Blob
+  // copy — the free tier is 50 requests/DAY, so nothing here may be per-player
+  // or per-render. The id map is written onto state.players as `fpId` so the
+  // match survives a reload and every later lookup is an id compare instead of
+  // another name-normalization site.
+  const [fpNews, setFpNews] = useState([]);
+  const [fpIndex, setFpIndex] = useState(null);
+  const fpDone = useRef(false);
+  useEffect(() => {
+    if (!loaded || viewingShared || fpDone.current) return;
+    fpDone.current = true;
+    (async () => {
+      let index = null;
+      try {
+        index = await fetchFpPlayers();
+        if (!aliveRef.current) return;
+        setFpIndex(index);
+        setState((st) => {
+          const patch = resolveFpIds(st.players, index);
+          if (!Object.keys(patch).length) return st;
+          const players = { ...st.players };
+          for (const [id, fpId] of Object.entries(patch)) players[id] = { ...players[id], fpId };
+          return { ...st, players };
+        });
+      } catch {
+        /* ids are an enhancement — news still matches by name key */
+      }
+      try {
+        const d = await fetchFpNews();
+        if (!aliveRef.current) return;
+        setFpNews(d.items || []);
+      } catch {
+        /* the wire is enhancement; the seed notes still render */
+      }
+    })();
+  }, [loaded, viewingShared]);
 
   /** News matched to the league pool: sleepers (low-rostered) and my players. */
   const beatWire = useMemo(() => {
@@ -2949,6 +2989,8 @@ export default function App({ initialTab } = {}) {
             setMoveId(id);
           }}
           onDrop={onDropPlayer}
+          fpNews={fpNews}
+          fpIndex={fpIndex}
         />
       )}
       {moveId && (

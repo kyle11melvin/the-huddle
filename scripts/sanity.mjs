@@ -7,6 +7,7 @@
 //   5. ESPN sync seats every player it can and REPORTS the ones it can't
 //   6. one failed week fetch must not fabricate a league-wide bye
 import fsMod from "node:fs";
+import { fpIdFor, resolveFpIds, newsForPlayer, fpDate, fpDateLabel } from "../src/fantasyPros.js";
 import { propsToPoints, SCORING, parseProps } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
 import { extractScoring } from "../api/espn.js";
@@ -1633,6 +1634,81 @@ check(
   "ecrIndex still does NOT travel — 27KB of pasted rankings, re-pasteable",
   packed.ecrIndex === undefined
 );
+
+// ---- 38. FantasyPros ids and news matching ----
+// The roster matcher has needed hand-fixing before and name normalization
+// lives in six places. These pin the two cases that actually bite: a defence,
+// whose FantasyPros name ("Pittsburgh Steelers") will never equal the app's
+// ("Steelers"), and a UTC timestamp Safari refuses to parse without a T.
+const fpIndex = {
+  byId: {
+    "12483": { name: "Matthew Stafford", pos: "QB", team: "LAR" },
+    "8018": { name: "Pittsburgh Steelers", pos: "DST", team: "PIT" },
+  },
+  byName: { matthewstafford: "12483", pittsburghsteelers: "8018" },
+  byTeamDst: { PIT: "8018" },
+};
+check(
+  "a player matches FantasyPros by normalized name",
+  fpIdFor(fpIndex, { name: "Matthew Stafford", pos: "QB", team: "LAR" }) === "12483"
+);
+check(
+  'a D/ST matches on TEAM - "Steelers" never equals "Pittsburgh Steelers"',
+  fpIdFor(fpIndex, { name: "Steelers", pos: "DST", team: "PIT" }) === "8018"
+);
+check(
+  "an unknown player returns null rather than a near-miss",
+  fpIdFor(fpIndex, { name: "Somebody Nobody", pos: "WR", team: "SF" }) === null
+);
+check(
+  "an already-resolved fpId is trusted and not re-derived",
+  fpIdFor(fpIndex, { name: "Wrong Name", pos: "QB", team: "LAR", fpId: "12483" }) === "12483"
+);
+{
+  const patch = resolveFpIds(
+    {
+      a: { id: "a", name: "Matthew Stafford", pos: "QB", team: "LAR" },
+      b: { id: "b", name: "Steelers", pos: "DST", team: "PIT" },
+      c: { id: "c", name: "Ghost", pos: "WR", team: "SF" },
+      d: { id: "d", name: "x", fpId: "99" },
+    },
+    fpIndex
+  );
+  check(
+    "resolveFpIds patches only the players it can actually place",
+    JSON.stringify(patch) === JSON.stringify({ a: "12483", b: "8018" }),
+    JSON.stringify(patch)
+  );
+}
+{
+  // FantasyPros sends "2026-09-11 18:46:38" in UTC with no zone marker.
+  const d = fpDate("2026-09-11 18:46:38");
+  check(
+    "a FantasyPros timestamp parses as UTC",
+    d instanceof Date && d.toISOString() === "2026-09-11T18:46:38.000Z",
+    d && d.toISOString()
+  );
+  check("a garbage timestamp yields null, not Invalid Date", fpDate("nonsense") === null);
+  check("every rendered item can show a date", fpDateLabel("2026-09-11 18:46:38").length > 0);
+}
+{
+  const items = [
+    { id: 1, fpid: "12483", name: "Matthew Stafford", created: "2026-09-09 10:00:00", title: "older", categories: ["News"], decision: false },
+    { id: 2, fpid: "12483", name: "Matthew Stafford", created: "2026-09-11 10:00:00", title: "newer", categories: ["Injury"], decision: true },
+    { id: 3, fpid: "999", name: "Someone Else", created: "2026-09-11 11:00:00", title: "other", categories: ["News"], decision: false },
+  ];
+  const got = newsForPlayer(items, { name: "Matthew Stafford", pos: "QB", team: "LAR" }, fpIndex);
+  check("news is filtered to THIS player", got.length === 2 && got.every((i) => i.fpid === "12483"));
+  check(
+    "news is newest first - a stale item on top is worse than none",
+    got[0].title === "newer",
+    got.map((i) => i.title).join(",")
+  );
+  check(
+    "no news and no index still returns an array, never a throw",
+    Array.isArray(newsForPlayer(null, { name: "x" }, null))
+  );
+}
 
 // ---- 37. no orphaned classNames ----
 // Twice now a stylesheet edit truncated whole sections, and the app shipped

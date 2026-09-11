@@ -14,6 +14,8 @@ import PlayerCard from "../PlayerCard.jsx";
 import { playerCardData } from "../../playerCardData.js";
 import { pointDistribution, playerAnalytics, floorCeiling } from "../../analytics.js";
 import { scheduleOpp, nextOpponents } from "../../scheduleSync.js";
+import { newsForPlayer, fpDateLabel } from "../../fantasyPros.js";
+import { SEED_NOTE_DATE, isSeedNote } from "../../share.js";
 import { opponentOf, kickoffLabel } from "../../headToHead.js";
 import { whoRosters, MY_TEAM } from "../../data/leagueRosters.js";
 import { searchFreeAgents } from "../../data/freeAgents.js";
@@ -93,7 +95,7 @@ export function MoveSheet({ state, playerId, onClose, onMove, coarse }) {
   );
 }
 
-export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, onMoveOpen, onDrop, onEdit }) {
+export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, onMoveOpen, onDrop, onEdit, fpNews, fpIndex }) {
   const player = state.players[playerId];
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -109,6 +111,20 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(null);
   const [err, setErr] = useState("");
+  // Above the `!player` guard: hooks must run in the same order on every
+  // render, so these take a possibly-missing player rather than sitting after
+  // the early return.
+  const wire = useMemo(() => (player ? newsForPlayer(fpNews, player, fpIndex) : []), [fpNews, player, fpIndex]);
+  // The seed notes open with "VERIFIED:", a claim about freshness an August
+  // camp report cannot make in September. The date above the block says what
+  // the prefix was trying to.
+  const seedNote = useMemo(() => {
+    if (!player) return "";
+    if (!isSeedNote(playerId, player.notes)) return player.notes;
+    const t = String(player.notes).replace(/^VERIFIED[^:]*:\s*/, "");
+    // Dropping the prefix leaves a sentence starting mid-thought in lower case.
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }, [playerId, player]);
   if (!player) return null;
 
   const team = teamOf(player.team);
@@ -279,10 +295,34 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
             </div>
           </div>
 
-          {player.notes && (
+          {/* ADDITIVE, not a swap. The FantasyPros wire is fresher, but a camp
+              report with a coach quote often beats a transaction blurb, so the
+              seed note stays — demoted, dated, and no longer claiming
+              VERIFIED, because a rule this block now enforces is that
+              anything presented as intel carries the date it was true. */}
+          {(wire.length > 0 || player.notes) && (
             <>
               <div className="modal-section-label">Scouting report</div>
-              <div className="modal-scout">{player.notes}</div>
+              {wire.map((it) => (
+                <div key={it.id} className={`scout-item${it.decision ? " decision" : ""}`}>
+                  <div className="scout-head">
+                    <span className="scout-date">{fpDateLabel(it.created)}</span>
+                    {it.decision && <span className="scout-tag">{it.categories.includes("Injury") ? "INJURY" : "BREAKING"}</span>}
+                    <span className="scout-src">FantasyPros</span>
+                  </div>
+                  <div className="scout-title">{it.title}</div>
+                  {it.impact && <div className="scout-impact">{it.impact}</div>}
+                </div>
+              ))}
+              {player.notes && (
+                <div className="scout-item seed">
+                  <div className="scout-head">
+                    <span className="scout-date">{SEED_NOTE_DATE}</span>
+                    <span className="scout-src">Preseason note</span>
+                  </div>
+                  <div className="modal-scout">{seedNote}</div>
+                </div>
+              )}
             </>
           )}
 
