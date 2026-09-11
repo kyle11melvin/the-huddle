@@ -6,6 +6,7 @@
 //   4. migrate never silently deletes a player, never double-places one
 //   5. ESPN sync seats every player it can and REPORTS the ones it can't
 //   6. one failed week fetch must not fabricate a league-wide bye
+import fsMod from "node:fs";
 import { propsToPoints, SCORING, parseProps } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
 import { extractScoring } from "../api/espn.js";
@@ -1597,6 +1598,67 @@ check(
 check(
   "my lineup being done is phrased about MY lineup",
   /your lineup is done/i.test(narr({ winProb: 0.4, tieProb: 0, myNow: 110, oppNow: 100, myLeft: 0, oppLeft: 3 }))
+);
+
+// ---- 36b. snapshots carry the intelligence layer ----
+// A device set up by snapshot had no props and no matchup stars: packState
+// dropped `analytics` entirely. It read as missing DATA rather than a missing
+// transfer, because a later ESPN sync repopulates `proj` and nothing else.
+const { packState, encodeShare: enc, decodeShare: dec } = await import("../src/share.js");
+const snapState = {
+  v: 2,
+  week: "1",
+  players: { a: { id: "a", name: "Trevor Lawrence", pos: "QB", team: "JAX", ecr: "QB9" } },
+  lineup: { QB: ["a"] },
+  bench: [],
+  ir: [],
+  watch: [],
+  calls: [],
+  claims: [],
+  faab: 99,
+  analytics: {
+    a: { 1: { proj: 20.7, fpProj: 19.4, matchupStars: 1, propsProj: 23.1, propsParts: [["245.5 pass yds", 9.8]], propsSource: "odds-api" } },
+  },
+  ecrIndex: { someone: 12 },
+};
+const packed = packState(snapState);
+check("a snapshot carries analytics", !!packed.analytics, "without it the card shows no props on a new device");
+check(
+  "props survive the round trip — the whole point of the card",
+  dec(enc(snapState)).analytics.a[1].propsProj === 23.1 &&
+    dec(enc(snapState)).analytics.a[1].propsParts.length === 1
+);
+check("matchup stars survive too", dec(enc(snapState)).analytics.a[1].matchupStars === 1);
+check(
+  "ecrIndex still does NOT travel — 27KB of pasted rankings, re-pasteable",
+  packed.ecrIndex === undefined
+);
+
+// ---- 37. no orphaned classNames ----
+// Twice now a stylesheet edit truncated whole sections, and the app shipped
+// with unstyled markup — a player card rendered as a wall of running text and
+// the gauge as a black blob. Every check passed both times: the components
+// RENDER fine without CSS. Nothing but a screenshot or this catches it.
+const cssText = fsMod.readFileSync("src/index.css", "utf8");
+const componentFiles = fsMod
+  .readdirSync("src/components", { recursive: true })
+  .filter((f) => String(f).endsWith(".jsx"))
+  .map((f) => `src/components/${f}`);
+const orphans = new Set();
+for (const file of componentFiles) {
+  const src = fsMod.readFileSync(file, "utf8");
+  for (const m of src.matchAll(/className=[`"]([^`"$}]*)[`"]/g)) {
+    for (const cls of m[1].split(/\s+/)) {
+      // Skip interpolated fragments and anything conditional.
+      if (!cls || /[^a-z0-9-]/i.test(cls)) continue;
+      if (!cssText.includes(`.${cls}`)) orphans.add(cls);
+    }
+  }
+}
+check(
+  "every static className rendered by a component has a rule in index.css",
+  orphans.size === 0,
+  orphans.size ? `orphaned: ${[...orphans].sort().join(", ")}` : ""
 );
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

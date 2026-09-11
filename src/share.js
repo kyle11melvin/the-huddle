@@ -65,6 +65,40 @@ export function packState(state) {
     claims: state.claims,
   };
   if (state.byes && Object.keys(state.byes).length) out.byes = state.byes;
+
+  // ANALYTICS TRAVELS. Dropping it meant a device set up by snapshot had no
+  // props and no matchup stars — the player card showed "No book lines for
+  // this player this week" for a QB whose lines were sitting in the source
+  // state. Worse, it looked like missing DATA rather than a missing transfer,
+  // because a later ESPN sync repopulates `proj` and nothing else.
+  //
+  // Trimmed to the fields the card and the projection engine actually read:
+  // the full record is ~5.6KB, this is ~3.8KB, against a snapshot that was
+  // 4.7KB. Worth it — this is the intelligence layer, and it is the reason to
+  // open the app at all.
+  //
+  // ecrIndex stays out: 27KB of pasted rankings, an order of magnitude larger
+  // than everything else combined, and re-pasteable on the new device.
+  const analytics = {};
+  for (const [id, byWeek] of Object.entries(state.analytics || {})) {
+    const weeks = {};
+    for (const [wk, a] of Object.entries(byWeek || {})) {
+      if (!a) continue;
+      weeks[wk] = {
+        proj: a.proj,
+        projSource: a.projSource,
+        projBasis: a.projBasis,
+        fpProj: a.fpProj,
+        matchupStars: a.matchupStars,
+        propsProj: a.propsProj,
+        propsParts: a.propsParts,
+        propsSource: a.propsSource,
+      };
+    }
+    if (Object.keys(weeks).length) analytics[id] = weeks;
+  }
+  if (Object.keys(analytics).length) out.analytics = analytics;
+
   // state.espn and state.schedule are rebuildable from the API and far too
   // large for a URL
   return out;
