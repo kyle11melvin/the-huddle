@@ -294,12 +294,63 @@ export function opponentDistributions(state, week, oppTeamOverride, mode = "like
     const rank = state.ecrIndex ? state.ecrIndex[k] : null;
     if (rank == null) continue;
     // Rough points-from-rank curve, only used to give the simulation an
-    // opponent at all. Flagged as an estimate everywhere it surfaces.
+    // opponent at all. NOT injury-priced — unlike oppDist() on the live path,
+    // nothing here knows a player is out, so a ruled-out starter is valued at
+    // his healthy rank. `estimated` marks every entry so a consumer cannot
+    // present these as real projections by accident.
     const mean = rankToPoints(rank);
-    out.push({ id: k, name, team: team || null, pos, opp: nflOppOf(state, team, week), mean, sd: mean * (CVS[pos] ?? 0.55) });
+    out.push({
+      id: k,
+      name,
+      team: team || null,
+      pos,
+      opp: nflOppOf(state, team, week),
+      mean,
+      sd: mean * (CVS[pos] ?? 0.55),
+      estimated: true,
+    });
   }
   return out;
 }
+
+/**
+ * Which path opponentDistributions() ACTUALLY took: "live" | "estimated" | "none".
+ *
+ * The UI used to infer this from `state.espn` being truthy, which is a
+ * different question and gets it wrong in the case that matters. `state.espn`
+ * is a persisted blob from the last successful sync, so it stays truthy long
+ * after ESPN stops answering — cookies expire roughly annually and this league
+ * has been running since August. The result was a screen that said "Both sides
+ * use real ESPN projections" while quietly running rank estimates.
+ *
+ * That is the same failure shape as a roster that looked current but wasn't,
+ * and a badge reading SYNCED on a device that was syncing nothing: plausible
+ * numbers, no indication anything had degraded. Ask the question directly.
+ */
+export function opponentSource(state, week, oppTeamOverride) {
+  const oppTeam =
+    oppTeamOverride || (state.matchups && state.matchups[week] && state.matchups[week].oppTeam) || "";
+  if (!oppTeam) return "none";
+  if (espnTeamRoster(state, oppTeam)) return "live";
+  const oppRoster = LEAGUE_ROSTERS.find((t) => t.team === oppTeam);
+  return oppRoster ? "estimated" : "none";
+}
+
+/**
+ * Age of the ESPN snapshot in ms, or null if there has never been one.
+ *
+ * Separate from opponentSource because they fail differently: a sync that
+ * stops working leaves the LAST roster in place, so the live path keeps being
+ * taken with data that is hours or days old. Nothing falls back, nothing
+ * errors, the numbers just quietly stop moving.
+ */
+export function espnAgeMs(state, now = Date.now()) {
+  const at = state && state.espn && state.espn.fetchedAt;
+  return Number.isFinite(at) ? Math.max(0, now - at) : null;
+}
+
+/** Human-scale staleness for display. Tuned for a game day, not a Tuesday. */
+export const STALE_AFTER_MS = 3 * 60 * 60 * 1000;
 
 // -------------------------------------------------------------- simulation ---
 

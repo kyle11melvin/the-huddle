@@ -112,6 +112,22 @@ function liveState() {
   return st;
 }
 
+// Same real roster, but with the opponent absent from the espn blob — the
+// case where the old UI claimed "real ESPN projections" while running rank
+// estimates. Also ages the sync past the staleness line.
+function unsyncedState() {
+  const st = liveState();
+  st.espn.teams = st.espn.teams.filter((t) => (t.mapped || t.name) === "Brock Hard");
+  st.espn.fetchedAt = Date.now() - 26 * 3600 * 1000;
+  return st;
+}
+
+CASES.push({
+  file: "gameday-unsynced.png",
+  component: "gameday",
+  props: { state: unsyncedState(), week: "1", onSetLive: () => {}, onSetOpponent: () => {}, onRefresh: () => {} },
+});
+
 CASES.push({
   file: "gameday-live.png",
   component: "gameday",
@@ -146,6 +162,14 @@ for (const c of CASES) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:wght@600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
     <style>${CSS}
+      /* Kill entry animations. The app fades rows and panels in on mount, and
+         a screenshot taken mid-flight renders the whole screen dimmed — which
+         reads as a styling bug that isn't there. Visual checks want the
+         settled state, deterministically. */
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
       body { background: var(--bg); padding: 22px 24px; font-family: var(--font-body); }
       .shot-label { color: var(--text-muted); font-size: 10px; letter-spacing: .18em;
         text-transform: uppercase; margin-bottom: 18px; font-weight: 700; }

@@ -1358,5 +1358,53 @@ check(
   liveProjection({ pregame: null, ifPlays: null, scored: 5.5, pctRemaining: 0.4, status: "inProgress" }) === 5.5
 );
 
+// ---- 33. opponent data provenance ----
+// The UI used to infer "are these real projections" from state.espn being
+// truthy. That blob is persisted from the last good sync and outlives the
+// sync itself, so the screen claimed real ESPN numbers while running rank
+// estimates. Ask the code that builds them instead.
+const { opponentSource, espnAgeMs, STALE_AFTER_MS } = await import("../src/simulate.js");
+
+const oppBase = {
+  week: "1",
+  matchups: { 1: { oppTeam: "Substation" } },
+  ecrIndex: { dakprescott: 30 },
+};
+check(
+  "no opponent set reports none, not a false 'live'",
+  opponentSource({ ...oppBase, matchups: {} }, "1") === "none"
+);
+check(
+  "with no espn blob at all, a known league team falls back to estimates",
+  opponentSource({ ...oppBase, espn: null }, "1") === "estimated",
+  `got ${opponentSource({ ...oppBase, espn: null }, "1")}`
+);
+check(
+  "THE CASE THAT MATTERS: state.espn present but the opponent is missing from it still reports estimated",
+  opponentSource({ ...oppBase, espn: { teams: [{ id: 1, name: "Someone Else", roster: [{ name: "X" }] }] } }, "1") ===
+    "estimated",
+  "a truthy state.espn must never be read as proof the numbers are real"
+);
+check(
+  "an opponent actually present in the espn blob reports live",
+  opponentSource(
+    { ...oppBase, espn: { teams: [{ id: 2, name: "Substation", mapped: "Substation", roster: [{ name: "Dak" }] }] } },
+    "1"
+  ) === "live"
+);
+check(
+  "a sync that never happened has no age rather than an age of zero",
+  espnAgeMs({ espn: null }) === null && espnAgeMs({}) === null
+);
+check(
+  "staleness is measured from fetchedAt",
+  espnAgeMs({ espn: { fetchedAt: 1000 } }, 1000 + 7200000) === 7200000
+);
+check(
+  "three hours is the game-day staleness line",
+  espnAgeMs({ espn: { fetchedAt: 0 } }, STALE_AFTER_MS + 1) > STALE_AFTER_MS &&
+    espnAgeMs({ espn: { fetchedAt: 0 } }, STALE_AFTER_MS - 1) < STALE_AFTER_MS
+);
+
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);
