@@ -100,6 +100,26 @@ Most likely answer, given the key page renders an upgrade prompt and premium
 access requires Hall of Fame while Kyle has MVP: the free tier issues a key
 that is entitled to nothing. If so this is a subscription decision, not a bug.
 
+### UPDATE, same day — Kyle upgraded to Hall of Fame
+
+Retested immediately after the upgrade: still `403` on both endpoints, control
+still `200`.
+
+That is expected rather than discouraging. **The key was reset BEFORE HOF was
+active**, so API Gateway issued it bound to the free usage plan, and upgrading
+the subscription does not retroactively re-scope an already-issued key.
+
+**Next action, tomorrow:** request a NEW key now that HOF is active. The 24h
+reset allowance was spent today, which is the only reason this waits.
+
+Then rerun the two Step 0 curls. The expectation is a 200 with JSON. If it is
+still 403 with a key issued under an active HOF subscription, THAT is the
+support question — and a much stronger one, because the entitlement argument
+will have been eliminated.
+
+Do not re-probe endpoint shape, headers, or the Bearer prefix. All three are
+settled above with controls.
+
 **Everything below is blocked until this resolves.** The CSV paste path keeps
 working in the meantime, which is exactly why Guardrail 1 says not to remove it.
 
