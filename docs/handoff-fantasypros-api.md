@@ -100,7 +100,50 @@ Most likely answer, given the key page renders an upgrade prompt and premium
 access requires Hall of Fame while Kyle has MVP: the free tier issues a key
 that is entitled to nothing. If so this is a subscription decision, not a bug.
 
-### UPDATE, same day — Kyle upgraded to Hall of Fame
+### RESOLVED 2026-09-11 — THE BASE PATH WAS WRONG. The key was always fine.
+
+**Everything above about the 403 was investigating the wrong thing, and the
+doc's own instruction not to look at the path is what kept it hidden.**
+
+The correct base is `https://api.fantasypros.com/public/v2/json/nfl/...`.
+This doc specified `https://api.fantasypros.com/v2/json/nfl/...` — no
+`/public` — and that base returns `403 {"message":"Forbidden"}` for ANY key,
+valid or not.
+
+That is why every control pointed at entitlement: `/v2/json` rejects the
+request before the key is ever evaluated, so a good key and no key at all
+produce byte-identical responses. The reasoning in the section below was
+sound and the conclusion was still wrong, because every test ran against a
+base path that cannot succeed.
+
+The tell was in the doc the whole time: the only call that ever returned 200
+was `public/v2/terms-of-use` — the `/public` prefix, sitting in plain sight.
+
+**Confirmed working, Week 1, PPR:**
+
+| call | result |
+| --- | --- |
+| `/public/v2/json/nfl/2026/consensus-rankings?position=WR&week=1&scoring=PPR` | `200`, **261 rows**, down to WR261 |
+| same, `position=RB` | `200`, **161 rows**, down to RB161 |
+| `/public/v2/json/nfl/news?limit=3` | `200`, dated items with `player_id` and `categories` |
+
+**STEP 3 IS ALSO ANSWERED — the free tier does NOT truncate at 25-30.** 261
+WRs and 161 RBs, with every deep player on Kyle's roster present: Makai Lemon
+WR55, Kayshon Boutte WR63, Parker Washington WR26. The API CAN replace the
+CSV paste, not merely supplement it. Keep the importer anyway per Guardrail 1.
+
+Rankings rows carry `player_id`, `sportsdata_id`, `cbs_player_id`,
+`player_yahoo_id` and `player_bye_week` — the cross-references Step 5 needs
+are already on the rankings response.
+
+News items carry `created` (timestamped), `player_id`, `categories`, `author`,
+`impact`. Everything Step 4 asked for.
+
+Note: HOF was purchased partway through this diagnosis. It was NOT the fix and
+may not have been necessary — the path was. Worth checking whether the free
+tier serves these endpoints before treating the subscription as required.
+
+### SUPERSEDED — Kyle upgraded to Hall of Fame
 
 Retested immediately after the upgrade: still `403` on both endpoints, control
 still `200`.
