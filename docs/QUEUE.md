@@ -95,3 +95,73 @@ doesn't beat plain linear decay by Week 4.
 - **Live projection decay.** Shipped and deployed.
 - **Opponent fallback made loud.** Shipped, with a staleness bound that tightens
   to 10 minutes while your own players are on the field.
+
+## Season-long / future (not before Week 4)
+
+These are ideas captured Sept 11. None are approved to build. They
+are here so they are not lost. Revisit after Week 4, once there are
+real games behind the projections and the live-decay model has told
+us whether the projections are trustworthy in the first place.
+
+### F1 — Card adaptation as the season matures
+
+The player card is built for Week 1 conditions: consensus rank, ECR,
+slot, bye, props. As real games accumulate, some of those tiles get
+less useful and others become possible. The card should change with
+the season rather than stay fixed.
+
+Retire or demote as the season goes on:
+- CONSENSUS and ECR are currently duplicate tiles showing the same
+  rank (both read "WR26" on the Parker Washington card). One of the
+  two slots is wasted. Decide which one survives and free the slot.
+- Preseason ECR loses signal every week. By Week 6 it should not
+  occupy prime real estate.
+
+Earn their slot as the season goes on:
+- Rest-of-season strength of schedule (see F2)
+- Target share / snap share trend (last 3 weeks vs season)
+- Realized vs projected differential — is this player beating or
+  missing our own number, and by how much
+
+### F2 — Strength of schedule, weighted by when it matters
+
+Generic "SOS: 12th hardest" is close to useless. It averages weeks
+that decide nothing with weeks that decide everything. Three cuts of
+SOS actually change a decision:
+
+1. Rest-of-season SOS weighted toward playoff weeks. Weeks 15-17 are
+   the only ones that decide a title. A player with a brutal Week 8
+   and a soft Week 16 is a buy, not a sell. Weight the playoff weeks
+   heavily (proposal: weeks 15-17 at 3x, weeks 12-14 at 1.5x,
+   everything else 1x) and surface that single number.
+
+2. Next three weeks. That is the window that governs start/sit and
+   how much FAAB to spend. A separate, unweighted, short-horizon
+   number.
+
+3. Bye-week clustering. If three of my starters share a bye, that is
+   a trade signal weeks before it becomes a roster crisis. Detect and
+   flag it.
+
+Same thesis as the projections work: everyone has the data, almost
+nobody weights it by when it matters.
+
+Open question before building: what is the opponent-strength input?
+Season-to-date points allowed by position is noisy early and
+contaminated by the opponents that defense happened to face. Prefer
+a schedule-adjusted or opponent-adjusted measure. Decide this before
+writing any SOS code.
+
+### F3 — Empty states are honest, and that is a problem worth naming
+
+The card currently degrades for depth players: "No book lines for
+this player this week", matchup "no data". That honesty is correct
+and should be kept. But it means the card is least useful for exactly
+the players where a decision is hardest. Consider what a depth player
+card should show instead of three empty tiles.
+
+### F4 — Hero number sizing (small, do anytime)
+
+The projected-points number now overlaps the gauge arc, crosses the
+needle, and crowds the word PROJECTED. Reduce roughly 25% and re-check
+against the approved gauge reference.

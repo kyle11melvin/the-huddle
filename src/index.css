@@ -3667,12 +3667,14 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 .gg-hero {
   fill: #ffffff;
   font-family: var(--font-body);
-  font-size: 52px;
+  /* Reduced ~25% from 52px: at the old size the number crossed the needle and
+     crowded the PROJECTED label and the arc. QUEUE.md F4. */
+  font-size: 39px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   paint-order: stroke;
   stroke: var(--g-card-mid);
-  stroke-width: 7px;
+  stroke-width: 6px;
   stroke-linejoin: round;
 }
 

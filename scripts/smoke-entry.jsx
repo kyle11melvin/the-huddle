@@ -14,6 +14,7 @@ import RosterRow from "../src/components/RosterRow.jsx";
 import { MoveSheet, PlayerModal, AddPlayerModal } from "../src/components/modals/index.jsx";
 import ProjectionGauge from "../src/components/ProjectionGauge.jsx";
 import PlayerCard from "../src/components/PlayerCard.jsx";
+import OpponentCard from "../src/components/modals/OpponentCard.jsx";
 
 const noop = () => {};
 
@@ -136,6 +137,16 @@ export function screens(state) {
       consensus: { rank: "RB2", sources: 3, spread: 1 },
       book: { spread: "ATL +2.5", total: 44.5, implied: 21 },
       news: [{ age: "2h", text: "Full participant Wednesday." }],
+    }],
+    // Opponent players have no record in state.players, so this path is
+    // entirely separate from PlayerModal and needs its own coverage.
+    ["Opponent card", OpponentCard, {
+      row: { name: "De'Von Achane", pos: "RB", team: "MIA", status: "", bye: 12, proj: 21.7, simProj: 21.7, playProb: 1, cv: 0.5, espnId: "4429160" },
+      week: "1", state, onClose: noop,
+    }],
+    ["Opponent card (rank-estimated, no projection)", OpponentCard, {
+      row: { name: "Some Guy", pos: "WR", team: "NYJ", status: "Q", proj: null, cv: 0.58, estimated: true },
+      week: "1", state, onClose: noop,
     }],
     ["Player card (no feeds, injured)", PlayerCard, {
       player: { name: "Brock Bowers", pos: "TE", team: "LV", opp: "vs MIA", status: "D" },

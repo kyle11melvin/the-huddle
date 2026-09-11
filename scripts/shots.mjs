@@ -143,6 +143,18 @@ for (const [file, key, props] of [
 }
 
 CASES.push({
+  file: "opponent-card.png",
+  component: "oppcard",
+  palette: "current",
+  props: {
+    row: { name: "De'Von Achane", pos: "RB", team: "MIA", status: "", bye: 12, proj: 21.7, simProj: 21.7, playProb: 1, cv: 0.5, espnId: "4429160" },
+    week: "1",
+    state: liveState(),
+    onClose: () => {},
+  },
+});
+
+CASES.push({
   file: "gameday-unsynced.png",
   component: "gameday",
   props: { state: unsyncedState(), week: "1", onSetLive: () => {}, onSetOpponent: () => {}, onRefresh: () => {} },
@@ -173,6 +185,7 @@ const COMPONENTS = {
   gauge: M.ProjectionGauge,
   card: M.PlayerCard,
   gameday: M.Gameday,
+  oppcard: M.OpponentCard,
   today: M.Today,
   lab: M.StartSitLab,
   league: M.LeagueBrowser,
