@@ -75,13 +75,44 @@ plain linear decay by Week 4, it is cleverness rather than edge, and it gets cut
 The app already has a calibration ledger (`src/calibration.js`) that banks
 projections against actuals — extend that rather than building a second one.
 
-## A trap this shares with the matchup model
+## Key off SURPRISE, not state
 
-Projections lead with **Vegas props**, and the book has already priced the
-expected game script into the line. A quarterback on a team favoured by 10 has
-already had his passing volume marked down. Applying a script multiplier on top
-of a props-derived projection risks charging him twice for the same game state.
+This is the load-bearing correction, and it rescues the model rather than
+killing it.
 
-The adjustment should know which projection source it is modifying. This is the
-same constraint recorded for the matchup model in `docs/DESIGN.md`, and it is
-the easiest way for either to look sophisticated while being wrong.
+The book prices **expected** game script pre-kickoff. It cannot price how the
+game actually goes. So the multiplier must key off the difference between the
+two:
+
+```
+surprise = realized differential − differential the book implied
+```
+
+Worked example. ATL favoured by 2.5, implied team total 21. At halftime:
+
+| state | surprise | adjustment |
+| --- | --- | --- |
+| up 14–10 | roughly as priced | **none** — the props already cover it |
+| down 17 | large negative | Bijan's remaining volume drops harder than clock decay alone; ATL passing rises |
+| up 24 | large positive | Bijan's carries rise, ATL passing collapses |
+
+Adjusting on **raw differential** charges the player twice for the same game
+state: once in the line, once in the multiplier. Adjusting on **surprise** adds
+only information the book did not have — which is the only place an edge can
+live.
+
+Two consequences:
+
+**1. The spread and total become model INPUTS, not display fields.** They are
+already pulled from The Odds API and currently only rendered. Deriving the
+implied differential from them is what makes the surprise term computable at
+all.
+
+**2. It sharpens the Week 4 cut criterion into a real experiment.** Log
+surprise-keyed error AND state-keyed error against finals. If the adjustment is
+fighting the book rather than adding to it, surprise-keyed will beat
+state-keyed. That settles the question with data instead of argument, and it is
+cheap — both numbers come from the same logged projections.
+
+The same correction applies to the matchup model for the same reason; see
+`docs/DESIGN.md`.
