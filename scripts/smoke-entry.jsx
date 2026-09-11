@@ -133,7 +133,7 @@ export function screens(state) {
       player: { name: "Bijan Robinson", pos: "RB", team: "ATL", opp: "@PIT", status: "" },
       dist: { mean: 24.7, condMean: 24.7, sd: 13.5, playProb: 1 },
       propsEdge: { delta: 2.4, parts: ["18.5 rush att", "82.5 rush yds"] },
-      matchup: { grade: "B+", points: 2.1, detail: "PIT 24th vs RB" },
+      source: { label: "PROPS", edge: true, detail: "sources agree" }, matchup: null,
       consensus: { rank: "RB2", sources: 3, spread: 1 },
       book: { spread: "ATL +2.5", total: 44.5, implied: 21 },
       news: [{ age: "2h", text: "Full participant Wednesday." }],

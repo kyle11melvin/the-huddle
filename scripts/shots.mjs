@@ -48,7 +48,8 @@ const CASES = [
       player: { name: "Bijan Robinson", pos: "RB", team: "ATL", opp: "@PIT", status: "", espnId: "4430807" },
       dist: { mean: 24.7, condMean: 24.7, sd: 13.5, playProb: 1 },
       propsEdge: { delta: 2.4, parts: ["18.5 rush att", "82.5 rush yds", "3.5 rec", "TD +135 (43%)"] },
-      matchup: { grade: "B+", points: 2.1, detail: "PIT 24th vs RB" },
+      source: { label: "PROPS", edge: true, detail: "sources agree" },
+      matchup: null,
       consensus: { rank: "RB2", sources: 3, spread: 1 },
       book: { spread: "ATL +2.5", total: 44.5, implied: 21 },
       news: [
@@ -65,7 +66,8 @@ const CASES = [
       player: { name: "Brock Bowers", pos: "TE", team: "LV", opp: "vs MIA", status: "D", espnId: "4432665" },
       dist: { mean: 3.7, condMean: 14.9, sd: 8.9, playProb: 0.25 },
       propsEdge: null,
-      matchup: { grade: "C", points: 0.4, detail: "MIA 16th vs TE" },
+      source: { label: "ESPN+FP", edge: false, detail: "wide spread" },
+      matchup: null,
       consensus: { rank: "TE1", sources: 3, spread: 0 },
       book: null,
       news: [

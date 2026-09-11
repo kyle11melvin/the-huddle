@@ -20,6 +20,41 @@ import { DEFAULT_PROJ_WEIGHTS } from "./analytics.js";
 const DOUBTFUL = new Set(["D", "O", "IR"]);
 
 /**
+ * pointDistribution().source -> a short label and its qualifier.
+ *
+ * This replaces the matchup tile. Matchup stars have no automatic source —
+ * FantasyPros exposes no matchup/SOS/DvP endpoint, ESPN publishes no DvP
+ * rating, and a computed one needs opponent-adjusted game logs that will not
+ * exist until roughly Week 4. So the tile read "no data" for nearly every
+ * player and was dead space in the most valuable row on the card.
+ *
+ * What goes there instead is the one thing the app knows about every player
+ * and never showed: WHICH SOURCE produced his projection. That is the card's
+ * whole thesis — props outrank opinion — so saying whether this number came
+ * from the market or from consensus tells you how much weight it carries.
+ * When the Odds API budget runs out, this is also the tile that explains why
+ * the props box went empty.
+ */
+function sourceOf(dist) {
+  if (!dist || !dist.source) return null;
+  const raw = String(dist.source);
+  const base = raw.split(/\s*[×·]\s*/)[0].trim();
+  const qual = raw.slice(base.length).replace(/^\s*[×·]\s*/, "").trim();
+  let label = "ESPN";
+  if (/vegas props/i.test(base)) label = "PROPS";
+  else if (/blend/i.test(base)) label = "ESPN+FP";
+  else if (/fantasypros/i.test(base)) label = "FP";
+  else if (/season average/i.test(base)) label = "SEASON";
+  else if (/projects zero/i.test(base)) label = "ESPN 0";
+  return {
+    label,
+    // Market-derived is the edge; everything else is opinion. Gold marks it.
+    edge: label === "PROPS",
+    detail: qual || (dist.confident ? "sources agree" : "wide spread"),
+  };
+}
+
+/**
  * 1-5 matchup stars -> a word describing THE MATCHUP.
  *
  * Deliberately not a letter grade. A letter next to "RB2" reads as a verdict on
@@ -103,6 +138,7 @@ export function playerCardData(state, player, week) {
       ? { mean: dist.mean, condMean: dist.condMean, sd: dist.sd, playProb: dist.playProb }
       : null,
     propsEdge: propsEdgeFrom(a, state.projWeights),
+    source: sourceOf(dist),
     matchup,
     consensus: player.ecr
       ? { rank: player.ecr, sources: 1, spread: 0, stale: DOUBTFUL.has(status) }
