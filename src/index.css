@@ -14,10 +14,14 @@
   --text: #eef2f8;
   --text-muted: #9aa5b8;
   --text-dim: #64708a;
-  --accent: #4f7fff;
-  --accent-bright: #6b93ff;
-  --accent-soft: rgba(79, 127, 255, 0.12);
-  --accent-border: rgba(79, 127, 255, 0.35);
+  /* --accent was a second accent colour (iOS-adjacent blue) living alongside
+     the gold. One accent means one accent, so these now derive from it — 56
+     usages across the stylesheet redirect from this one block rather than
+     being rewritten individually. Status colours stay their own thing. */
+  --accent: var(--gold);
+  --accent-bright: var(--gold-hi);
+  --accent-soft: rgba(var(--gold-rgb), 0.12);
+  --accent-border: rgba(var(--gold-rgb), 0.35);
   /* ONE GOLD. Every gold in the app derives from these two lines — the hex for
      solid fills, the channel triplet for anything with alpha. Changing the
      colour is changing one value, not hunting 28 rgba() literals. Team colours
@@ -712,7 +716,7 @@ select option {
   font-weight: 700;
   letter-spacing: 1px;
   line-height: 1;
-  background: linear-gradient(135deg, var(--accent-bright), #9db9ff);
+  background: linear-gradient(135deg, var(--gold-hi), var(--gold));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -747,8 +751,8 @@ select option {
 .faab-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #3a63d8, var(--accent-bright));
-  box-shadow: 0 0 12px rgba(79, 127, 255, 0.5);
+  background: linear-gradient(90deg, var(--gold-dk), var(--gold-hi));
+  box-shadow: 0 0 12px rgba(var(--gold-rgb), 0.5);
   transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -757,11 +761,14 @@ select option {
 .btn-primary {
   font-weight: 700;
   font-size: 13.5px;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent), #3a63d8);
+  /* Dark ink, not white: white on blue passed contrast, white on gold does
+     not. Swapping the surface colour without swapping the text is how a
+     palette change quietly makes a control unreadable. */
+  color: #16120a;
+  background: linear-gradient(135deg, var(--gold-hi), var(--gold));
   border-radius: 11px;
   padding: 11px 20px;
-  box-shadow: 0 4px 16px rgba(79, 127, 255, 0.35);
+  box-shadow: 0 4px 16px rgba(var(--gold-rgb), 0.35);
   transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease;
 }
 
@@ -1014,10 +1021,10 @@ select option {
 .status-btn:hover { color: var(--text); border-color: var(--text-dim); }
 
 .status-btn.active {
-  color: #fff;
+  color: #16120a;
   background: var(--accent);
   border-color: var(--accent);
-  box-shadow: 0 3px 12px rgba(79, 127, 255, 0.35);
+  box-shadow: 0 3px 12px rgba(var(--gold-rgb), 0.35);
 }
 
 .status-btn.active.danger {
@@ -2064,7 +2071,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 .strength-fill { height: 100%; border-radius: 999px; transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
 .strength-fill.good { background: linear-gradient(90deg, #1f9c62, var(--positive)); box-shadow: 0 0 10px rgba(46, 213, 132, 0.45); }
-.strength-fill.mid { background: linear-gradient(90deg, #3a63d8, var(--accent-bright)); }
+.strength-fill.mid { background: linear-gradient(90deg, var(--gold-dk), var(--gold-hi)); }
 .strength-fill.bad { background: linear-gradient(90deg, #b83c48, var(--negative)); box-shadow: 0 0 10px rgba(255, 92, 108, 0.4); }
 
 .strength-rank {
@@ -2168,7 +2175,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 .own-chip.free { color: var(--positive); border-color: rgba(52, 211, 153, 0.4); }
 .own-chip.taken { color: var(--gold); border-color: rgba(var(--gold-rgb), 0.35); }
-.own-chip.mine { color: var(--accent); border-color: rgba(96, 165, 250, 0.4); }
+.own-chip.mine { color: var(--accent); border-color: rgba(var(--gold-rgb), 0.4); }
 
 .wire-row { display: flex; align-items: center; gap: 11px; padding: 13px 16px; }
 .wire-name { font-weight: 700; font-size: 14px; flex: 1; min-width: 0; }
@@ -2319,7 +2326,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 .wi-tier.red { color: #fff; background: var(--negative); }
 .wi-tier.good { color: #04130b; background: var(--positive); }
-.wi-tier.blue { color: #fff; background: var(--accent); }
+.wi-tier.blue { color: #16120a; background: var(--accent); }
 .wi-tier.gold { color: #0a0e17; background: var(--gold); }
 .wi-tier.dim { color: var(--text-muted); border: 1px solid var(--border-hi); }
 
@@ -2857,7 +2864,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 
 .filter-chip:hover { color: var(--text); }
-.filter-chip.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.filter-chip.on { color: #16120a; background: var(--accent); border-color: var(--accent); }
 
 .filter-count {
   font-family: var(--font-mono);
@@ -2931,7 +2938,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 
 .conf-dot:hover { border-color: var(--accent); transform: scale(1.15); }
-.conf-dot.on { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px rgba(79, 127, 255, 0.5); }
+.conf-dot.on { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px rgba(var(--gold-rgb), 0.5); }
 
 /* ------------------------------------------------------------ start/sit --- */
 
@@ -2954,7 +2961,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 .lab-chip:hover { color: var(--text); border-color: var(--border-hi); }
 .lab-chip.starter { border-left: 3px solid var(--accent); }
-.lab-chip.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.lab-chip.on { color: #16120a; background: var(--accent); border-color: var(--accent); }
 
 .lab-grid {
   display: grid;
