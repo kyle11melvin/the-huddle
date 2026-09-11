@@ -3522,7 +3522,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 .pc-name {
   font-family: var(--font-display);
-  font-size: clamp(28px, 8vw, 38px);
+  font-size: clamp(24px, 7vw, 33px);
   font-weight: 700;
   line-height: 0.95;
   letter-spacing: 0.01em;
@@ -3726,4 +3726,27 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 .pc-news-text {
   color: var(--text-muted);
+}
+
+/* Photo sits left of the identity block; Avatar already handles the ESPN
+   headshot, the team-logo fallback and initials when both fail. */
+.pc-head .pc-avatar {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  margin-right: 12px;
+}
+
+.pc-ident {
+  flex: 1;
+  min-width: 0;
+}
+
+/* A rank the injury has overtaken. Muted rather than removed — that it exists
+   and is now unreliable is itself the useful thing to show. */
+.pc-tile-value.pc-stale {
+  color: var(--text-dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-dim);
+  text-decoration-thickness: 1.5px;
 }

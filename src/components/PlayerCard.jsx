@@ -19,6 +19,12 @@
 // ============================================================================
 
 import ProjectionGauge from "./ProjectionGauge.jsx";
+import { Avatar } from "./ui/index.jsx";
+
+// Statuses that mean "may not take the field". A season-long consensus rank
+// says nothing useful about a player in this state, so the card must not
+// present one as if it did.
+const DOUBTFUL = new Set(["D", "O", "IR"]);
 
 /** One of the three small tiles. `value` null renders the no-data state. */
 function Tile({ label, value, sub, tone = "" }) {
@@ -36,10 +42,12 @@ const signed = (n) => (n > 0 ? `+${n.toFixed(1)}` : n.toFixed(1));
 
 export default function PlayerCard({ player, dist, propsEdge, matchup, consensus, book, news = [] }) {
   const { name, pos, team, opp, status } = player;
+  const stale = DOUBTFUL.has(status);
 
   return (
     <div className="pc">
       <div className="pc-head">
+        <Avatar player={player} className="pc-avatar" />
         <div className="pc-ident">
           <h2 className="pc-name">{name}</h2>
           <div className="pc-meta">
@@ -73,10 +81,23 @@ export default function PlayerCard({ player, dist, propsEdge, matchup, consensus
           value={matchup ? matchup.grade : null}
           sub={matchup ? `${signed(matchup.points)} pts · ${matchup.detail}` : ""}
         />
+        {/* The stored rank is SEASON-LONG, and nothing about it knows the
+            player is hurt. Bowers really is filed as TE1 in the live team
+            document while listed doubtful — showing that bare, next to a
+            projection of 3.7, invites exactly the wrong read. Label the
+            timeframe, and say plainly when the rank has been overtaken by
+            the injury rather than quietly printing it. */}
         <Tile
           label="Consensus"
           value={consensus ? consensus.rank : null}
-          sub={consensus ? `${consensus.sources} sources · ±${consensus.spread}` : ""}
+          tone={consensus && stale ? "pc-stale" : ""}
+          sub={
+            consensus
+              ? stale
+                ? `season rank · stale (${status})`
+                : `season · ${consensus.sources} sources · ±${consensus.spread}`
+              : ""
+          }
         />
         <Tile
           label="Book"
