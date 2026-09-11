@@ -258,6 +258,13 @@ export default async function handler(req, res) {
         const regRemaining = Math.max(0, (4 - period) * 900 + clock);
         pctRemaining = Math.max(0.02, Math.min(1, regRemaining / 3600));
       }
+      // Weather and venue ride along on the SAME scoreboard response we
+      // already fetch for game state and implied totals — no extra request,
+      // no new provider, no key. Two of sixteen games carried no weather at
+      // all, so the client must handle absence rather than defaulting.
+      const indoor = !!(comp.venue && comp.venue.indoor);
+      const wx = ev.weather || null;
+
       const homeC = (comp.competitors || []).find((c) => c.homeAway === "home");
       const awayC = (comp.competitors || []).find((c) => c.homeAway === "away");
       const homeAbbr = homeC && homeC.team && fixT(homeC.team.abbreviation);
@@ -268,6 +275,10 @@ export default async function handler(req, res) {
             state: stateRaw,
             pctRemaining: Math.round(pctRemaining * 100) / 100,
             detail: (st.type && st.type.shortDetail) || "",
+            indoor,
+            // conditionId is AccuWeather's code — stable enough to map to an
+            // icon; displayValue is the human string for a title attribute.
+            wx: wx ? { t: wx.temperature ?? null, c: wx.conditionId || null, d: wx.displayValue || "" } : null,
             // Absolute kickoff, so the client can run a real countdown instead
             // of reprinting ESPN's display string.
             startTime: ev.date || (comp && comp.date) || null,
