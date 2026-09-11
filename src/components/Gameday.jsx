@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
 import { simulateLive, liveNarrative, liveProjection, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
 import { teamLogoUrl } from "../data/teams.js";
-import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, kickoffLabel, opponentOf } from "../headToHead.js";
+import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, kickoffLabel, opponentOf, pairingEdge } from "../headToHead.js";
 import { SLOT_COLOR } from "../constants.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
 import { scheduleOpp } from "../scheduleSync.js";
@@ -394,6 +394,18 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
   );
   const narrative = useMemo(() => liveNarrative(sim), [sim]);
 
+  // Does ANY of my starters' games have a ball in the air? The hero's
+  // hierarchy flips on this: pre-kickoff the projection is the story and the
+  // score is noise; once live the score is the story.
+  const anyLive = useMemo(
+    () => [...leftResolved, ...rightResolved].some((r) => r && r.l && r.l.status === "inProgress"),
+    [leftResolved, rightResolved]
+  );
+  const projMargin = sim ? Math.round((sim.myProjFinal - sim.oppProjFinal) * 10) / 10 : 0;
+  const myDrift = sim && Number.isFinite(sim.myPregame) ? Math.round((sim.myProjFinal - sim.myPregame) * 10) / 10 : null;
+  const oppDrift = sim && Number.isFinite(sim.oppPregame) ? Math.round((sim.oppProjFinal - sim.oppPregame) * 10) / 10 : null;
+
+
   // Say what the numbers on screen actually ARE. Asked directly of the code
   // that produces them, never inferred from `state.espn` being present — that
   // blob outlives the sync that filled it, which is how a screen ends up
@@ -522,60 +534,98 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
         </div>
       </div>
 
-      {/* League scoreboard: every matchup this week, yours highlighted.
-          The opponent is never chosen by hand — the sync knows the schedule. */}
-      {leagueBoard.length > 0 && (
-        <div className="gd-league">
-          {leagueBoard.map((m, i) => (
-            <button
-              key={i}
-              className={`gd-mini ${m.isMine ? "mine" : ""} ${viewIdx === i ? "active" : ""}`}
-              onClick={() => setViewIdx(i)}
-            >
-              <span className="gd-mini-row">
-                <span className="gd-mini-name">{m.awayName}</span>
-                <span className="gd-mini-score">{m.awayScore}</span>
-              </span>
-              <span className="gd-mini-row">
-                <span className="gd-mini-name">{m.homeName}</span>
-                <span className="gd-mini-score">{m.homeScore}</span>
-              </span>
-              {m.isMine && <span className="gd-mini-tag">YOU</span>}
-            </button>
-          ))}
-        </div>
-      )}
       {!oppTeam && leagueBoard.length === 0 && (
         <div className="hint-card subtle">Your opponent sets itself from the ESPN schedule on sync.</div>
       )}
 
       {sim && (
-        <div className="card gd-hero">
+        <div className={`card gd-hero ${viewingMine ? "mine" : ""}`}>
           <div className="gd-scores">
+            {/* myTeam is ALWAYS the left column. Anchored once, threaded
+                everywhere — the page previously let each section decide, which
+                is how a reader ends up attributing the wrong side to himself. */}
             <div className="gd-team">
               <div className="gd-team-name">{leftName}</div>
-              <div className="gd-total">{sim.myNow}</div>
-              <div className="gd-proj-final">proj {sim.myProjFinal}</div>
-              <div className="gd-left">{sim.myLeft} yet to play</div>
+              <div className="gd-team-rec">{leftSub}</div>
+              {anyLive ? (
+                <>
+                  <div className="gd-total live">{sim.myNow}</div>
+                  <div className="gd-proj-final">
+                    proj {sim.myProjFinal}
+                    {myDrift != null && (
+                      <b className={myDrift >= 0 ? "up" : "down"}>
+                        {myDrift >= 0 ? " ▲" : " ▼"}
+                        {Math.abs(myDrift).toFixed(1)}
+                      </b>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Pre-kickoff everyone is near zero and the score is noise. */}
+                  <div className="gd-total proj">{sim.myProjFinal}</div>
+                  <div className="gd-scored">{sim.myNow} scored</div>
+                </>
+              )}
             </div>
-            <div className="gd-vs">VS</div>
+
+            <div className="gd-vs">
+              <span className={`gd-margin ${projMargin >= 0 ? "up" : "down"}`}>
+                {projMargin >= 0 ? "+" : "−"}
+                {Math.abs(projMargin).toFixed(1)}
+              </span>
+            </div>
+
             <div className="gd-team right">
               <div className="gd-team-name">{rightName}</div>
-              <div className="gd-total">{sim.oppNow}</div>
-              <div className="gd-proj-final">proj {sim.oppProjFinal}</div>
-              <div className="gd-left">{sim.oppLeft} yet to play</div>
+              <div className="gd-team-rec">{rightSub}</div>
+              {anyLive ? (
+                <>
+                  <div className="gd-total live">{sim.oppNow}</div>
+                  <div className="gd-proj-final">
+                    proj {sim.oppProjFinal}
+                    {oppDrift != null && (
+                      <b className={oppDrift >= 0 ? "up" : "down"}>
+                        {oppDrift >= 0 ? " ▲" : " ▼"}
+                        {Math.abs(oppDrift).toFixed(1)}
+                      </b>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="gd-total proj">{sim.oppProjFinal}</div>
+                  <div className="gd-scored">{sim.oppNow} scored</div>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="gd-prob-label">{viewingMine ? "Chance to win" : `${leftName} win chance`}</div>
+          {/* Gold is ALWAYS you, slate is ALWAYS them, and both carry a word.
+              Green read as "good" and pointed at whichever side happened to be
+              favoured, which is a colour-only signal saying the wrong thing. */}
+          <div className="gd-prob-keys">
+            <span className="gd-key-you">{viewingMine ? "You" : leftName} {pct(sim.winProb)}</span>
+            <span className="gd-key-them">{viewingMine ? "Him" : rightName} {pct(1 - sim.winProb - sim.tieProb)}</span>
+          </div>
           <div className="gd-prob-bar">
-            <div className="gd-prob-mine" style={{ width: `${sim.winProb * 100}%` }}>
-              <span>{pct(sim.winProb)}</span>
+            <div className="gd-prob-mine" style={{ width: `${sim.winProb * 100}%` }} />
+            <div className="gd-prob-theirs" />
+          </div>
+
+          {/* Yet to play, once — with the POSITIONS, because 8-vs-10 only means
+              something when you can see who still holds a QB. */}
+          <div className="gd-ytp">
+            <div className="gd-ytp-box">
+              <b>{leftYtp.count} players</b>
+              <span>{yetToPlayLabel(leftYtp) || "none left"}</span>
             </div>
-            <div className="gd-prob-theirs">
-              <span>{pct(1 - sim.winProb - sim.tieProb)}</span>
+            <div className="gd-ytp-box r">
+              <b>{rightYtp.count} players</b>
+              <span>{yetToPlayLabel(rightYtp) || "none left"}</span>
             </div>
           </div>
+
           {viewingMine && narrative && <div className="gd-narrative">{narrative}</div>}
           {viewingMine && oppProvenance.warn && (
             <div className="data-warn">
@@ -598,37 +648,26 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
 
       {(leftRows.length > 0 || rightRows.length > 0) && (
         <div className="h2h">
-          <div className="h2h-head">
-            <div className="h2h-team">
-              <div className="h2h-team-name">{leftName}</div>
-              <div className="h2h-team-sub">{leftSub}</div>
-              {leftYtp.count > 0 && (
-                <div className="h2h-ytp">
-                  <span className="h2h-ytp-n">yet to play ({leftYtp.count})</span>
-                  <span className="h2h-ytp-parts">{yetToPlayLabel(leftYtp)}</span>
-                </div>
-              )}
-            </div>
-            <div className="h2h-team r">
-              <div className="h2h-team-name">{rightName}</div>
-              <div className="h2h-team-sub">{rightSub}</div>
-              {rightYtp.count > 0 && (
-                <div className="h2h-ytp">
-                  <span className="h2h-ytp-n">yet to play ({rightYtp.count})</span>
-                  <span className="h2h-ytp-parts">{yetToPlayLabel(rightYtp)}</span>
-                </div>
-              )}
-            </div>
-          </div>
-          {pairs.map((p) => {
+          {pairs.map((p, idx) => {
             const A = sideData(p.mine, week, state);
             const B = sideData(p.theirs, week, state);
             const isLive = (A && A.isLive) || (B && B.isLive);
             // Both sides done -> the row sinks. Ten rows collapse into "here is
             // what's left" without reading a word.
             const isDone = A && B && A.isFinal && B.isFinal;
+            // Slot divider: the position moves OUT of the row and becomes the
+            // heading that groups it, so it is stated once per group instead of
+            // twice per row.
+            const newSlot = idx === 0 || pairs[idx - 1].slot !== p.slot;
             return (
-              <div className={`h2h-row ${isLive ? "islive" : ""} ${isDone ? "isdone" : ""}`} key={p.key}>
+              <React.Fragment key={p.key}>
+                {newSlot && (
+                  <div className="h2h-div">
+                    <span style={{ color: SLOT_COLOR[p.slot] || "var(--text-dim)" }}>{p.slot}</span>
+                    <i />
+                  </div>
+                )}
+              <div className={`h2h-row ${isLive ? "islive" : ""} ${isDone ? "isdone" : ""}`}>
                 <div className="h2h-l1">
                   <button
                     type="button"
@@ -639,9 +678,14 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                     {A ? shortName(A.row.name) : "Empty"}
                   </button>
                   <Proj d={A} />
-                  <span className="h2h-slot" style={{ background: SLOT_COLOR[p.slot] || "var(--text-dim)" }}>
-                    {p.slot}
-                  </span>
+                  {(() => {
+                    const e = pairingEdge(A && A.worth, B && B.worth);
+                    return (
+                      <span className={`h2h-edge ${e.lead}`}>
+                        {e.lead === "even" ? "EVEN" : `${e.lead === "mine" ? "◀ " : ""}${e.delta.toFixed(1)}${e.lead === "theirs" ? " ▶" : ""}`}
+                      </span>
+                    );
+                  })()}
                   <Proj d={B} right />
                   <button
                     type="button"
@@ -680,8 +724,30 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                   <Chip d={B} right />
                 </div>
               </div>
+              </React.Fragment>
             );
           })}
+        </div>
+      )}
+
+      {/* The rest of the league, BELOW my own matchup. It used to eat the whole
+          first screen and push my matchup a third of the way down. */}
+      {leagueBoard.length > 0 && (
+        <div className="gd-league">
+          <div className="gd-league-k">Around the league</div>
+          {leagueBoard.map((m, i) => (
+            <button
+              key={i}
+              className={`gd-mini ${m.isMine ? "mine" : ""} ${viewIdx === i ? "active" : ""}`}
+              onClick={() => setViewIdx(i)}
+            >
+              <span className="gd-mini-t">{m.awayName}</span>
+              <span className="gd-mini-s">{m.awayScore}</span>
+              <span className="gd-mini-d">–</span>
+              <span className="gd-mini-s">{m.homeScore}</span>
+              <span className="gd-mini-t r">{m.homeName}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -745,6 +811,9 @@ function sideData(row, week, state) {
     was,
     dir,
     chip,
+    // What he is worth RIGHT NOW — the same number the row displays: banked
+    // points once final, the live projection while football remains.
+    worth: value,
     prog: isFinal ? 1 : isLive ? 1 - (l.pctRemaining ?? 1) : 0,
     when,
     opp,
@@ -768,10 +837,7 @@ const Ident = ({ d, right }) => {
   return (
     <span className={right ? "r" : ""}>
       {row.status && <span className="h2h-inj">{row.status} · </span>}
-      <span className="h2h-pos" style={{ color: SLOT_COLOR[row.pos] || "var(--text-muted)" }}>
-        {row.pos}
-      </span>
-      {` · ${row.team}`}
+      <span>{row.team}</span>
       {Number.isFinite(row.bye) ? ` (${row.bye})` : ""}
     </span>
   );
@@ -787,16 +853,15 @@ const Chip = ({ d, right }) => {
   );
 };
 
+/* The mirrored helmet tracks were unreadable — you couldn't tell which way
+   they filled. A plain bar, filling from the OUTER edge inward on each side. */
 const Track = ({ d, right }) => (
-  <div className={`h2h-trk ${right ? "r" : ""}`}>
-    <span className="h2h-logo">{d && d.logo && <img src={d.logo} alt="" loading="lazy" />}</span>
-    <span className="h2h-bar">
-      <i
-        className={d ? (d.isFinal ? "done" : d.isLive ? "on" : "") : ""}
-        style={{ width: `${Math.round(Math.max(0, Math.min(1, d ? d.prog : 0)) * 100)}%` }}
-      />
-    </span>
-  </div>
+  <span className={`h2h-bar ${right ? "r" : ""}`}>
+    <i
+      className={d ? (d.isFinal ? "done" : d.isLive ? "on" : "") : ""}
+      style={{ width: `${Math.round(Math.max(0, Math.min(1, d ? d.prog : 0)) * 100)}%` }}
+    />
+  </span>
 );
 
 function EmptyBox({ children }) {

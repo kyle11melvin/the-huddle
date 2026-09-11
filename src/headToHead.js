@@ -170,3 +170,28 @@ export function opponentOf(raw) {
   const at = s.startsWith("@");
   return { at, opp: s.replace(/^@/, "") };
 }
+
+/**
+ * The pairing edge: how much one side is currently worth over the other in
+ * this slot.
+ *
+ * WORTH is actual points once the game is final, and the live projection
+ * otherwise — a finished player is worth what he scored, not what he was
+ * expected to score.
+ *
+ * This replaces the position pill that used to sit in the centre column. The
+ * position was already printed under BOTH names, so the single most valuable
+ * spot in the row — dead centre, between the two numbers being compared — was
+ * spending itself on its third redundant copy.
+ *
+ * @returns {{delta:number, lead:"mine"|"theirs"|"even"}}
+ */
+export function pairingEdge(mineWorth, theirsWorth) {
+  const a = Number.isFinite(mineWorth) ? mineWorth : 0;
+  const b = Number.isFinite(theirsWorth) ? theirsWorth : 0;
+  const delta = Math.round(Math.abs(a - b) * 10) / 10;
+  // Under a point is noise, not an edge, and rendering "0.3 ◀" invites a
+  // decision the number can't support.
+  if (delta < 1) return { delta, lead: "even" };
+  return { delta, lead: a > b ? "mine" : "theirs" };
+}

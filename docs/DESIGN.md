@@ -93,6 +93,43 @@ A letter beside "RB2" reads as a verdict on the PLAYER — the app appearing to
 call the second-best back in football a D — when it means he drew a defense
 that guts running backs. Name the opponent read and the ambiguity disappears.
 
+## The myTeam anchor, and colour that means something
+
+Three rules, in order of how expensive they are to get wrong.
+
+### 1. One anchor: myTeam is resolved ONCE and threaded everywhere
+
+`state.espn.myTeamId` is the single source of truth. Every section of a matchup
+view — hero, player rows, league strip — takes its side from that one value.
+
+**myTeam is ALWAYS the left column.** Sleeper's convention, and the point is
+consistency rather than the specific side.
+
+Why this is a rule and not a preference: the sections used to decide
+independently, and the result was that the person who BUILT the app read the
+live board and concluded he was the opponent. He then filed a perspective bug
+against logic that was correct. Nothing on the screen said which side was his,
+so there was no way to be right. A reader must never have to infer ownership.
+
+Every narrative string is written in **second person about myTeam**, and is
+asserted — see the narrative-perspective checks in `scripts/sanity.mjs`.
+
+### 2. Gold is you. Slate is them. Always.
+
+`--gold` (`#e8b95a`) is myTeam. `rgba(255,255,255,0.055)` is the opponent.
+
+Green is banned from this role. It reads as "good" rather than "yours", so on a
+win bar it points at whoever happens to be favoured — which is the opponent
+about half the time, saying the opposite of what it appears to say.
+
+### 3. No colour-only signals
+
+Every state carries a **word** as well as a colour: `You 25%` / `Him 75%`,
+`FINAL`, a clock, a kickoff time. Colour is the fast channel, not the only one.
+
+It has to survive a glance at a phone in sunlight, and a viewer who cannot
+distinguish the hues at all should lose speed, never meaning.
+
 ## Gameday paired board — the three game states
 
 Reference: `docs/design/gameday-paired-board.png`, from the approved artifact

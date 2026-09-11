@@ -143,6 +143,23 @@ for (const [file, key, props] of [
 }
 
 CASES.push({
+  file: "board-pre.png",
+  component: "today",
+  palette: "current",
+  props: (() => {
+    const st = JSON.parse(_rf("/tmp/now.json", "utf8")).state;
+    return { state: st, week: "1", onApplyMove: () => {}, onSetLive: () => {}, onSetOpponent: () => {}, onRefresh: () => {}, onOpenRow: () => {} };
+  })(),
+});
+
+CASES.push({
+  file: "board-live.png",
+  component: "today",
+  palette: "current",
+  props: { state: liveState(), week: "1", onApplyMove: () => {}, onSetLive: () => {}, onSetOpponent: () => {}, onRefresh: () => {}, onOpenRow: () => {} },
+});
+
+CASES.push({
   file: "opponent-card.png",
   component: "oppcard",
   palette: "current",
@@ -198,7 +215,7 @@ const browser = await puppeteer.launch({ executablePath: CHROME, headless: "new"
 const page = await browser.newPage();
 // 375px is the iPhone SE / mini width and the narrowest real target. Phone-first
 // means checking the tightest case, not a comfortable one.
-await page.setViewport({ width: 375, height: 700, deviceScaleFactor: 2 });
+await page.setViewport({ width: 390, height: 700, deviceScaleFactor: 2 });
 
 for (const c of CASES) {
   const markup = renderToString(React.createElement(COMPONENTS[c.component], c.props));
