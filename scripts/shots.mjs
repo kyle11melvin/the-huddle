@@ -43,6 +43,7 @@ const CASES = [
   {
     file: "card-bijan.png",
     component: "card",
+    palette: "current",
     props: {
       player: { name: "Bijan Robinson", pos: "RB", team: "ATL", opp: "@PIT", status: "", espnId: "4430807" },
       dist: { mean: 24.7, condMean: 24.7, sd: 13.5, playProb: 1 },
@@ -59,6 +60,7 @@ const CASES = [
   {
     file: "card-bowers.png",
     component: "card",
+    palette: "current",
     props: {
       player: { name: "Brock Bowers", pos: "TE", team: "LV", opp: "vs MIA", status: "D", espnId: "4432665" },
       dist: { mean: 3.7, condMean: 14.9, sd: 8.9, playProb: 0.25 },
@@ -122,6 +124,11 @@ function unsyncedState() {
   return st;
 }
 
+// Same card, reference palette — the only difference is the token block.
+for (const base of CASES.filter((c) => c.component === "card" && c.palette === "current")) {
+  CASES.push({ ...base, file: base.file.replace(".png", "-ref.png"), palette: "ref" });
+}
+
 CASES.push({
   file: "gameday-unsynced.png",
   component: "gameday",
@@ -174,7 +181,7 @@ for (const c of CASES) {
       .shot-label { color: var(--text-muted); font-size: 10px; letter-spacing: .18em;
         text-transform: uppercase; margin-bottom: 18px; font-weight: 700; }
     </style></head><body>
-    ${markup}
+    <div class="${c.palette === "ref" ? "pal-ref" : ""}">${markup}</div>
   </body></html>`;
 
   // networkidle0 never settles here — the Google Fonts connection stays warm.

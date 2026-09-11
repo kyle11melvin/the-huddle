@@ -1,0 +1,104 @@
+// ============================================================================
+// State -> PlayerCard props.
+//
+// Pure and separate from the component so the card can be asserted on without
+// rendering, and so the modal and the screenshot harness feed it from the same
+// place. The card renders whatever it is handed; this file decides what the
+// app actually knows.
+//
+// Every field returns null rather than a plausible-looking zero when the
+// underlying data is missing. Absent is the common case — the DvP model has no
+// game logs in week 1, and the book spread is not stored at all — and a tile
+// reading 0.0 when it means "unknown" is the failure mode this project keeps
+// running into.
+// ============================================================================
+
+import { pointDistribution, playerAnalytics } from "./analytics.js";
+import { DEFAULT_PROJ_WEIGHTS } from "./analytics.js";
+
+/** Statuses meaning "may not take the field" — a season rank stops applying. */
+const DOUBTFUL = new Set(["D", "O", "IR"]);
+
+/** 0-5 matchup stars -> a letter. 2-3 is the middle of the range, not a fail. */
+const GRADES = ["F", "D", "C", "B-", "B+", "A"];
+
+/**
+ * The props edge: how much the market disagrees with expert projections.
+ *
+ * Measured against the ESPN+FP blend rather than against nothing, because the
+ * blend is what the projection WOULD have been. A props number that merely
+ * agrees with consensus is not an edge, and should read near zero.
+ */
+function propsEdgeFrom(a, weights) {
+  if (!a || !Number.isFinite(a.propsProj) || a.propsProj <= 0) return null;
+  const espn = Number.isFinite(a.proj) ? a.proj : null;
+  const fp = Number.isFinite(a.fpProj) ? a.fpProj : null;
+  let baseline = null;
+  if (espn != null && fp != null) {
+    const w = weights || DEFAULT_PROJ_WEIGHTS;
+    baseline = espn * w.espn + fp * w.fp;
+  } else if (fp != null) baseline = fp;
+  else if (espn != null) baseline = espn;
+  if (baseline == null) return null;
+
+  const parts = Array.isArray(a.propsParts) ? a.propsParts.map(([label]) => label) : [];
+  return {
+    delta: Math.round((a.propsProj - baseline) * 10) / 10,
+    parts,
+    source: a.propsSource || null,
+  };
+}
+
+/**
+ * @param {object} state  app state
+ * @param {object} player the player record
+ * @param {string} week
+ * @returns {object|null} props for <PlayerCard>, or null without a player
+ */
+export function playerCardData(state, player, week) {
+  if (!player) return null;
+  const a = playerAnalytics(state, player.id, week);
+  const dist = pointDistribution(player, week, state);
+  const wd = (player.weeks && player.weeks[week]) || {};
+  const status = player.status || "";
+
+  // Stars are the only matchup signal that exists today. The schedule-adjusted
+  // opponent-defense rating docs/DESIGN.md specifies is NOT built — so this is
+  // labelled as stars rather than dressed up as something it isn't.
+  const stars = Number.isFinite(wd.matchup) ? wd.matchup : Number.isFinite(a && a.matchupStars) ? a.matchupStars : null;
+  const matchup =
+    stars == null
+      ? null
+      : {
+          grade: GRADES[Math.max(0, Math.min(5, Math.round(stars)))],
+          points: Math.round(stars * 0.4 * 10) / 10,
+          detail: `${stars}/5 stars`,
+        };
+
+  const implied = state.espn && state.espn.impliedTotals && player.team ? state.espn.impliedTotals[player.team] : null;
+
+  return {
+    player: {
+      name: player.name,
+      pos: player.pos,
+      team: player.team,
+      opp: wd.opp || null,
+      status,
+      espnId: player.espnId || "",
+    },
+    dist: dist
+      ? { mean: dist.mean, condMean: dist.condMean, sd: dist.sd, playProb: dist.playProb }
+      : null,
+    propsEdge: propsEdgeFrom(a, state.projWeights),
+    matchup,
+    consensus: player.ecr
+      ? { rank: player.ecr, sources: 1, spread: 0, stale: DOUBTFUL.has(status) }
+      : null,
+    // The book SPREAD is not stored anywhere — only the implied team total
+    // survives the ESPN sync. Showing the total and saying so beats inventing
+    // a spread or leaving the tile silently blank.
+    book: Number.isFinite(implied) ? { spread: `${implied}`, total: null, implied } : null,
+    // No per-player news feed exists. api/news.js is a league-wide wire.
+    news: [],
+  };
+}
