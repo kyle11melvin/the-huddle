@@ -1312,5 +1312,51 @@ check("the ghost sits to the right of the real needle in that case", gDoubt.ghos
 const gLow = gaugeGeometry({ mean: 3, condMean: 3, sd: 5, playProb: 1 });
 check("the floor clamps at 0 rather than going negative", gLow.floor === 0, `got ${gLow.floor}`);
 
+// ---- 32. live projection decay ----
+// The Gameday rows rendered a STATIC pregame number from a different source
+// than the sim at the top of the same screen: Stafford sat at 22.2 with 1
+// point scored and a quarter to play. Both now call liveProjection().
+const { liveProjection, remainingFraction } = await import("../src/simulate.js");
+
+check(
+  "pre-kickoff is untouched — nothing has happened to decay yet",
+  liveProjection({ pregame: 18.4, ifPlays: 18.4, scored: 0, status: "notStarted" }) === 18.4
+);
+check(
+  "the real case: 22.2 pregame, 1 scored, a quarter left -> 6.6, not 22.2",
+  liveProjection({ pregame: 22.2, ifPlays: 22.2, scored: 1, pctRemaining: 0.25, status: "inProgress" }) === 6.6,
+  `got ${liveProjection({ pregame: 22.2, ifPlays: 22.2, scored: 1, pctRemaining: 0.25, status: "inProgress" })}`
+);
+check(
+  "a final game projects EXACTLY the actual — no estimate survives it",
+  liveProjection({ pregame: 22.2, ifPlays: 22.2, scored: 7.3, pctRemaining: 0, status: "final" }) === 7.3
+);
+check(
+  "ruled out COLLAPSES to points banked rather than decaying gently",
+  liveProjection({ pregame: 14, ifPlays: 14, scored: 0, pctRemaining: 0.8, status: "inProgress", playProb: 0 }) === 0,
+  "a slow fade reads as 'still has a chance' when he does not"
+);
+check(
+  "a projection is never below points already scored",
+  liveProjection({ pregame: 4, ifPlays: 4, scored: 19.6, pctRemaining: 0.05, status: "inProgress" }) >= 19.6,
+  `got ${liveProjection({ pregame: 4, ifPlays: 4, scored: 19.6, pctRemaining: 0.05, status: "inProgress" })}`
+);
+check(
+  "once underway the REMAINING portion accrues at the if-he-plays rate, not the injury-discounted one",
+  liveProjection({ pregame: 7, ifPlays: 14, scored: 2, pctRemaining: 0.5, status: "inProgress" }) === 9,
+  `got ${liveProjection({ pregame: 7, ifPlays: 14, scored: 2, pctRemaining: 0.5, status: "inProgress" })}`
+);
+check(
+  "kickoff-to-final the fraction runs 1 -> 0 and clamps outside that",
+  remainingFraction("notStarted", 1) === 1 &&
+    remainingFraction("final", 0.5) === 0 &&
+    remainingFraction("inProgress", 1.4) === 1 &&
+    remainingFraction("inProgress", -3) === 0
+);
+check(
+  "no projection at all still reports points banked rather than null mid-game",
+  liveProjection({ pregame: null, ifPlays: null, scored: 5.5, pctRemaining: 0.4, status: "inProgress" }) === 5.5
+);
+
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);

@@ -3358,14 +3358,14 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 /* ============================================================================
    PROJECTION GAUGE
-   Gold is load-bearing here, not decorative: it marks the needle and the
-   in-range band and nothing else, so "where the gold is" reads as "what the
-   projection is". See docs/DESIGN.md.
+   Gold is load-bearing, not decorative: it marks the in-range band and the
+   needle tip and nothing else, so "where the gold is" reads as "what the
+   projection is". Everything outside the range recedes to structure.
    ============================================================================ */
 
 .gauge {
   position: relative;
-  padding: 8px 0 0;
+  padding: 4px 0 0;
 }
 
 .gauge-svg {
@@ -3375,111 +3375,385 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   overflow: visible;
 }
 
-/* Out-of-range ticks stay present but recede — the dial keeps its full 0-40
-   shape so needle position is readable against a constant scale. */
+/* Out-of-range graduations stay visible so the dial keeps its full 0-40 shape
+   — needle position is only meaningful against a constant scale — but they sit
+   well back. */
 .gauge-tick {
-  fill: var(--border-hi);
-  opacity: 0.35;
+  stroke: var(--border-hi);
+  stroke-width: 1.6;
+  opacity: 0.5;
 }
 
+/* In-range ticks run longer AND brighter. Two channels rather than one, so the
+   band survives being glanced at on a phone in sunlight. */
 .gauge-tick-band {
-  fill: var(--gold);
-  opacity: 0.55;
+  stroke: var(--gold);
+  stroke-width: 2.2;
+  opacity: 0.9;
+  filter: drop-shadow(0 0 3px rgba(255, 182, 18, 0.35));
 }
 
 .gauge-needle {
-  stroke: var(--text);
-  stroke-width: 3;
+  fill: var(--text);
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
 }
 
-/* The if-he-plays needle. Deliberately quieter than the real one: it shows
-   where the projection WOULD be, and must never be mistaken for the headline. */
+/* The if-he-plays pointer. Deliberately quieter — it shows where the
+   projection WOULD be and must never be mistaken for the headline. */
 .gauge-needle-ghost {
-  stroke: var(--text-dim);
-  stroke-width: 2;
-  stroke-dasharray: 3 3;
-}
-
-.gauge-hub {
-  fill: var(--surface-hi);
-  stroke: var(--border-hi);
-  stroke-width: 2;
+  fill: var(--text-dim);
+  opacity: 0.75;
 }
 
 .gauge-axis {
   fill: var(--text-dim);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.55;
 }
 
 .gauge-axis-mid {
   text-anchor: middle;
-  fill: var(--gold);
+  fill: var(--text-muted);
 }
 
 .gauge-axis-end {
   text-anchor: end;
 }
 
-/* Sits inside the dial rather than below it, so the number and the needle
-   read as one object. */
+/* Sits in the dial's free centre. The needle floats in the ring (r 64-86) and
+   never reaches here, so nothing overlaps the number at any value. */
 .gauge-readout {
   position: absolute;
   left: 0;
   right: 0;
-  top: 46%;
+  top: 38%;
   text-align: center;
   pointer-events: none;
 }
 
 .gauge-hero {
   font-family: var(--font-display);
-  font-size: clamp(44px, 13vw, 64px);
+  font-size: clamp(46px, 14vw, 68px);
   font-weight: 700;
-  line-height: 0.9;
+  line-height: 0.88;
   color: var(--text);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .gauge-hero-label {
-  margin-top: 4px;
+  margin-top: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.gauge-ifplays {
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.gauge-ifplays-val {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Floor and ceiling sit under the arc ends they describe, not in the page
+   corners — the label belongs to the end of the dial it names. */
+.gauge-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 0 2px;
+}
+
+.gauge-end-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.gauge-end-value {
+  margin-top: 1px;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.gauge-end-right {
+  text-align: right;
+}
+
+/* ============================================================================
+   PLAYER CARD
+   Layered surfaces over the navy ground, gold reserved for the edge. The
+   hierarchy is literal: gauge, then the props row at full width because that
+   is the app's edge, then three equal tiles, then news.
+   ============================================================================ */
+
+.pc {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(79, 127, 255, 0.14), transparent 60%),
+    linear-gradient(180deg, var(--bg-raised) 0%, var(--bg) 70%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 18px 18px;
+  box-shadow: var(--shadow-lift);
+}
+
+.pc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pc-name {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 7vw, 33px);
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.pc-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.pc-pos {
+  color: var(--gold);
+  font-weight: 800;
+}
+
+.pc-dot {
+  color: var(--text-dim);
+}
+
+.pc-opp {
+  padding: 2px 7px;
+  border: 1px solid var(--border-hi);
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.pc-status {
+  flex: none;
+  min-width: 28px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--surface-hi);
+  color: var(--text-muted);
+  border: 1px solid var(--border-hi);
+}
+
+/* Status is the one sanctioned exception to gold-only: it carries meaning gold
+   cannot express, and a reader must not have to decode it. */
+.pc-status-q {
+  color: #ffd166;
+  border-color: rgba(255, 209, 102, 0.4);
+  background: rgba(255, 209, 102, 0.1);
+}
+
+.pc-status-d,
+.pc-status-o,
+.pc-status-ir {
+  color: var(--negative);
+  border-color: rgba(255, 92, 108, 0.4);
+  background: rgba(255, 92, 108, 0.1);
+}
+
+.pc-gauge {
+  margin: 6px 0 18px;
+}
+
+/* The edge row. Full width and gold-bordered — the one element allowed to
+   shout, because it is the input the whole app is built around. */
+.pc-edge {
+  padding: 13px 15px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 182, 18, 0.11), rgba(255, 182, 18, 0.04));
+  border: 1px solid rgba(255, 182, 18, 0.32);
+}
+
+.pc-edge-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.pc-edge-label {
   font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.pc-edge-value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.pc-edge-sub {
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* No lines pasted is the COMMON case today, so it gets a real state rather
+   than a zero that would read as a confident "no edge". */
+.pc-edge-empty {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.pc-edge-empty .pc-edge-label {
+  color: var(--text-dim);
+}
+
+.pc-edge-empty .pc-edge-value {
+  color: var(--text-dim);
+}
+
+.pc-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pc-tile {
+  padding: 11px 10px 10px;
+  border-radius: 11px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+.pc-tile-label {
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--text-dim);
 }
 
-.gauge-ifplays {
+.pc-tile-value {
   margin-top: 6px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.gauge-ends {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 2px;
-}
-
-.gauge-end-label {
-  font-size: 10px;
+  font-family: var(--font-display);
+  font-size: 22px;
   font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  color: var(--text);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.pc-tile-sub {
+  margin-top: 5px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-dim);
+  line-height: 1.3;
+}
+
+.pc-tile-empty .pc-tile-value {
   color: var(--text-dim);
 }
 
-.gauge-end-value {
-  font-family: var(--font-mono);
-  font-size: 15px;
+.pc-news {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 13px;
+}
+
+.pc-news-label {
+  font-size: 9px;
   font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 9px;
+}
+
+.pc-news-row {
+  display: flex;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.pc-news-age {
+  flex: none;
+  width: 30px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  padding-top: 1px;
+}
+
+.pc-news-text {
   color: var(--text-muted);
 }
 
-.gauge-end-right {
-  text-align: right;
+/* Photo sits left of the identity block; Avatar already handles the ESPN
+   headshot, the team-logo fallback and initials when both fail. */
+.pc-head .pc-avatar {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  margin-right: 12px;
+}
+
+.pc-ident {
+  flex: 1;
+  min-width: 0;
+}
+
+/* A rank the injury has overtaken. Muted rather than removed — that it exists
+   and is now unreliable is itself the useful thing to show. */
+.pc-tile-value.pc-stale {
+  color: var(--text-dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-dim);
+  text-decoration-thickness: 1.5px;
+}
+
+/* A projection that is currently decaying is not the same claim as a pregame
+   estimate, and the row should not imply otherwise. */
+.gd-proj-live {
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
 }

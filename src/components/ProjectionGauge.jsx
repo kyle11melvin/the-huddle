@@ -2,68 +2,57 @@
 // Projection gauge — the player card's hero.
 //
 // Speedometer form, per docs/DESIGN.md: floor left, ceiling right, needle at
-// the projection, and the range drawn as an arc band from the sd the
-// projection blend already produces.
+// the projection, range as an arc band from the sd the blend already produces.
 //
-// THE SCALE IS FIXED (0-40) AND SHARED BY EVERY POSITION. That is the whole
-// point: needle POSITION carries meaning before you read a single number.
-// On a real roster Bijan sits at 62% of the dial and a RB4 at 9%, and a
-// per-player scale would flatten that difference to nothing — every player
-// would look identical with only the axis labels changing. K and D/ST sitting
-// low on this scale is honest, not a flaw.
+// THE SCALE IS FIXED (0-40) AND SHARED BY EVERY POSITION. Needle POSITION
+// carries meaning before any number is read: on the live roster Bijan sits at
+// 62% of the dial and an RB4 at 9%. A per-player scale would flatten that to
+// nothing. K and D/ST sitting low is honest, not a flaw.
 //
-// THE NEEDLE CAN LAND OUTSIDE THE BAND. This is a normal case, not an edge
-// case, and it is the most useful thing the gauge draws:
+// THE NEEDLE CAN LAND OUTSIDE THE BAND, and that is the most useful thing here:
+// mean = condMean × playProb, so a TE at 14.9 if-he-plays with playProb 0.25
+// projects 3.7 — below his own floor of 6.0. The ghost needle at condMean is
+// what makes that legible rather than looking broken.
 //
-//   mean = condMean × playProb
-//
-// so a tight end at 14.9 if-he-plays with playProb 0.25 projects 3.7 — below
-// his own floor of 6.0. The solid needle sits left of the band, the ghost
-// needle sits at condMean inside it, and the gap between them IS the start/sit
-// decision, made spatial instead of arithmetic. Without the ghost that card
-// just looks broken.
+// GEOMETRY NOTE: the needle floats in the ring (r 64→86) instead of pivoting
+// from the centre. A centre-pivoted needle crosses the hero number for any
+// near-vertical value — it sliced straight through "24.7" in the first pass —
+// and no amount of restyling fixes that, because the collision is structural.
+// Floating it leaves the whole middle free for the readout.
 // ============================================================================
 
 import { MAX, angleFor, gaugeGeometry } from "../gaugeGeometry.js";
 
-const R_OUTER = 92;
-const R_INNER = 74;
 const CX = 110;
-const CY = 110;
+const CY = 116;
+const R_TICK_OUT = 100; // outer edge of every tick
+const R_TICK_IN = 88; // inner edge of a normal tick
+const R_TICK_IN_BAND = 82; // in-band ticks run longer, so the range reads as mass
+const R_NEEDLE_TIP = 86;
+const R_NEEDLE_TAIL = 60;
 
-function polar(cx, cy, r, deg) {
+const polar = (r, deg) => {
   const rad = (deg * Math.PI) / 180;
-  return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  return [CX + r * Math.cos(rad), CY + r * Math.sin(rad)];
+};
+
+function Tick({ value, inBand }) {
+  const a = angleFor(value);
+  const [x1, y1] = polar(inBand ? R_TICK_IN_BAND : R_TICK_IN, a);
+  const [x2, y2] = polar(R_TICK_OUT, a);
+  return <line x1={x1} y1={y1} x2={x2} y2={y2} className={inBand ? "gauge-tick-band" : "gauge-tick"} />;
 }
 
-/** Wedge between two angles, as an SVG path. */
-function arcPath(a0, a1, rOuter, rInner) {
-  const [x0o, y0o] = polar(CX, CY, rOuter, a0);
-  const [x1o, y1o] = polar(CX, CY, rOuter, a1);
-  const [x1i, y1i] = polar(CX, CY, rInner, a1);
-  const [x0i, y0i] = polar(CX, CY, rInner, a0);
-  const large = Math.abs(a1 - a0) > 180 ? 1 : 0;
-  return [
-    `M ${x0o} ${y0o}`,
-    `A ${rOuter} ${rOuter} 0 ${large} 1 ${x1o} ${y1o}`,
-    `L ${x1i} ${y1i}`,
-    `A ${rInner} ${rInner} 0 ${large} 0 ${x0i} ${y0i}`,
-    "Z",
-  ].join(" ");
-}
-
+/** Tapered pointer — wide at the tail, sharp at the tip. */
 function Needle({ value, ghost }) {
   const a = angleFor(value);
-  const [xTip, yTip] = polar(CX, CY, R_INNER - 4, a);
-  const [xBase, yBase] = polar(CX, CY, 10, a);
+  const [xTip, yTip] = polar(R_NEEDLE_TIP, a);
+  const [xL, yL] = polar(R_NEEDLE_TAIL, a - 2.3);
+  const [xR, yR] = polar(R_NEEDLE_TAIL, a + 2.3);
   return (
-    <line
-      x1={xBase}
-      y1={yBase}
-      x2={xTip}
-      y2={yTip}
+    <polygon
+      points={`${xTip},${yTip} ${xL},${yL} ${xR},${yR}`}
       className={ghost ? "gauge-needle-ghost" : "gauge-needle"}
-      strokeLinecap="round"
     />
   );
 }
@@ -77,45 +66,40 @@ function Needle({ value, ghost }) {
 export default function ProjectionGauge({ mean, condMean, sd, playProb = 1 }) {
   const { floor, ceiling, uncertain } = gaugeGeometry({ mean, condMean, sd, playProb });
 
-  // Ticks every 2 points, brightened inside the floor..ceiling band. Reading
-  // the band as discrete ticks rather than a solid fill keeps it a speedometer
-  // and makes the width countable at a glance.
+  // One tick per point. Fine graduations read as an instrument; the chunky
+  // 2-point wedges of the first pass read as a progress bar.
   const ticks = [];
-  for (let v = 0; v < MAX; v += 2) {
-    const inBand = v >= floor && v <= ceiling;
-    ticks.push(
-      <path
-        key={v}
-        d={arcPath(angleFor(v) + 0.6, angleFor(v + 2) - 0.6, R_OUTER, R_INNER)}
-        className={inBand ? "gauge-tick-band" : "gauge-tick"}
-      />
-    );
+  for (let v = 0; v <= MAX; v += 1) {
+    ticks.push(<Tick key={v} value={v} inBand={v >= floor && v <= ceiling} />);
   }
 
   return (
     <div className="gauge">
       <svg
-        viewBox="0 0 220 132"
+        viewBox="0 0 220 140"
         className="gauge-svg"
         role="img"
-        aria-label={`Projected ${mean} points, range ${floor} to ${ceiling}`}
+        aria-label={`Projected ${mean} fantasy points. Range ${floor} to ${ceiling}.${
+          uncertain ? ` ${condMean} if he plays, ${Math.round(playProb * 100)} percent likely.` : ""
+        }`}
       >
-        {ticks}
-        {/* Ghost first so the solid needle always draws over it. */}
+        <g className="gauge-ticks">{ticks}</g>
+        {/* Ghost first, so the real needle always draws over it. */}
         {uncertain && <Needle value={condMean} ghost />}
         <Needle value={mean} />
-        <circle cx={CX} cy={CY} r={6} className="gauge-hub" />
-        <text x={16} y={126} className="gauge-axis">0</text>
-        <text x={CX} y={14} className="gauge-axis gauge-axis-mid">20</text>
-        <text x={204} y={126} className="gauge-axis gauge-axis-end">40</text>
+
+        <text x={6} y={136} className="gauge-axis">0</text>
+        <text x={CX} y={12} className="gauge-axis gauge-axis-mid">20</text>
+        <text x={214} y={136} className="gauge-axis gauge-axis-end">40</text>
       </svg>
 
       <div className="gauge-readout">
         <div className="gauge-hero">{mean}</div>
-        <div className="gauge-hero-label">Fantasy points</div>
+        <div className="gauge-hero-label">Projected</div>
         {uncertain && (
           <div className="gauge-ifplays">
-            {condMean} if he plays · {Math.round(playProb * 100)}%
+            <span className="gauge-ifplays-val">{condMean}</span> if he plays ·{" "}
+            {Math.round(playProb * 100)}%
           </div>
         )}
       </div>

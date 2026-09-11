@@ -13,6 +13,7 @@ import ErrorBoundary from "../src/ErrorBoundary.jsx";
 import RosterRow from "../src/components/RosterRow.jsx";
 import { MoveSheet, PlayerModal, AddPlayerModal } from "../src/components/modals/index.jsx";
 import ProjectionGauge from "../src/components/ProjectionGauge.jsx";
+import PlayerCard from "../src/components/PlayerCard.jsx";
 
 const noop = () => {};
 
@@ -124,6 +125,23 @@ export function screens(state) {
     // dial end rather than swinging off it.
     ["Projection gauge (low, wide)", ProjectionGauge, { mean: 3.6, condMean: 3.6, sd: 2.7, playProb: 1 }],
     ["Projection gauge (over scale)", ProjectionGauge, { mean: 44, condMean: 44, sd: 6, playProb: 1 }],
+    // Both halves of the card matter: every feed present, and every optional
+    // feed absent. Props are pasted by hand and the DvP model has no game logs
+    // in week 1, so the empty state is the COMMON case, not the edge case.
+    ["Player card (all inputs)", PlayerCard, {
+      player: { name: "Bijan Robinson", pos: "RB", team: "ATL", opp: "@PIT", status: "" },
+      dist: { mean: 24.7, condMean: 24.7, sd: 13.5, playProb: 1 },
+      propsEdge: { delta: 2.4, parts: ["18.5 rush att", "82.5 rush yds"] },
+      matchup: { grade: "B+", points: 2.1, detail: "PIT 24th vs RB" },
+      consensus: { rank: "RB2", sources: 3, spread: 1 },
+      book: { spread: "ATL +2.5", total: 44.5, implied: 21 },
+      news: [{ age: "2h", text: "Full participant Wednesday." }],
+    }],
+    ["Player card (no feeds, injured)", PlayerCard, {
+      player: { name: "Brock Bowers", pos: "TE", team: "LV", opp: "vs MIA", status: "D" },
+      dist: { mean: 3.7, condMean: 14.9, sd: 8.9, playProb: 0.25 },
+      propsEdge: null, matchup: null, consensus: null, book: null, news: [],
+    }],
     ["Roster row (filled)", RosterRow, { dest: { zone: "lineup", slotKey: "WR", index: 0 }, player: state.players.wr1, week, byes: state.byes, oppFor: () => "vs CLE", projFor: () => 14.2, index: 0, dragId: null, legalKeys: new Set(), onOpen: noop, onBadge: noop, onDragStart: noop, onDragEnd: noop, onDrop: noop, coarse: false }],
     ["Roster row (empty slot)", RosterRow, { dest: { zone: "bench", index: 3 }, player: null, week, byes: state.byes, oppFor: () => "", projFor: () => null, index: 1, dragId: null, legalKeys: new Set(), onOpen: noop, onBadge: noop, onDragStart: noop, onDragEnd: noop, onDrop: noop, coarse: true }],
   ];
