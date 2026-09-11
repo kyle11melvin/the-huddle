@@ -3358,14 +3358,14 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 /* ============================================================================
    PROJECTION GAUGE
-   Gold is load-bearing here, not decorative: it marks the needle and the
-   in-range band and nothing else, so "where the gold is" reads as "what the
-   projection is". See docs/DESIGN.md.
+   Gold is load-bearing, not decorative: it marks the in-range band and the
+   needle tip and nothing else, so "where the gold is" reads as "what the
+   projection is". Everything outside the range recedes to structure.
    ============================================================================ */
 
 .gauge {
   position: relative;
-  padding: 8px 0 0;
+  padding: 4px 0 0;
 }
 
 .gauge-svg {
@@ -3375,109 +3375,121 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   overflow: visible;
 }
 
-/* Out-of-range ticks stay present but recede — the dial keeps its full 0-40
-   shape so needle position is readable against a constant scale. */
+/* Out-of-range graduations stay visible so the dial keeps its full 0-40 shape
+   — needle position is only meaningful against a constant scale — but they sit
+   well back. */
 .gauge-tick {
-  fill: var(--border-hi);
-  opacity: 0.35;
+  stroke: var(--border-hi);
+  stroke-width: 1.6;
+  opacity: 0.5;
 }
 
+/* In-range ticks run longer AND brighter. Two channels rather than one, so the
+   band survives being glanced at on a phone in sunlight. */
 .gauge-tick-band {
-  fill: var(--gold);
-  opacity: 0.55;
+  stroke: var(--gold);
+  stroke-width: 2.2;
+  opacity: 0.9;
+  filter: drop-shadow(0 0 3px rgba(255, 182, 18, 0.35));
 }
 
 .gauge-needle {
-  stroke: var(--text);
-  stroke-width: 3;
+  fill: var(--text);
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
 }
 
-/* The if-he-plays needle. Deliberately quieter than the real one: it shows
-   where the projection WOULD be, and must never be mistaken for the headline. */
+/* The if-he-plays pointer. Deliberately quieter — it shows where the
+   projection WOULD be and must never be mistaken for the headline. */
 .gauge-needle-ghost {
-  stroke: var(--text-dim);
-  stroke-width: 2;
-  stroke-dasharray: 3 3;
-}
-
-.gauge-hub {
-  fill: var(--surface-hi);
-  stroke: var(--border-hi);
-  stroke-width: 2;
+  fill: var(--text-dim);
+  opacity: 0.75;
 }
 
 .gauge-axis {
   fill: var(--text-dim);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.55;
 }
 
 .gauge-axis-mid {
   text-anchor: middle;
-  fill: var(--gold);
+  fill: var(--text-muted);
 }
 
 .gauge-axis-end {
   text-anchor: end;
 }
 
-/* Sits inside the dial rather than below it, so the number and the needle
-   read as one object. */
+/* Sits in the dial's free centre. The needle floats in the ring (r 64-86) and
+   never reaches here, so nothing overlaps the number at any value. */
 .gauge-readout {
   position: absolute;
   left: 0;
   right: 0;
-  top: 46%;
+  top: 38%;
   text-align: center;
   pointer-events: none;
 }
 
 .gauge-hero {
   font-family: var(--font-display);
-  font-size: clamp(44px, 13vw, 64px);
+  font-size: clamp(46px, 14vw, 68px);
   font-weight: 700;
-  line-height: 0.9;
+  line-height: 0.88;
   color: var(--text);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .gauge-hero-label {
-  margin-top: 4px;
-  font-size: 10px;
+  margin-top: 6px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--text-dim);
 }
 
 .gauge-ifplays {
-  margin-top: 6px;
-  font-family: var(--font-mono);
+  margin-top: 10px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-muted);
 }
 
+.gauge-ifplays-val {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Floor and ceiling sit under the arc ends they describe, not in the page
+   corners — the label belongs to the end of the dial it names. */
 .gauge-ends {
   display: flex;
   justify-content: space-between;
-  margin-top: 2px;
+  margin-top: 10px;
+  padding: 0 2px;
 }
 
 .gauge-end-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text-dim);
 }
 
 .gauge-end-value {
+  margin-top: 1px;
   font-family: var(--font-mono);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .gauge-end-right {
