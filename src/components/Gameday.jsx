@@ -4,6 +4,7 @@ import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
 import { simulateLive, liveNarrative, liveProjection, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
 import { teamLogoUrl } from "../data/teams.js";
+import { pairBySlot, shortName } from "../headToHead.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
 import { scheduleOpp } from "../scheduleSync.js";
 
@@ -337,6 +338,10 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
   const leftResolved = useMemo(() => sortResolved(withLive(leftRows)), [leftRows, withLive]);
   const rightResolved = useMemo(() => sortResolved(withLive(rightRows)), [rightRows, withLive]);
 
+  // Sorted by SLOT, not by live status — the two columns only mean anything if
+  // row N on the left is the same slot as row N on the right.
+  const pairs = useMemo(() => pairBySlot(leftResolved, rightResolved), [leftResolved, rightResolved]);
+
   const myEntries = useMemo(
     () => leftResolved.filter((r) => r.name && r.proj != null).map(entryFor),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -556,56 +561,64 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
       )}
 
       {(leftRows.length > 0 || rightRows.length > 0) && (
-        <div className="gd-boards">
-          <div className="gd-board">
-            <div className="gd-board-head">{leftName}</div>
-            <div className="gd-cols">
-              <span>SLOT</span>
-              <span className="grow">PLAYER</span>
-              <span>PROJ</span>
-              <span>PTS</span>
-              <span>ST</span>
-            </div>
-            {leftResolved.map((r) => (
-              <Row
-                key={r.k}
-                row={r}
-                l={r.l}
-                autoMode={autoMode}
-                isOpen={!autoMode && editing === r.k}
-                onToggle={setEditing}
-                onSetLive={onSetLive}
-                week={week}
-              />
-            ))}
+        <div className="h2h">
+          <div className="h2h-head">
+            <span className="h2h-head-l">{leftName}</span>
+            <span className="h2h-head-c">SLOT</span>
+            <span className="h2h-head-r">{rightName}</span>
           </div>
-          <div className="gd-board">
-            <div className="gd-board-head">{rightName}</div>
-            <div className="gd-cols">
-              <span>SLOT</span>
-              <span className="grow">PLAYER</span>
-              <span>PROJ</span>
-              <span>PTS</span>
-              <span>ST</span>
+          {pairs.map((p) => (
+            <div className="h2h-row" key={p.key}>
+              <H2HSide row={p.mine} side="l" />
+              <span className="h2h-slot">{p.slot}</span>
+              <H2HSide row={p.theirs} side="r" />
             </div>
-            {rightResolved.map((r) => (
-              <Row
-                key={r.k}
-                row={r}
-                l={r.l}
-                autoMode={autoMode}
-                isOpen={!autoMode && editing === r.k}
-                onToggle={setEditing}
-                onSetLive={onSetLive}
-                week={week}
-              />
-            ))}
-          </div>
+          ))}
         </div>
       )}
     </div>
   );
 }
+
+
+/**
+ * One half of a head-to-head row. Projection sits on the INSIDE edge, next to
+ * the slot badge, so the two numbers being compared are adjacent instead of a
+ * screen apart.
+ */
+const H2HSide = ({ row, side }) => {
+  if (!row || !row.name) {
+    return (
+      <div className={`h2h-side ${side} empty`}>
+        <span className="h2h-name dim">Empty</span>
+      </div>
+    );
+  }
+  const l = row.l || {};
+  const status = l.status || "notStarted";
+  const liveProj = liveProjection({
+    pregame: row.proj,
+    ifPlays: row.simProj ?? row.proj,
+    scored: l.scored,
+    pctRemaining: l.pctRemaining,
+    status,
+    playProb: row.playProb ?? 1,
+  });
+  const logo = teamLogoUrl(row.team);
+  return (
+    <div className={`h2h-side ${side} ${status === "final" ? "final" : ""}`}>
+      <span className="h2h-logo">{logo && <img src={logo} alt="" loading="lazy" />}</span>
+      <span className="h2h-name">
+        {status === "inProgress" && <span className="gd-live-dot" />}
+        {shortName(row.name)}
+      </span>
+      <span className="h2h-nums">
+        <b className={`h2h-pts ${status === "final" ? "final" : ""}`}>{Number.isFinite(l.scored) ? l.scored : "—"}</b>
+        <i className={`h2h-proj ${status === "inProgress" ? "live" : ""}`}>{liveProj != null ? liveProj : "—"}</i>
+      </span>
+    </div>
+  );
+};
 
 function EmptyBox({ children }) {
   return (

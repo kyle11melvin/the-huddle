@@ -3976,3 +3976,172 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 .modal-body .pc::before {
   display: none;
 }
+
+/* ============================================================================
+   HEAD-TO-HEAD BOARD
+   One row per starting slot: my player left, the opponent's same-slot player
+   mirrored right, slot badge between them. Projections sit on the INSIDE
+   edges so the two numbers being compared are adjacent rather than a screen
+   apart — which is the entire reason for the layout.
+   ============================================================================ */
+
+.h2h {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.h2h-head {
+  display: grid;
+  grid-template-columns: 1fr 42px 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 11px 12px 9px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.h2h-head-r {
+  text-align: right;
+}
+
+.h2h-head-c {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--text-dim);
+}
+
+.h2h-row {
+  display: grid;
+  grid-template-columns: 1fr 42px 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.h2h-row:last-child {
+  border-bottom: 0;
+}
+
+.h2h-slot {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 0;
+}
+
+.h2h-side {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* Mirrored: the opponent reads right-to-left so both projections land beside
+   the slot badge in the middle. */
+.h2h-side.r {
+  flex-direction: row-reverse;
+}
+
+.h2h-side.final {
+  opacity: 0.68;
+}
+
+.h2h-logo {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+}
+
+.h2h-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.h2h-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.h2h-side.r .h2h-name {
+  text-align: right;
+}
+
+.h2h-name.dim {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.h2h-nums {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+  min-width: 36px;
+}
+
+.h2h-side.r .h2h-nums {
+  align-items: flex-start;
+}
+
+.h2h-pts {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.h2h-pts.final {
+  color: var(--positive);
+}
+
+.h2h-proj {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-style: normal;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A decaying projection is a different claim from a pregame estimate. */
+.h2h-proj.live {
+  color: var(--gold);
+}
+
+@media (max-width: 380px) {
+  .h2h-row,
+  .h2h-head {
+    grid-template-columns: 1fr 40px 1fr;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .h2h-name {
+    font-size: 12px;
+  }
+}
