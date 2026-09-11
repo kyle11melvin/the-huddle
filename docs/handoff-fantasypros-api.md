@@ -65,6 +65,44 @@ curl -s -w "\n%{http_code}\n" -H "x-api-key: <KEY>" \
 
 ---
 
+### STEP 0 RESULT — settled 2026-09-11. Do not re-test.
+
+**Both endpoints 403 on a real machine, real terminal, no sandbox, no proxy —
+with the original key AND with a freshly reset one.**
+
+| test | result |
+| --- | --- |
+| `consensus-rankings` + key | `403 {"message":"Forbidden"}` |
+| `news` + key | `403 {"message":"Forbidden"}` |
+| `public/v2/terms-of-use`, no auth | **`200`** |
+| `consensus-rankings` with **NO key at all** | `403` — byte-identical to the keyed call |
+| deliberately bogus route + key | `403 {"message":"Missing Authentication Token"}` — *different* |
+
+Headers on failure: `x-amzn-errortype: ForbiddenException`, via their CloudFront.
+
+What the controls establish, beyond the doc's original inference:
+
+- **Not network, sandbox or proxy.** `terms-of-use` returns 200 from the same
+  host on the same machine.
+- **Not the route or params.** A bogus route returns a DIFFERENT error
+  (`Missing Authentication Token`). Ours returns `Forbidden`, which is API
+  Gateway saying the route exists and the caller isn't authorized for it.
+- **Decisive:** the request with NO KEY AT ALL returns byte-identical output to
+  the request WITH the key. API Gateway is treating the key as absent — not
+  registered, not attached to a usage plan, or not entitled to these routes.
+
+The key was reset once (the 24h allowance) and retried once. Same result.
+
+**This is now a support question, not an engineering one.** Do not build
+workarounds and do not re-probe the endpoint shape — it has been isolated.
+
+Most likely answer, given the key page renders an upgrade prompt and premium
+access requires Hall of Fame while Kyle has MVP: the free tier issues a key
+that is entitled to nothing. If so this is a subscription decision, not a bug.
+
+**Everything below is blocked until this resolves.** The CSV paste path keeps
+working in the meantime, which is exactly why Guardrail 1 says not to remove it.
+
 ## STEP 1 — Rotate the key, then Vercel env
 
 The current key **was visible in a screenshot** on Sept 8 and was never rotated. Reset it on the FantasyPros key page before it goes anywhere near production, so the production key was never in an image.
