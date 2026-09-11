@@ -110,7 +110,7 @@ export default function LeagueBrowser({ state, ecrIndex, interested, onToggleInt
                 <span className="lb-info">
                   <span className="lb-player">
                     {r.name}
-                    {r.inj && <span className="status-pill" style={{ background: r.inj === "O" || r.inj === "IR" ? "var(--negative)" : "#c99514", marginLeft: 6 }}>{r.inj}</span>}
+                    {r.inj && <span className="status-pill" style={{ background: r.inj === "O" || r.inj === "IR" ? "var(--negative)" : "var(--gold-dk)", marginLeft: 6 }}>{r.inj}</span>}
                   </span>
                   <span className="lb-sub">
                     {r.pos} · {r.nfl || "FA"}

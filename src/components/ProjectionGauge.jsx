@@ -1,58 +1,104 @@
 // ============================================================================
 // Projection gauge — the player card's hero.
 //
-// Speedometer form, per docs/DESIGN.md: floor left, ceiling right, needle at
-// the projection, range as an arc band from the sd the blend already produces.
+// Per docs/DESIGN.md: floor left, ceiling right, needle at the projection,
+// range drawn from the sd the blend already produces.
 //
-// THE SCALE IS FIXED (0-40) AND SHARED BY EVERY POSITION. Needle POSITION
-// carries meaning before any number is read: on the live roster Bijan sits at
-// 62% of the dial and an RB4 at 9%. A per-player scale would flatten that to
-// nothing. K and D/ST sitting low is honest, not a flaw.
+// THE ARC IS MADE OF LIGHT, NOT PAINT. Individual ticks radiate outward — gold
+// and lit inside the floor..ceiling range, thin and recessive outside it — and
+// they burn hotter the closer they sit to the needle. That last part is the
+// whole trick: the eye lands on the value before consciously reading a number,
+// which a solid painted band cannot do.
 //
-// THE NEEDLE CAN LAND OUTSIDE THE BAND, and that is the most useful thing here:
-// mean = condMean × playProb, so a TE at 14.9 if-he-plays with playProb 0.25
-// projects 3.7 — below his own floor of 6.0. The ghost needle at condMean is
+// THE SCALE IS FIXED (0-40) AND SHARED BY EVERY POSITION, so needle POSITION
+// is meaningful before any number is read. K and D/ST sitting low is honest.
+//
+// THE NEEDLE CAN LAND OUTSIDE THE RANGE, and that is the most useful thing
+// here: mean = condMean × playProb, so a TE at 14.9 if-he-plays with playProb
+// 0.25 projects 3.7 — below his own floor. The ghost needle at condMean is
 // what makes that legible rather than looking broken.
-//
-// GEOMETRY NOTE: the needle floats in the ring (r 64→86) instead of pivoting
-// from the centre. A centre-pivoted needle crosses the hero number for any
-// near-vertical value — it sliced straight through "24.7" in the first pass —
-// and no amount of restyling fixes that, because the collision is structural.
-// Floating it leaves the whole middle free for the readout.
 // ============================================================================
 
-import { MAX, angleFor, gaugeGeometry } from "../gaugeGeometry.js";
+import { MAX, CX, CY, R, pointAt, tickHeat, gaugeGeometry } from "../gaugeGeometry.js";
 
-const CX = 110;
-const CY = 116;
-const R_TICK_OUT = 100; // outer edge of every tick
-const R_TICK_IN = 88; // inner edge of a normal tick
-const R_TICK_IN_BAND = 82; // in-band ticks run longer, so the range reads as mass
-const R_NEEDLE_TIP = 86;
-const R_NEEDLE_TAIL = 60;
+const STEP = 0.5; // one tick per half point — 81 of them, fine enough to read as an instrument
+const HERO_DY = -36;
+const CAP_DY = -12;
 
-const polar = (r, deg) => {
-  const rad = (deg * Math.PI) / 180;
-  return [CX + r * Math.cos(rad), CY + r * Math.sin(rad)];
-};
+function Ticks({ floor, ceiling, needle }) {
+  const dim = [];
+  const lit = [];
+  const labels = [];
 
-function Tick({ value, inBand }) {
-  const a = angleFor(value);
-  const [x1, y1] = polar(inBand ? R_TICK_IN_BAND : R_TICK_IN, a);
-  const [x2, y2] = polar(R_TICK_OUT, a);
-  return <line x1={x1} y1={y1} x2={x2} y2={y2} className={inBand ? "gauge-tick-band" : "gauge-tick"} />;
+  for (let v = 0; v <= MAX + 1e-9; v += STEP) {
+    const inRange = v >= floor && v <= ceiling;
+    const major = Math.abs(v % 10) < 1e-3;
+    const len = major ? (inRange ? 22 : 14) : inRange ? 17 : 9;
+    const [x1, y1] = pointAt(v, R - len);
+    const [x2, y2] = pointAt(v, R);
+
+    if (inRange) {
+      // Hotter toward the needle: brighter, wider, more opaque.
+      const heat = tickHeat(v, needle);
+      lit.push(
+        <line
+          key={v}
+          x1={x1.toFixed(2)}
+          y1={y1.toFixed(2)}
+          x2={x2.toFixed(2)}
+          y2={y2.toFixed(2)}
+          className={heat > 0.55 ? "gg-tick-hot" : "gg-tick-lit"}
+          strokeWidth={(2.6 + heat * 1.5).toFixed(2)}
+          opacity={(0.62 + heat * 0.38).toFixed(3)}
+          strokeLinecap="round"
+        />
+      );
+    } else {
+      dim.push(
+        <line
+          key={v}
+          x1={x1.toFixed(2)}
+          y1={y1.toFixed(2)}
+          x2={x2.toFixed(2)}
+          y2={y2.toFixed(2)}
+          className="gg-tick-dim"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+        />
+      );
+    }
+
+    if (major) {
+      const [lx, ly] = pointAt(v, R - 28);
+      labels.push(
+        <text key={`l${v}`} x={lx.toFixed(2)} y={ly.toFixed(2)} className="gg-axis" textAnchor="middle" dominantBaseline="middle">
+          {v.toFixed(0)}
+        </text>
+      );
+    }
+  }
+
+  return (
+    <>
+      <g>{dim}</g>
+      <g filter="url(#ggGlow)">{lit}</g>
+      <g>{labels}</g>
+    </>
+  );
 }
 
-/** Tapered pointer — wide at the tail, sharp at the tip. */
+/** Full-length needle with a counterweight tail, anchored in a visible hub. */
 function Needle({ value, ghost }) {
-  const a = angleFor(value);
-  const [xTip, yTip] = polar(R_NEEDLE_TIP, a);
-  const [xL, yL] = polar(R_NEEDLE_TAIL, a - 2.3);
-  const [xR, yR] = polar(R_NEEDLE_TAIL, a + 2.3);
+  const [tx, ty] = pointAt(value, R - 34);
+  const [bx, by] = pointAt(value, -28); // negative radius = the tail, opposite the tip
   return (
-    <polygon
-      points={`${xTip},${yTip} ${xL},${yL} ${xR},${yR}`}
-      className={ghost ? "gauge-needle-ghost" : "gauge-needle"}
+    <line
+      x1={bx.toFixed(2)}
+      y1={by.toFixed(2)}
+      x2={tx.toFixed(2)}
+      y2={ty.toFixed(2)}
+      className={ghost ? "gg-needle-ghost" : "gg-needle"}
+      strokeLinecap="round"
     />
   );
 }
@@ -62,56 +108,97 @@ function Needle({ value, ghost }) {
  * @param {number} condMean  the if-he-plays branch
  * @param {number} sd        spread of the if-he-plays branch (describes condMean)
  * @param {number} playProb  1 when healthy; < 1 pulls mean below condMean
+ * @param {number} show      value the dial is currently reading (tab selector)
+ * @param {string} caption   label under the hero number
  */
-export default function ProjectionGauge({ mean, condMean, sd, playProb = 1 }) {
+export default function ProjectionGauge({ mean, condMean, sd, playProb = 1, show, caption = "PROJECTED" }) {
   const { floor, ceiling, uncertain } = gaugeGeometry({ mean, condMean, sd, playProb });
-
-  // One tick per point. Fine graduations read as an instrument; the chunky
-  // 2-point wedges of the first pass read as a progress bar.
-  const ticks = [];
-  for (let v = 0; v <= MAX; v += 1) {
-    ticks.push(<Tick key={v} value={v} inBand={v >= floor && v <= ceiling} />);
-  }
+  const value = Number.isFinite(show) ? show : mean;
 
   return (
-    <div className="gauge">
+    <div className="gg">
       <svg
-        viewBox="0 0 220 140"
-        className="gauge-svg"
+        className="gg-svg"
+        viewBox="0 0 340 206"
         role="img"
-        aria-label={`Projected ${mean} fantasy points. Range ${floor} to ${ceiling}.${
+        aria-label={`Projected ${mean} fantasy points. Floor ${floor}, ceiling ${ceiling}, on a 0 to ${MAX} scale.${
           uncertain ? ` ${condMean} if he plays, ${Math.round(playProb * 100)} percent likely.` : ""
         }`}
       >
-        <g className="gauge-ticks">{ticks}</g>
-        {/* Ghost first, so the real needle always draws over it. */}
-        {uncertain && <Needle value={condMean} ghost />}
-        <Needle value={mean} />
+        <defs>
+          <filter id="ggGlow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="5" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="ggNeedleGlow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="3.2" result="n" />
+            <feMerge>
+              <feMergeNode in="n" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <radialGradient id="ggHub" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" className="gg-hub-0" />
+            <stop offset="55%" className="gg-hub-1" />
+            <stop offset="100%" className="gg-hub-2" />
+          </radialGradient>
+        </defs>
 
-        <text x={6} y={136} className="gauge-axis">0</text>
-        <text x={CX} y={12} className="gauge-axis gauge-axis-mid">20</text>
-        <text x={214} y={136} className="gauge-axis gauge-axis-end">40</text>
+        {/* warm light spilling from behind the dial */}
+        <circle cx={CX} cy={CY} r={150} fill="url(#ggHub)" />
+
+        <Ticks floor={floor} ceiling={ceiling} needle={value} />
+
+        {/* floor and ceiling marked ON the arc — the visible range is the concept */}
+        {[floor, ceiling].map((v) => {
+          const [ax, ay] = pointAt(v, R - 27);
+          const [bx, by] = pointAt(v, R + 11);
+          return (
+            <line
+              key={`edge${v}`}
+              x1={ax.toFixed(2)}
+              y1={ay.toFixed(2)}
+              x2={bx.toFixed(2)}
+              y2={by.toFixed(2)}
+              className="gg-edge"
+              strokeLinecap="round"
+            />
+          );
+        })}
+
+        <g filter="url(#ggNeedleGlow)">
+          {uncertain && <Needle value={condMean} ghost />}
+          <Needle value={value} />
+          <circle cx={CX} cy={CY} r={10} className="gg-hub-ring" />
+          <circle cx={CX} cy={CY} r={2.8} className="gg-hub-dot" />
+        </g>
+
+        <text x={CX} y={CY + HERO_DY} textAnchor="middle" className="gg-hero">
+          {value.toFixed(1)}
+        </text>
+        <text x={CX} y={CY + CAP_DY} textAnchor="middle" className="gg-cap">
+          {caption}
+        </text>
       </svg>
 
-      <div className="gauge-readout">
-        <div className="gauge-hero">{mean}</div>
-        <div className="gauge-hero-label">Projected</div>
-        {uncertain && (
-          <div className="gauge-ifplays">
-            <span className="gauge-ifplays-val">{condMean}</span> if he plays ·{" "}
-            {Math.round(playProb * 100)}%
-          </div>
-        )}
-      </div>
-
-      <div className="gauge-ends">
-        <div className="gauge-end">
-          <div className="gauge-end-label">Floor</div>
-          <div className="gauge-end-value">{floor}</div>
+      {uncertain && (
+        <div className="gg-ifplays">
+          <span className="gg-ifplays-val">{condMean}</span> if he plays · {Math.round(playProb * 100)}%
         </div>
-        <div className="gauge-end gauge-end-right">
-          <div className="gauge-end-label">Ceiling</div>
-          <div className="gauge-end-value">{ceiling}</div>
+      )}
+
+      <div className="gg-range">
+        <div>
+          <span className="gg-range-lab">Floor</span>
+          <span className="gg-range-val">{floor}</span>
+        </div>
+        <div className="gg-range-r">
+          <span className="gg-range-lab">Ceiling</span>
+          <span className="gg-range-val">{ceiling}</span>
         </div>
       </div>
     </div>

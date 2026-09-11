@@ -38,7 +38,7 @@ export function Avatar({ player, className = "" }) {
 
 export function StatusPill({ status }) {
   if (!status) return null;
-  const bg = status === "O" || status === "IR" ? "var(--negative)" : status === "BYE" ? "var(--text-dim)" : "#c99514";
+  const bg = status === "O" || status === "IR" ? "var(--negative)" : status === "BYE" ? "var(--text-dim)" : "var(--gold-dk)";
   return (
     <span className="status-pill" style={{ background: bg }}>
       {status}

@@ -18,8 +18,18 @@
   --accent-bright: #6b93ff;
   --accent-soft: rgba(79, 127, 255, 0.12);
   --accent-border: rgba(79, 127, 255, 0.35);
-  --gold: #ffb612;
-  --gold-soft: rgba(255, 182, 18, 0.12);
+  /* ONE GOLD. Every gold in the app derives from these two lines — the hex for
+     solid fills, the channel triplet for anything with alpha. Changing the
+     colour is changing one value, not hunting 28 rgba() literals. Team colours
+     in data/teams.js are NOT this and must never be swapped with it. */
+  --gold: #e8b95a;
+  --gold-rgb: 232, 185, 90;
+  /* The lit end of the same gold, for gradients and emissive text. Derived by
+     eye from --gold, not an unrelated yellow. */
+  --gold-hi: #ffd98a;
+  /* Darkened gold for small filled chips, where the lit gold would glare. */
+  --gold-dk: #b8912f;
+  --gold-soft: rgba(var(--gold-rgb), 0.12);
   --positive: #2ed584;
   --negative: #ff5c6c;
   --violet: #a78bfa;
@@ -99,7 +109,7 @@ select option {
   padding-top: env(safe-area-inset-top, 0px);
   background:
     radial-gradient(ellipse 90% 120% at 15% -20%, rgba(79, 127, 255, 0.32), transparent 55%),
-    radial-gradient(ellipse 70% 100% at 85% -30%, rgba(255, 182, 18, 0.16), transparent 50%),
+    radial-gradient(ellipse 70% 100% at 85% -30%, rgba(var(--gold-rgb), 0.16), transparent 50%),
     radial-gradient(ellipse 120% 80% at 50% 120%, rgba(20, 30, 55, 0.9), transparent 70%),
     linear-gradient(175deg, #101b33 0%, #0c1322 55%, var(--bg) 100%);
   border-bottom: 1px solid var(--border);
@@ -221,10 +231,10 @@ select option {
   font-weight: 700;
   letter-spacing: 1px;
   color: #0a0e17;
-  background: linear-gradient(135deg, var(--gold), #ffd35c);
+  background: linear-gradient(135deg, var(--gold), var(--gold-hi));
   border-radius: 999px;
   padding: 7px 14px;
-  box-shadow: 0 4px 18px rgba(255, 182, 18, 0.3);
+  box-shadow: 0 4px 18px rgba(var(--gold-rgb), 0.3);
 }
 
 .badge-sync {
@@ -571,7 +581,7 @@ select option {
 .stars { display: flex; gap: 2px; align-items: center; }
 
 .stars .star { font-size: 12.5px; line-height: 1; color: var(--border-hi); }
-.stars .star.lit { color: var(--gold); text-shadow: 0 0 6px rgba(255, 182, 18, 0.5); }
+.stars .star.lit { color: var(--gold); text-shadow: 0 0 6px rgba(var(--gold-rgb), 0.5); }
 
 /* scout note */
 .scout-preview {
@@ -598,7 +608,7 @@ select option {
   letter-spacing: 1.2px;
   color: var(--gold);
   background: var(--gold-soft);
-  border: 1px solid rgba(255, 182, 18, 0.3);
+  border: 1px solid rgba(var(--gold-rgb), 0.3);
   padding: 2px 7px;
   border-radius: 4px;
 }
@@ -1068,10 +1078,10 @@ select option {
   font-weight: 700;
   letter-spacing: 1px;
   color: #0a0e17;
-  background: linear-gradient(135deg, var(--gold), #ffd35c);
+  background: linear-gradient(135deg, var(--gold), var(--gold-hi));
   border-radius: 999px;
   padding: 7px 13px;
-  box-shadow: 0 4px 18px rgba(255, 182, 18, 0.3);
+  box-shadow: 0 4px 18px rgba(var(--gold-rgb), 0.3);
   cursor: pointer;
   transition: filter 0.15s ease, transform 0.12s ease;
 }
@@ -1255,7 +1265,7 @@ select option {
   border: 1px solid var(--border-hi);
 }
 
-.limit-chip.full { color: var(--gold); border-color: rgba(255, 182, 18, 0.4); background: var(--gold-soft); }
+.limit-chip.full { color: var(--gold); border-color: rgba(var(--gold-rgb), 0.4); background: var(--gold-soft); }
 
 .limit-grid { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
 
@@ -1367,7 +1377,7 @@ select option {
 }
 
 .star-picker .star:hover { transform: scale(1.15); }
-.star-picker .star.lit { color: var(--gold); text-shadow: 0 0 8px rgba(255, 182, 18, 0.5); }
+.star-picker .star.lit { color: var(--gold); text-shadow: 0 0 8px rgba(var(--gold-rgb), 0.5); }
 
 .star-clear {
   font-family: var(--font-mono);
@@ -1464,8 +1474,8 @@ select option {
   margin-top: 12px;
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 182, 18, 0.35);
-  background: rgba(255, 182, 18, 0.06);
+  border: 1px solid rgba(var(--gold-rgb), 0.35);
+  background: rgba(var(--gold-rgb), 0.06);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1484,7 +1494,7 @@ select option {
   color: var(--text-dim);
 }
 .today-doubt.d { border-color: rgba(239, 68, 68, 0.4); }
-.today-doubt.q { border-color: rgba(255, 182, 18, 0.4); }
+.today-doubt.q { border-color: rgba(var(--gold-rgb), 0.4); }
 
 .today-opp { margin-top: 11px; font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
 
@@ -1510,7 +1520,7 @@ select option {
 .lab-sources-gap {
   margin-left: auto;
   font-size: 9.5px;
-  border: 1px solid rgba(255, 182, 18, 0.4);
+  border: 1px solid rgba(var(--gold-rgb), 0.4);
   border-radius: 999px;
   padding: 1px 6px;
 }
@@ -1904,7 +1914,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 
 .check-card.bad { border-color: rgba(255, 92, 108, 0.45); }
-.check-card.warn { border-color: rgba(255, 182, 18, 0.4); }
+.check-card.warn { border-color: rgba(var(--gold-rgb), 0.4); }
 .check-card.clean { display: flex; align-items: center; gap: 13px; }
 
 .check-head { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
@@ -1924,7 +1934,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 .check-icon.ok { color: var(--positive); background: rgba(46, 213, 132, 0.14); border: 1px solid rgba(46, 213, 132, 0.4); }
 .check-icon.bad { color: var(--negative); background: rgba(255, 92, 108, 0.14); border: 1px solid rgba(255, 92, 108, 0.4); }
-.check-icon.warn { color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(255, 182, 18, 0.4); }
+.check-icon.warn { color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(var(--gold-rgb), 0.4); }
 
 .check-title { font-size: 14.5px; font-weight: 700; }
 .check-sub { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
@@ -2137,7 +2147,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   flex-shrink: 0;
 }
 .own-chip.free { color: var(--positive); border-color: rgba(52, 211, 153, 0.4); }
-.own-chip.taken { color: var(--gold); border-color: rgba(255, 182, 18, 0.35); }
+.own-chip.taken { color: var(--gold); border-color: rgba(var(--gold-rgb), 0.35); }
 .own-chip.mine { color: var(--accent); border-color: rgba(96, 165, 250, 0.4); }
 
 .wire-row { display: flex; align-items: center; gap: 11px; padding: 13px 16px; }
@@ -2147,7 +2157,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 .wire-row.clickable { cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
 .wire-row.clickable:hover { border-color: var(--gold); }
 .wire-row.clickable:hover .star-btn { color: var(--gold); transform: scale(1.15); }
-.wire-row.watching { border-color: rgba(255, 182, 18, 0.45); }
+.wire-row.watching { border-color: rgba(var(--gold-rgb), 0.45); }
 
 .sug-reason {
   display: block;
@@ -2322,7 +2332,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 .wi-metric.up { color: var(--positive); border-color: rgba(46, 213, 132, 0.35); }
 .wi-metric.down { color: var(--text-dim); }
-.wi-metric.bid { color: var(--gold); border-color: rgba(255, 182, 18, 0.4); background: var(--gold-soft); }
+.wi-metric.bid { color: var(--gold); border-color: rgba(var(--gold-rgb), 0.4); background: var(--gold-soft); }
 
 .wi-sched { font-family: var(--font-mono); font-size: 10.5px; color: var(--accent-bright); margin-top: 9px; }
 .wi-bye { color: var(--text-dim); }
@@ -2348,7 +2358,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 
 .alert-card.red { border-color: rgba(255, 92, 108, 0.5); background: rgba(255, 92, 108, 0.07); }
-.alert-card.gold { border-color: rgba(255, 182, 18, 0.45); background: var(--gold-soft); }
+.alert-card.gold { border-color: rgba(var(--gold-rgb), 0.45); background: var(--gold-soft); }
 .alert-card.blue { border-color: var(--accent-border); background: var(--accent-soft); }
 
 .alert-icon { font-size: 17px; line-height: 1.2; flex-shrink: 0; }
@@ -2381,7 +2391,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   font-size: 12px;
   color: var(--gold);
   background: var(--gold-soft);
-  border: 1px solid rgba(255, 182, 18, 0.3);
+  border: 1px solid rgba(var(--gold-rgb), 0.3);
   border-radius: 9px;
   padding: 9px 12px;
 }
@@ -2493,7 +2503,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   line-height: 1.55;
   color: var(--gold);
   background: var(--gold-soft);
-  border: 1px solid rgba(255, 182, 18, 0.3);
+  border: 1px solid rgba(var(--gold-rgb), 0.3);
   border-radius: 9px;
   padding: 10px 12px;
 }
@@ -2545,7 +2555,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   letter-spacing: 3px;
   color: var(--gold);
   background: var(--gold-soft);
-  border: 1px solid rgba(255, 182, 18, 0.3);
+  border: 1px solid rgba(var(--gold-rgb), 0.3);
   border-radius: 10px;
   padding: 11px 14px;
   text-align: center;
@@ -2770,7 +2780,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 
 .star-btn:hover { color: var(--gold); transform: scale(1.15); }
-.star-btn.on { color: var(--gold); text-shadow: 0 0 8px rgba(255, 182, 18, 0.5); }
+.star-btn.on { color: var(--gold); text-shadow: 0 0 8px rgba(var(--gold-rgb), 0.5); }
 
 .lb-foot { margin-top: 12px; font-size: 11px; color: var(--text-dim); font-style: italic; }
 
@@ -2873,7 +2883,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   line-height: 1.55;
   color: var(--gold);
   background: var(--gold-soft);
-  border: 1px solid rgba(255, 182, 18, 0.3);
+  border: 1px solid rgba(var(--gold-rgb), 0.3);
   border-radius: 9px;
   padding: 10px 12px;
 }
@@ -3012,7 +3022,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 .sim-range.est { font-style: italic; }
 
 .sim-advice { margin-top: 14px; font-size: 12.5px; line-height: 1.6; border-radius: 10px; padding: 11px 13px; }
-.sim-advice.ceiling { color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(255, 182, 18, 0.3); }
+.sim-advice.ceiling { color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(var(--gold-rgb), 0.3); }
 .sim-advice.floor { color: var(--positive); background: rgba(46, 213, 132, 0.1); border: 1px solid rgba(46, 213, 132, 0.3); }
 .sim-advice.balanced { color: var(--text-muted); background: var(--bg-raised); border: 1px solid var(--border); }
 
@@ -3357,408 +3367,6 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 
 /* ============================================================================
-   PROJECTION GAUGE
-   Gold is load-bearing, not decorative: it marks the in-range band and the
-   needle tip and nothing else, so "where the gold is" reads as "what the
-   projection is". Everything outside the range recedes to structure.
-   ============================================================================ */
-
-.gauge {
-  position: relative;
-  padding: 4px 0 0;
-}
-
-.gauge-svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  overflow: visible;
-}
-
-/* Out-of-range graduations stay visible so the dial keeps its full 0-40 shape
-   — needle position is only meaningful against a constant scale — but they sit
-   well back. */
-.gauge-tick {
-  stroke: var(--border-hi);
-  stroke-width: 1.6;
-  opacity: 0.5;
-}
-
-/* In-range ticks run longer AND brighter. Two channels rather than one, so the
-   band survives being glanced at on a phone in sunlight. */
-.gauge-tick-band {
-  stroke: var(--gold);
-  stroke-width: 2.2;
-  opacity: 0.9;
-  filter: drop-shadow(0 0 3px rgba(255, 182, 18, 0.35));
-}
-
-.gauge-needle {
-  fill: var(--text);
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
-}
-
-/* The if-he-plays pointer. Deliberately quieter — it shows where the
-   projection WOULD be and must never be mistaken for the headline. */
-.gauge-needle-ghost {
-  fill: var(--text-dim);
-  opacity: 0.75;
-}
-
-.gauge-axis {
-  fill: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  opacity: 0.55;
-}
-
-.gauge-axis-mid {
-  text-anchor: middle;
-  fill: var(--text-muted);
-}
-
-.gauge-axis-end {
-  text-anchor: end;
-}
-
-/* Sits in the dial's free centre. The needle floats in the ring (r 64-86) and
-   never reaches here, so nothing overlaps the number at any value. */
-.gauge-readout {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 38%;
-  text-align: center;
-  pointer-events: none;
-}
-
-.gauge-hero {
-  font-family: var(--font-display);
-  font-size: clamp(46px, 14vw, 68px);
-  font-weight: 700;
-  line-height: 0.88;
-  color: var(--text);
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
-.gauge-hero-label {
-  margin-top: 6px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.gauge-ifplays {
-  margin-top: 10px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted);
-}
-
-.gauge-ifplays-val {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  color: var(--text);
-}
-
-/* Floor and ceiling sit under the arc ends they describe, not in the page
-   corners — the label belongs to the end of the dial it names. */
-.gauge-ends {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 10px;
-  padding: 0 2px;
-}
-
-.gauge-end-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.gauge-end-value {
-  margin-top: 1px;
-  font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.gauge-end-right {
-  text-align: right;
-}
-
-/* ============================================================================
-   PLAYER CARD
-   Layered surfaces over the navy ground, gold reserved for the edge. The
-   hierarchy is literal: gauge, then the props row at full width because that
-   is the app's edge, then three equal tiles, then news.
-   ============================================================================ */
-
-.pc {
-  background:
-    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(79, 127, 255, 0.14), transparent 60%),
-    linear-gradient(180deg, var(--bg-raised) 0%, var(--bg) 70%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px 18px 18px;
-  box-shadow: var(--shadow-lift);
-}
-
-.pc-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.pc-name {
-  font-family: var(--font-display);
-  font-size: clamp(24px, 7vw, 33px);
-  font-weight: 700;
-  line-height: 0.95;
-  letter-spacing: 0.01em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-
-.pc-meta {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-top: 7px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.pc-pos {
-  color: var(--gold);
-  font-weight: 800;
-}
-
-.pc-dot {
-  color: var(--text-dim);
-}
-
-.pc-opp {
-  padding: 2px 7px;
-  border: 1px solid var(--border-hi);
-  border-radius: 5px;
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
-.pc-status {
-  flex: none;
-  min-width: 28px;
-  padding: 4px 8px;
-  border-radius: 7px;
-  text-align: center;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 700;
-  background: var(--surface-hi);
-  color: var(--text-muted);
-  border: 1px solid var(--border-hi);
-}
-
-/* Status is the one sanctioned exception to gold-only: it carries meaning gold
-   cannot express, and a reader must not have to decode it. */
-.pc-status-q {
-  color: #ffd166;
-  border-color: rgba(255, 209, 102, 0.4);
-  background: rgba(255, 209, 102, 0.1);
-}
-
-.pc-status-d,
-.pc-status-o,
-.pc-status-ir {
-  color: var(--negative);
-  border-color: rgba(255, 92, 108, 0.4);
-  background: rgba(255, 92, 108, 0.1);
-}
-
-.pc-gauge {
-  margin: 6px 0 18px;
-}
-
-/* The edge row. Full width and gold-bordered — the one element allowed to
-   shout, because it is the input the whole app is built around. */
-.pc-edge {
-  padding: 13px 15px;
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(255, 182, 18, 0.11), rgba(255, 182, 18, 0.04));
-  border: 1px solid rgba(255, 182, 18, 0.32);
-}
-
-.pc-edge-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-}
-
-.pc-edge-label {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--gold);
-}
-
-.pc-edge-value {
-  font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 700;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-.pc-edge-sub {
-  margin-top: 5px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-/* No lines pasted is the COMMON case today, so it gets a real state rather
-   than a zero that would read as a confident "no edge". */
-.pc-edge-empty {
-  background: var(--surface);
-  border-color: var(--border);
-}
-
-.pc-edge-empty .pc-edge-label {
-  color: var(--text-dim);
-}
-
-.pc-edge-empty .pc-edge-value {
-  color: var(--text-dim);
-}
-
-.pc-tiles {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.pc-tile {
-  padding: 11px 10px 10px;
-  border-radius: 11px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  text-align: center;
-}
-
-.pc-tile-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.pc-tile-value {
-  margin-top: 6px;
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text);
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.pc-tile-sub {
-  margin-top: 5px;
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-dim);
-  line-height: 1.3;
-}
-
-.pc-tile-empty .pc-tile-value {
-  color: var(--text-dim);
-}
-
-.pc-news {
-  margin-top: 16px;
-  border-top: 1px solid var(--border);
-  padding-top: 13px;
-}
-
-.pc-news-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin-bottom: 9px;
-}
-
-.pc-news-row {
-  display: flex;
-  gap: 10px;
-  padding: 5px 0;
-  font-size: 12.5px;
-  line-height: 1.4;
-}
-
-.pc-news-age {
-  flex: none;
-  width: 30px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  padding-top: 1px;
-}
-
-.pc-news-text {
-  color: var(--text-muted);
-}
-
-/* Photo sits left of the identity block; Avatar already handles the ESPN
-   headshot, the team-logo fallback and initials when both fail. */
-.pc-head .pc-avatar {
-  width: 56px;
-  height: 56px;
-  flex: none;
-  margin-right: 12px;
-}
-
-.pc-ident {
-  flex: 1;
-  min-width: 0;
-}
-
-/* A rank the injury has overtaken. Muted rather than removed — that it exists
-   and is now unreliable is itself the useful thing to show. */
-.pc-tile-value.pc-stale {
-  color: var(--text-dim);
-  text-decoration: line-through;
-  text-decoration-color: var(--text-dim);
-  text-decoration-thickness: 1.5px;
-}
-
-/* A projection that is currently decaying is not the same claim as a pregame
-   estimate, and the row should not imply otherwise. */
-.gd-proj-live {
-  color: var(--gold);
-  font-variant-numeric: tabular-nums;
-}
-
-/* ============================================================================
    DATA PROVENANCE WARNING
    Shown when the numbers on screen are not what the reader would assume —
    rank estimates standing in for projections, or a sync that stopped hours
@@ -3773,8 +3381,8 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   margin-top: 12px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: rgba(255, 182, 18, 0.09);
-  border: 1px solid rgba(255, 182, 18, 0.34);
+  background: rgba(var(--gold-rgb), 0.09);
+  border: 1px solid rgba(var(--gold-rgb), 0.34);
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-muted);
@@ -3790,4 +3398,581 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   font-weight: 800;
   letter-spacing: 0.12em;
   white-space: nowrap;
+}
+
+
+/* Inside the modal the card is a section, not a standalone surface. */
+
+/* ============================================================================
+   PLAYER CARD + PROJECTION GAUGE
+   The "lit" treatment: the arc is built from light rather than paint, and the
+   card is an object with depth rather than a flat panel.
+
+   Every colour below comes from a token defined in ONE place per palette, so
+   the current and reference schemes differ only by that block — nothing else
+   in this section changes between them.
+   ============================================================================ */
+
+:root {
+  /* current app palette */
+  --g-gold: var(--gold);
+  --g-gold-hi: var(--gold-hi);
+  --g-tick-off: #2e3b58;
+  --g-good: #2ed584;
+  --g-bad: #ff5c6c;
+  --g-ink: #eef2f8;
+  --g-muted: #9aa5b8;
+  --g-dim: #64708a;
+  --g-card-top: #16243c;
+  --g-card-mid: #101b2e;
+  --g-card-bot: #0a1321;
+  --g-card-spill: rgba(58, 96, 148, 0.42);
+}
+
+/* ---- card shell: a lit top edge, falling to near-black, sitting on shadow ---- */
+
+.pc {
+  position: relative;
+  border-radius: 20px;
+  padding: 21px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+  color: var(--g-ink);
+  background:
+    radial-gradient(130% 70% at 50% -8%, var(--g-card-spill) 0%, rgba(18, 30, 50, 0) 55%),
+    linear-gradient(178deg, var(--g-card-top) 0%, var(--g-card-mid) 38%, var(--g-card-bot) 100%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.09) inset,
+    0 0 0 1px rgba(120, 160, 215, 0.13),
+    0 28px 70px -28px rgba(0, 0, 0, 0.95),
+    0 0 90px -30px rgba(var(--gold-rgb), 0.18);
+}
+
+/* warm light spilling off the gauge, behind everything */
+.pc::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 150px;
+  width: 320px;
+  height: 320px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(var(--gold-rgb), 0.18) 0%, rgba(var(--gold-rgb), 0.05) 38%, rgba(var(--gold-rgb), 0) 68%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.pc > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- header ---- */
+
+.pc-head {
+  display: grid;
+  grid-template-columns: 66px 1fr auto;
+  gap: 13px;
+  align-items: center;
+}
+
+/* Gold hairline, dark spacer ring, and a wash of the player's own team colour
+   behind the cutout — `--team` is set inline from teams.js. */
+.pc-shot {
+  position: relative;
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(90% 80% at 50% 118%, color-mix(in srgb, var(--team) 85%, transparent) 0%, color-mix(in srgb, var(--team) 18%, transparent) 55%, transparent 78%),
+    linear-gradient(158deg, #253b5c 0%, #111d31 100%);
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--g-gold) 38%, transparent),
+    0 0 0 4px rgba(10, 18, 30, 0.9),
+    0 0 26px -6px color-mix(in srgb, var(--team) 75%, transparent),
+    0 1px 0 rgba(255, 255, 255, 0.14) inset;
+}
+
+.pc-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+
+.pc-silhouette {
+  width: 78%;
+  height: 78%;
+  margin-top: 14%;
+  display: block;
+  fill: #42618c;
+}
+
+.pc-who {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pc-name {
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 0.95;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
+}
+
+.pc-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--g-muted);
+}
+
+.pc-pos {
+  color: var(--g-gold);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--g-gold) 50%, transparent);
+}
+
+.pc-dot {
+  color: var(--g-dim);
+}
+
+.pc-opp {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  border-radius: 5px;
+  padding: 1px 6px;
+  color: #9aacc4;
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07) inset;
+}
+
+.pc-status {
+  flex: none;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--g-muted);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}
+
+/* Status is the other sanctioned exception to gold-only: it carries meaning
+   gold cannot express, and must never need decoding. */
+.pc-status-q {
+  color: var(--g-gold-hi);
+  background: color-mix(in srgb, var(--g-gold) 12%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--g-gold) 40%, transparent) inset;
+}
+
+.pc-status-d,
+.pc-status-o,
+.pc-status-ir {
+  color: var(--g-bad);
+  background: color-mix(in srgb, var(--g-bad) 12%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--g-bad) 40%, transparent) inset;
+}
+
+/* ---- gauge ---- */
+
+.gg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.gg-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.gg-tick-dim {
+  stroke: var(--g-tick-off);
+  opacity: 0.85;
+}
+
+.gg-tick-lit {
+  stroke: var(--g-gold);
+}
+
+/* Hottest ticks, nearest the needle. Two channels — hue and opacity — so the
+   gradient survives being glanced at on a phone in sunlight. */
+.gg-tick-hot {
+  stroke: var(--g-gold-hi);
+}
+
+.gg-axis {
+  fill: var(--g-dim);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+/* Floor and ceiling marked ON the arc — the visible range is the concept. */
+.gg-edge {
+  stroke: #ffe6b4;
+  stroke-width: 2;
+  opacity: 0.5;
+}
+
+.gg-needle {
+  stroke: #ffffff;
+  stroke-width: 3.6;
+}
+
+/* The if-he-plays needle. Quieter on purpose — it shows where the projection
+   WOULD be and must never be mistaken for the headline. */
+.gg-needle-ghost {
+  stroke: var(--g-dim);
+  stroke-width: 2.6;
+  opacity: 0.8;
+}
+
+.gg-hub-ring {
+  fill: #0c1728;
+  stroke: #ffffff;
+  stroke-width: 2.8;
+}
+
+.gg-hub-dot {
+  fill: #ffffff;
+}
+
+.gg-hub-0 { stop-color: var(--g-gold); stop-opacity: 0.3; }
+.gg-hub-1 { stop-color: var(--g-gold); stop-opacity: 0.07; }
+.gg-hub-2 { stop-color: var(--g-gold); stop-opacity: 0; }
+
+/* The needle sweeps through the middle of the dial at most values, so the
+   hero number carries a knockout halo in the card colour: paint-order puts the
+   stroke UNDER the fill, and the needle reads as passing behind the number
+   instead of slicing it. Sized down from the reference so it stops colliding
+   with the "20" axis label. */
+.gg-hero {
+  fill: #ffffff;
+  font-family: var(--font-body);
+  font-size: 52px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--g-card-mid);
+  stroke-width: 7px;
+  stroke-linejoin: round;
+}
+
+.gg-cap {
+  fill: #7f93ad;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 3.4px;
+}
+
+.gg-ifplays {
+  margin-top: -10px;
+  font-size: 12px;
+  color: var(--g-muted);
+}
+
+.gg-ifplays-val {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--g-ink);
+}
+
+.gg-range {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  margin-top: -14px;
+  padding: 0 2px;
+}
+
+.gg-range-lab {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+  margin-bottom: 1px;
+}
+
+.gg-range-val {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #a9bbd2;
+}
+
+.gg-range-r {
+  text-align: right;
+}
+
+.pc-nodist {
+  padding: 26px 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+}
+
+/* ---- Projection / Floor / Ceiling selector ---- */
+
+.pc-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+
+.pc-tab {
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 5px 9px;
+  text-align: center;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--g-muted);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07) inset, 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+}
+
+.pc-tab span {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+  margin-bottom: 2px;
+}
+
+.pc-tab b {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pc-tab[aria-pressed="true"] {
+  color: var(--g-gold-hi);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--g-gold) 20%, transparent), color-mix(in srgb, var(--g-gold) 5%, transparent));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--g-gold) 55%, transparent) inset,
+    0 0 22px -6px color-mix(in srgb, var(--g-gold) 65%, transparent),
+    0 1px 0 rgba(255, 255, 255, 0.14) inset;
+}
+
+.pc-tab[aria-pressed="true"] span {
+  color: var(--g-gold);
+}
+
+/* ---- props: the edge, lit from inside ---- */
+
+.pc-edge {
+  border-radius: 13px;
+  padding: 13px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background:
+    radial-gradient(120% 160% at 88% 0%, color-mix(in srgb, var(--g-gold) 22%, transparent) 0%, color-mix(in srgb, var(--g-gold) 2%, transparent) 62%),
+    linear-gradient(180deg, color-mix(in srgb, var(--g-gold) 10%, transparent), color-mix(in srgb, var(--g-gold) 2%, transparent));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--g-gold) 42%, transparent) inset,
+    0 0 34px -14px color-mix(in srgb, var(--g-gold) 55%, transparent),
+    0 1px 0 rgba(255, 230, 180, 0.14) inset;
+}
+
+.pc-edge-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pc-edge-k {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-gold-hi);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--g-gold) 50%, transparent);
+}
+
+.pc-edge-v {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.pc-edge-v b {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gold-hi);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 26px color-mix(in srgb, var(--g-gold) 75%, transparent);
+}
+
+.pc-edge-v em {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: #9c8a67;
+  text-align: right;
+  line-height: 1.3;
+}
+
+.pc-edge-line {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: #d4deec;
+  line-height: 1.5;
+}
+
+/* No lines is the COMMON case, so it gets a real state rather than a zero
+   that would read as a confident "no edge". */
+.pc-edge-empty {
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07) inset;
+}
+
+.pc-edge-empty .pc-edge-k,
+.pc-edge-empty .pc-edge-v b,
+.pc-edge-empty .pc-edge-v em {
+  color: var(--g-dim);
+  text-shadow: none;
+}
+
+/* ---- three-up ---- */
+
+.pc-three {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+
+.pc-tile {
+  border-radius: 11px;
+  padding: 10px 8px 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.075) inset, 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+}
+
+.pc-tile-k {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+}
+
+.pc-tile-v {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: var(--g-ink);
+}
+
+/* Grades carry semantic colour — the sanctioned carve-out from gold-only. */
+.pc-grade-good {
+  color: var(--g-good);
+  text-shadow: 0 0 20px color-mix(in srgb, var(--g-good) 55%, transparent);
+}
+
+.pc-grade-bad {
+  color: var(--g-bad);
+  text-shadow: 0 0 20px color-mix(in srgb, var(--g-bad) 45%, transparent);
+}
+
+/* A rank the injury has overtaken. Muted rather than removed — that it exists
+   and is now unreliable is itself the useful thing to show. */
+.pc-stale {
+  color: var(--g-dim);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.pc-tile-sub {
+  font-size: 10.5px;
+  color: var(--g-muted);
+  line-height: 1.32;
+}
+
+.pc-tile-empty .pc-tile-v {
+  color: var(--g-dim);
+}
+
+/* ---- news ---- */
+
+.pc-news {
+  padding-top: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.075);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.pc-news-k {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+}
+
+.pc-item {
+  display: grid;
+  grid-template-columns: 2.2rem 1fr;
+  gap: 9px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.pc-item time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--g-dim);
+  padding-top: 2px;
+}
+
+.pc-item p {
+  margin: 0;
+  color: #c7d4e4;
+}
+
+/* Inside the modal the card is a section, not a standalone surface. */
+.modal-body .pc {
+  background: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.modal-body .pc::before {
+  display: none;
 }

@@ -1276,16 +1276,31 @@ check("the rank version still returns rank-scale numbers for display", (() => {
 // ---- 31. projection gauge geometry ----
 // Rendering it proves nothing about where the needle points. These are the
 // properties a render check can't see.
-const { gaugeGeometry, angleFor, MAX: GAUGE_MAX } = await import("../src/gaugeGeometry.js");
+const { gaugeGeometry, angleFor, tickHeat, MAX: GAUGE_MAX } = await import("../src/gaugeGeometry.js");
 
 check("the dial is a fixed 0-40 for every position, so needle position is comparable", GAUGE_MAX === 40);
-check("0 sits at the left end and the max at the right end", angleFor(0) === 180 && angleFor(GAUGE_MAX) === 360);
+// A 224-degree sweep from 202 deg: wider than a half circle, so the ends drop
+// below horizontal and it reads as an instrument face, not a progress bar.
+check("0 sits at the left end and the max at the right end", angleFor(0) === 202 && angleFor(GAUGE_MAX) === -22);
 check(
   "an over-scale value pins to the dial end instead of swinging past it",
-  angleFor(44) === 360 && angleFor(1000) === 360,
+  angleFor(44) === -22 && angleFor(1000) === -22,
   `got ${angleFor(44)} / ${angleFor(1000)}`
 );
-check("a negative value pins to the left end rather than wrapping", angleFor(-5) === 180);
+check("a negative value pins to the left end rather than wrapping", angleFor(-5) === 202);
+check(
+  "the needle angle DECREASES as the value rises — left to right across the face",
+  angleFor(0) > angleFor(20) && angleFor(20) > angleFor(40)
+);
+check(
+  "ticks burn hottest at the needle and fade with distance",
+  tickHeat(20, 20) === 1 && tickHeat(24.5, 20) === 0.5 && tickHeat(40, 20) === 0,
+  `${tickHeat(20, 20)} / ${tickHeat(24.5, 20)} / ${tickHeat(40, 20)}`
+);
+check(
+  "heat never goes negative for a far-away tick",
+  tickHeat(0, 39) === 0 && tickHeat(40, 0) === 0
+);
 
 // Bijan, off the live roster: healthy, so both needles coincide and no ghost.
 const gHealthy = gaugeGeometry({ mean: 24.7, condMean: 24.7, sd: 13.5, playProb: 1 });
@@ -1306,7 +1321,8 @@ check(
   gDoubt.needleOutsideBand && 3.7 < gDoubt.floor,
   `mean 3.7 vs floor ${gDoubt.floor}`
 );
-check("the ghost sits to the right of the real needle in that case", gDoubt.ghost > gDoubt.needle);
+// Angle decreases as value rises, so the higher condMean has the SMALLER angle.
+check("the ghost sits further round the dial than the real needle", gDoubt.ghost < gDoubt.needle);
 
 // A wide sd on a small projection would put the floor below zero.
 const gLow = gaugeGeometry({ mean: 3, condMean: 3, sd: 5, playProb: 1 });

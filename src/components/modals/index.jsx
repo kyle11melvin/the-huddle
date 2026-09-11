@@ -10,6 +10,8 @@ import {
   MAX_ROSTER, POS_LIMITS, POSITIONS, STATUSES, weekLabel,
 } from "../../lineup.js";
 import { effectiveStatus, isOnBye, byeWeekFor, ecrRank } from "../../analysis.js";
+import PlayerCard from "../PlayerCard.jsx";
+import { playerCardData } from "../../playerCardData.js";
 import { pointDistribution, playerAnalytics, floorCeiling } from "../../analytics.js";
 import { scheduleOpp, nextOpponents } from "../../scheduleSync.js";
 import { whoRosters, MY_TEAM } from "../../data/leagueRosters.js";
@@ -116,6 +118,7 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
   const shownStatus = effectiveStatus(player, week, byes);
   const byeWk = byeWeekFor(byes, player.team);
   const owner = whoRosters(player.name);
+  const cardData = playerCardData(state, player, week);
 
   const startEdit = () => {
     setForm({ name: player.name, team: player.team, pos: player.pos, ecr: player.ecr || "", espnId: player.espnId || "" });
@@ -149,6 +152,12 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
         </div>
 
         <div className="modal-body">
+          {/* The analytical view: projection gauge plus the evidence behind it.
+              Fed by playerCardData() so the modal and the screenshot harness
+              read from one mapper — a card that renders differently in a PNG
+              than in the app is worse than no screenshot at all. */}
+          {cardData && <PlayerCard {...cardData} showHeader={false} />}
+
           <div className="modal-stat-grid">
             <div className="stat-tile">
               <div className="stat-label">ECR</div>

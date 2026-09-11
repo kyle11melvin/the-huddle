@@ -2,27 +2,50 @@
 // Projection gauge geometry — pure, so it can be asserted on without
 // rendering. Kept out of the component for the same reason analytics.js and
 // lineup.js are: a render check proves a thing draws, not that it draws the
-// right thing, and where the needle POINTS is the whole claim the gauge makes.
+// RIGHT thing, and where the needle points is the whole claim the gauge makes.
 // ============================================================================
 
 /**
  * The dial is a FIXED 0-40, shared by every position.
  *
- * That is deliberate and load-bearing: needle position carries meaning before
- * any number is read. On the real roster Bijan sits at 62% of the dial and an
- * RB4 at 9%. A per-player scale would flatten that to nothing — every player
- * would look identical with only the axis labels changing. 40 covers the
- * highest ceiling on a real roster (38.2). K and D/ST sitting low is honest.
+ * Deliberate and load-bearing: needle position carries meaning before any
+ * number is read. On the real roster Bijan sits high on the dial and an RB4
+ * near the floor. A per-player scale would flatten that to nothing — every
+ * player identical, only the axis labels changing. 40 covers the highest real
+ * ceiling (38.2). K and D/ST sitting low is honest.
  */
 export const MAX = 40;
 
-const START = 180; // left end of the arc, in degrees
-const SWEEP = 180; // half circle
+// Arc layout. A 224° sweep starting at 202° — wider than a half circle, so the
+// ends drop below horizontal and the dial reads as an instrument face rather
+// than a progress bar.
+export const CX = 170;
+export const CY = 164;
+export const R = 130;
+const A0 = 202;
+const SWEEP = 224;
 
-/** Value -> angle along the arc, clamped to the dial at both ends. */
+/** Value -> angle in degrees, clamped to the dial at both ends. */
 export function angleFor(value, max = MAX) {
   const t = Math.max(0, Math.min(1, (value || 0) / max));
-  return START + t * SWEEP;
+  return A0 - t * SWEEP;
+}
+
+/** Polar -> cartesian in SVG space (y grows downward, hence the minus). */
+export function pointAt(value, radius, max = MAX) {
+  const rad = (angleFor(value, max) * Math.PI) / 180;
+  return [CX + radius * Math.cos(rad), CY - radius * Math.sin(rad)];
+}
+
+/**
+ * How hot a tick burns, 0..1, by distance from the needle.
+ *
+ * The point is pre-attentive: the eye should land on the value before reading
+ * a number. A flat band gives it nothing to land on.
+ */
+export function tickHeat(tickValue, needleValue, falloff = 9) {
+  const d = Math.abs(tickValue - needleValue);
+  return Math.max(0, 1 - d / falloff);
 }
 
 /**
