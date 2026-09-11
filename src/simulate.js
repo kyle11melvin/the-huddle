@@ -400,12 +400,69 @@ export function simulateSwap(state, week, oppDists, outId, inId, seed = 12345, r
  *
  * @param {Array} sides [{proj, scored, pctRemaining, status, cv, team, opp, pos, playProb}]
  */
+/**
+ * Fraction of a player's game still to be played, 0..1.
+ *
+ * Time-based today: it comes from the scoreboard clock via api/espn.js. That
+ * is an approximation — a leading team kneeling and a trailing team spiking
+ * burn the same clock at completely different play rates, so the same 5:00
+ * remaining is worth very different numbers of snaps. Counting remaining
+ * PLAYS rather than minutes is the real model; this is the honest simple
+ * version until there's something to check it against.
+ */
+export function remainingFraction(status, pctRemaining) {
+  if (status === "final") return 0;
+  if (status === "inProgress") return Math.max(0, Math.min(1, pctRemaining ?? 0));
+  return 1; // notStarted — the whole game is still ahead
+}
+
+/**
+ * What a player's projection should READ once his game is underway.
+ *
+ *   live = points already scored + (if-he-plays projection × fraction left)
+ *
+ * Exported and shared with the row display on purpose. The Gameday rows used
+ * to render a STATIC pregame number from a different source than the sim at
+ * the top of the same screen, so Stafford sat at 22.2 with 1 point scored and
+ * a quarter to play. One function, one number, no drift.
+ *
+ * `pregame` and `ifPlays` are deliberately separate inputs: before kickoff the
+ * row shows the injury-priced expectation, but once a player is on the field
+ * his Q/D coin flip has already resolved, so the REMAINING portion accrues at
+ * the if-he-plays rate rather than the discounted one.
+ *
+ * @returns {number|null} points, or null when there is no projection at all
+ */
+export function liveProjection({ pregame, ifPlays, scored, pctRemaining, status, playProb = 1 }) {
+  const banked = Number.isFinite(scored) ? scored : 0;
+
+  // Pre-kickoff is untouched — nothing has happened yet to decay.
+  if (status !== "inProgress" && status !== "final") {
+    return Number.isFinite(pregame) ? pregame : null;
+  }
+  // A finished game has no estimate left in it: the projection IS the actual.
+  if (status === "final") return banked;
+  // Ruled out or on bye. Collapse to what he banked rather than decaying
+  // gently toward it — a player who is not on the field will not accumulate
+  // the rest of his projection at any rate, and a slow fade reads as "still
+  // has a chance" when he does not.
+  if (playProb === 0) return banked;
+
+  const rate = Number.isFinite(ifPlays) ? ifPlays : Number.isFinite(pregame) ? pregame : null;
+  if (rate == null) return banked;
+
+  const live = banked + Math.max(0, rate * remainingFraction(status, pctRemaining));
+  // Never below points already on the board — those are facts, and a
+  // projection under them would be nonsense on its face.
+  return Math.max(banked, Math.round(live * 10) / 10);
+}
+
 function liveParts(entries, rand) {
   return entries.map((e) => {
     const scored = Number.isFinite(e.scored) ? e.scored : 0;
     if (e.status === "final") return { fixed: scored };
 
-    const remainingFrac = e.status === "inProgress" ? Math.max(0, Math.min(1, e.pctRemaining ?? 0)) : 1;
+    const remainingFrac = remainingFraction(e.status, e.pctRemaining);
     const remainingMean = Math.max(0, (e.proj || 0) * remainingFrac);
     if (remainingMean <= 0) return { fixed: scored };
 

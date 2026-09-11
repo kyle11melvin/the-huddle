@@ -25,6 +25,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import React from "react";
+import { readFileSync as _rf } from "node:fs";
 import { renderToString } from "react-dom/server";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -75,6 +76,48 @@ const CASES = [
   { file: "gauge-bowers.png", component: "gauge", props: { mean: 3.7, condMean: 14.9, sd: 8.9, playProb: 0.25 } },
 ];
 
+// ---- Gameday, with a live slate ----
+// Kyle's REAL team document, with game state injected: tonight's games have
+// not kicked off yet (00:35Z), so there is no genuinely live slate to shoot.
+// Rosters, players and projections are real; the clock and the points scored
+// are set here so the decay is visible.
+function liveState() {
+  const st = JSON.parse(_rf("/tmp/ka.json", "utf8")).state;
+  const SLATE = {
+    JAX: { pct: 0.55, detail: "Q2 07:21" },   // mid-game
+    ATL: { pct: 0.12, detail: "Q4 04:50" },   // nearly done, big day banked
+    CIN: { pct: 0, detail: "Final", post: true },
+    LAR: { pct: 0.78, detail: "Q1 11:02" },   // just started
+    IND: { pct: 0.4, detail: "Q3 09:40" },
+  };
+  for (const [abbr, g] of Object.entries(SLATE)) {
+    st.espn.games[abbr] = {
+      state: g.post ? "post" : "in",
+      pctRemaining: g.pct,
+      detail: g.detail,
+      startTime: st.espn.games[abbr] ? st.espn.games[abbr].startTime : null,
+    };
+  }
+  const SCORED = {
+    "Trevor Lawrence": 6.4,
+    "Bijan Robinson": 19.8,
+    "Tee Higgins": 11.2,
+    "Chase Brown": 2.1,
+  };
+  for (const t of st.espn.teams) {
+    for (const e of t.roster || []) {
+      if (SCORED[e.name] != null) e.actual = SCORED[e.name];
+    }
+  }
+  return st;
+}
+
+CASES.push({
+  file: "gameday-live.png",
+  component: "gameday",
+  props: { state: liveState(), week: "1", onSetLive: () => {}, onSetOpponent: () => {}, onRefresh: () => {} },
+});
+
 mkdirSync("node_modules/.shots", { recursive: true });
 await build({
   entryPoints: ["scripts/shots-entry.jsx"],
@@ -89,13 +132,13 @@ await build({
   external: ["react", "react-dom", "react-dom/server"],
   logLevel: "error",
 });
-const { ProjectionGauge, PlayerCard } = await import(`${pathToFileURL(resolve(BUNDLE)).href}?t=${Date.now()}`);
-const COMPONENTS = { gauge: ProjectionGauge, card: PlayerCard };
+const { ProjectionGauge, PlayerCard, Gameday } = await import(`${pathToFileURL(resolve(BUNDLE)).href}?t=${Date.now()}`);
+const COMPONENTS = { gauge: ProjectionGauge, card: PlayerCard, gameday: Gameday };
 
 mkdirSync(OUT_DIR, { recursive: true });
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: "new" });
 const page = await browser.newPage();
-await page.setViewport({ width: 400, height: 600, deviceScaleFactor: 2 });
+await page.setViewport({ width: 420, height: 700, deviceScaleFactor: 2 });
 
 for (const c of CASES) {
   const markup = renderToString(React.createElement(COMPONENTS[c.component], c.props));

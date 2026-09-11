@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
-import { simulateLive, liveNarrative } from "../simulate.js";
+import { simulateLive, liveNarrative, liveProjection } from "../simulate.js";
 import { teamLogoUrl } from "../data/teams.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
 import { scheduleOpp } from "../scheduleSync.js";
@@ -39,6 +39,14 @@ const kickoffOf = (l) => {
  */
 const Row = ({ row, l, autoMode, isOpen, onToggle, onSetLive, week }) => {
   const status = l.status || "notStarted";
+  const liveProj = liveProjection({
+    pregame: row.proj,
+    ifPlays: row.simProj ?? row.proj,
+    scored: l.scored,
+    pctRemaining: l.pctRemaining,
+    status,
+    playProb: row.playProb ?? 1,
+  });
   const logo = teamLogoUrl(row.team);
   if (!row.name) {
     return (
@@ -61,7 +69,9 @@ const Row = ({ row, l, autoMode, isOpen, onToggle, onSetLive, week }) => {
           {status === "inProgress" && <span className="gd-live-dot" />}
           {row.name}
         </span>
-        <span className="gd-proj">{row.proj != null ? row.proj : "—"}</span>
+        <span className={`gd-proj ${status === "inProgress" ? "gd-proj-live" : ""}`}>
+          {liveProj != null ? liveProj : "—"}
+        </span>
         <span className={`gd-score ${status === "final" ? "final" : ""}`}>
           {Number.isFinite(l.scored) ? l.scored : "—"}
         </span>
@@ -346,6 +356,16 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
   const Row = ({ row, side }) => {
     const l = resolveLive(row);
     const status = l.status || "notStarted";
+    // Same function the sim above uses — see simulate.js. These two used to
+    // disagree, which is how a row read 22.2 with a quarter left.
+    const liveProj = liveProjection({
+      pregame: row.proj,
+      ifPlays: row.simProj ?? row.proj,
+      scored: l.scored,
+      pctRemaining: l.pctRemaining,
+      status,
+      playProb: row.playProb ?? 1,
+    });
     const isOpen = !autoMode && editing === row.k;
     const logo = teamLogoUrl(row.team);
     if (!row.name) {
@@ -369,7 +389,9 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
             {status === "inProgress" && <span className="gd-live-dot" />}
             {row.name}
           </span>
-          <span className="gd-proj">{row.proj != null ? row.proj : "—"}</span>
+          <span className={`gd-proj ${status === "inProgress" ? "gd-proj-live" : ""}`}>
+            {liveProj != null ? liveProj : "—"}
+          </span>
           <span className={`gd-score ${status === "final" ? "final" : ""}`}>
             {Number.isFinite(l.scored) ? l.scored : "—"}
           </span>

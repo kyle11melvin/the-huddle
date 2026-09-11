@@ -3750,3 +3750,10 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   text-decoration-color: var(--text-dim);
   text-decoration-thickness: 1.5px;
 }
+
+/* A projection that is currently decaying is not the same claim as a pregame
+   estimate, and the row should not imply otherwise. */
+.gd-proj-live {
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
