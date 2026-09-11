@@ -1428,7 +1428,22 @@ export default function App({ initialTab } = {}) {
         if (!aliveRef.current) return;
         if (!r.ok) return;
         const d = await r.json();
-        if (!d.configured || !Array.isArray(d.players) || !d.players.length) return;
+        if (!d.configured || !Array.isArray(d.players) || !d.players.length) {
+          // Props are the HIGHEST-priority projection source, so their absence
+          // silently drops every projection to expert consensus. Say so rather
+          // than letting the numbers quietly change meaning.
+          flash(
+            d.reason ||
+              (d.remaining != null && Number(d.remaining) < 50
+                ? `Vegas props unavailable — Odds API credits exhausted (${d.remaining} left). Projections are expert consensus today.`
+                : "No Vegas lines available — projections are expert consensus today.")
+          );
+          return;
+        }
+        if (d.served === "stale" || (d.served === "stored" && d.ageMs > 12 * 3600e3)) {
+          const hrs = Math.round(d.ageMs / 3600e3);
+          flash(`Vegas lines are ${hrs}h old${d.reason ? ` — ${d.reason}` : "."}`);
+        }
         const byName = new Map(d.players.map((p) => [p.name.toLowerCase().replace(/[^a-z]/g, ""), p]));
         setState((s) => {
           let next = s;
