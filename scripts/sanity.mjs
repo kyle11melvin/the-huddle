@@ -1563,5 +1563,41 @@ check(
   "vs / @ must be right or the row lies about where the game is"
 );
 
+// ---- 36. narrative perspective ----
+// The callout must ALWAYS be written in second person about MY team, whichever
+// side of the ESPN matchup my team happens to sit on. Asserted because the
+// screen gives no other way to tell: with no "you" marker on the board, a
+// reader can attribute the wrong side to himself and conclude the app is
+// narrating from the opponent's chair when it is not.
+const { liveNarrative: narr } = await import("../src/simulate.js");
+
+// myTeam TRAILS on the scoreboard but has more players left.
+const behindMoreLeft = narr({ winProb: 0.75, tieProb: 0, myNow: 0, oppNow: 8, myLeft: 4, oppLeft: 2 });
+check(
+  "trailing with more to play reads as MY deficit, not the opponent's",
+  /down 8/i.test(behindMoreLeft) && /more player/i.test(behindMoreLeft),
+  behindMoreLeft
+);
+// myTeam LEADS but has fewer players left.
+const aheadFewerLeft = narr({ winProb: 0.25, tieProb: 0, myNow: 8, oppNow: 0, myLeft: 2, oppLeft: 4 });
+check(
+  "leading with fewer to play reads as MY lead being fragile",
+  /up 8/i.test(aheadFewerLeft) && /they have 2 more/i.test(aheadFewerLeft),
+  aheadFewerLeft
+);
+check(
+  "the two situations never produce the same sentence",
+  behindMoreLeft !== aheadFewerLeft
+);
+check(
+  "a finished week reports MY result",
+  /you won/i.test(narr({ winProb: 1, tieProb: 0, myNow: 120, oppNow: 90, myLeft: 0, oppLeft: 0 })) &&
+    /you lost/i.test(narr({ winProb: 0, tieProb: 0, myNow: 90, oppNow: 120, myLeft: 0, oppLeft: 0 }))
+);
+check(
+  "my lineup being done is phrased about MY lineup",
+  /your lineup is done/i.test(narr({ winProb: 0.4, tieProb: 0, myNow: 110, oppNow: 100, myLeft: 0, oppLeft: 3 }))
+);
+
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);
