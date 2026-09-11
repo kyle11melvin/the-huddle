@@ -863,11 +863,18 @@ select option {
   to { opacity: 1; transform: none; }
 }
 
+/* Sticky so the close button stays reachable at any scroll position, and so
+   you can always see whose card you are looking at. */
 .modal-hero {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 9;
   overflow: hidden;
   padding: 28px 24px 20px;
-  background:
+  /* A solid base under the gradients: a sticky header with a transparent
+     background lets the scrolling content show straight through it. */
+  background-color: var(--surface-hi);
+  background-image:
     radial-gradient(ellipse 130% 90% at 50% -30%, color-mix(in srgb, var(--team-ring, #26314a) 40%, transparent), transparent 65%),
     linear-gradient(180deg, color-mix(in srgb, var(--team-ring, #131826) 16%, transparent), transparent);
   border-bottom: 1px solid var(--border);
@@ -879,19 +886,26 @@ select option {
 .modal-hero .avatar-ring { width: 96px; height: 96px; padding: 4px; }
 .modal-hero .avatar-initials { font-size: 28px; }
 
+/* The modal itself is the scroll container, so an absolutely-positioned close
+   button sat at the top of the CONTENT and scrolled out of reach — you had to
+   scroll back up to dismiss. It is now pinned, and 44px, which is Apple's
+   minimum touch target; 32px was under it and missed taps on a phone. */
 .modal-close {
   position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 32px;
-  height: 32px;
+  top: 10px;
+  right: 10px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 14px;
-  color: var(--text-muted);
-  background: rgba(10, 14, 23, 0.5);
+  font-size: 17px;
+  line-height: 1;
+  color: var(--text);
+  background: rgba(10, 14, 23, 0.82);
   border: 1px solid var(--border-hi);
+  backdrop-filter: blur(8px);
+  z-index: 10;
   transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
 
@@ -1048,7 +1062,12 @@ select option {
   .scout-full-inner { padding-left: 15px; padding-right: 15px; }
 
   .faab-amount { font-size: 38px; }
-  .modal-hero { padding: 24px 18px 18px; gap: 14px; }
+  /* Sticky so the close button stays reachable at any scroll position, and so
+   you can always see whose card you are looking at. */
+.modal-hero {
+  position: sticky;
+  top: 0;
+  z-index: 9; padding: 24px 18px 18px; gap: 14px; }
   .modal-hero .avatar-ring { width: 76px; height: 76px; }
   .modal-name { font-size: 22px; }
   .modal-body { padding: 16px 18px 22px; }

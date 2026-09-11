@@ -862,7 +862,10 @@ const Ident = ({ d, right }) => {
     <span className={right ? "r" : ""}>
       {row.status && <span className="h2h-inj">{row.status} · </span>}
       <span>{row.team}</span>
-      {Number.isFinite(row.bye) ? ` (${row.bye})` : ""}
+      {/* Labelled. "JAX (7)" gave no way to know 7 was the bye week — it reads
+          as a rank, a jersey number or a projection. An unlabelled number on a
+          screen full of numbers is worse than no number. */}
+      {Number.isFinite(row.bye) ? ` · bye ${row.bye}` : ""}
     </span>
   );
 };
