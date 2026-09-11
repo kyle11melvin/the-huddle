@@ -17,6 +17,29 @@ const PLAY_PROB = { QUESTIONABLE: 0.77, DOUBTFUL: 0.25, OUT: 0, INJURY_RESERVE: 
 // ESPN injury strings -> the short tag shown inline. ACTIVE is deliberately
 // absent: a healthy player carries no tag.
 const INJ_TAG = { QUESTIONABLE: "Q", DOUBTFUL: "D", OUT: "O", INJURY_RESERVE: "IR", SUSPENSION: "O" };
+/**
+ * AccuWeather condition id -> one glyph. Grouped by band rather than
+ * enumerated: the exact id matters far less than "is it going to affect the
+ * football", and a 40-entry table would be 40 chances to be subtly wrong.
+ * An indoor venue short-circuits this entirely — the roof is the forecast.
+ */
+function wxGlyph(game) {
+  if (!game) return null;
+  if (game.indoor) return { icon: "⌂", label: "Indoor" };
+  const w = game.wx;
+  if (!w || w.c == null) return null;
+  const id = Number(w.c);
+  const t = Number.isFinite(w.t) ? `${w.t}°` : "";
+  const label = [w.d, t].filter(Boolean).join(" ");
+  if (id >= 1 && id <= 5) return { icon: "☀", label };
+  if (id >= 6 && id <= 11) return { icon: "☁", label };
+  if ((id >= 12 && id <= 18) || (id >= 39 && id <= 42)) return { icon: "🌧", label };
+  if ((id >= 19 && id <= 29) || (id >= 43 && id <= 44)) return { icon: "❄", label };
+  if (id >= 30 && id <= 31) return { icon: "🌡", label };
+  if (id >= 32 && id <= 34) return { icon: "💨", label };
+  return { icon: "☁", label };
+}
+
 const STARTER_SLOTS = ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "FLEX", "D/ST", "K"];
 const STATUSES = [
   ["notStarted", "Not started"],
@@ -712,8 +735,24 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                 </div>
 
                 <div className="h2h-l3">
-                  <span>{A ? `${A.when}${A.opp ? ` ${A.opp.at ? "@" : "vs"} ${A.opp.opp}` : ""}` : ""}</span>
+                  <span>
+                    {A ? `${A.when}${A.opp ? ` ${A.opp.at ? "@" : "vs"} ${A.opp.opp}` : ""}` : ""}
+                    {/* Absent for 2 of 16 games in a real slate, so it renders
+                        nothing rather than defaulting to an icon that isn't a
+                        forecast. Indoor short-circuits it — the roof IS the
+                        forecast. */}
+                    {A && A.wx && (
+                      <span className="h2h-wx" title={A.wx.label}>
+                        {A.wx.icon}
+                      </span>
+                    )}
+                  </span>
                   <span className="r">
+                    {B && B.wx && (
+                      <span className="h2h-wx" title={B.wx.label}>
+                        {B.wx.icon}
+                      </span>
+                    )}
                     {B ? `${B.when}${B.opp ? ` ${B.opp.at ? "@" : "vs"} ${B.opp.opp}` : ""}` : ""}
                     {B ? " ›" : ""}
                   </span>
@@ -823,6 +862,7 @@ function sideData(row, week, state) {
     when,
     opp,
     logo: teamLogoUrl(row.team),
+    wx: wxGlyph(game),
   };
 }
 

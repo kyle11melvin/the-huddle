@@ -4582,3 +4582,11 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 .h2h-face.empty {
   opacity: 0.25;
 }
+
+/* Weather / dome glyph on a row's game line. Muted — it qualifies the game,
+   it isn't the headline, and a slate of sixteen emoji would shout. */
+.h2h-wx {
+  margin: 0 3px;
+  opacity: 0.7;
+  font-size: 10px;
+}
