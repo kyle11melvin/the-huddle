@@ -7,10 +7,15 @@ import { teamLogoUrl } from "../data/teams.js";
 import { pairBySlot, shortName } from "../headToHead.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
 import { scheduleOpp } from "../scheduleSync.js";
+import { byeWeekFor } from "../analysis.js";
+import { untilKick } from "../timeUntil.js";
 
 const CV = { QB: 0.32, RB: 0.5, WR: 0.58, TE: 0.6, K: 0.42, "D/ST": 0.72 };
 // ESPN's raw injury strings → play probability (bimodal injury pricing).
 const PLAY_PROB = { QUESTIONABLE: 0.77, DOUBTFUL: 0.25, OUT: 0, INJURY_RESERVE: 0, SUSPENSION: 0 };
+// ESPN injury strings -> the short tag shown inline. ACTIVE is deliberately
+// absent: a healthy player carries no tag.
+const INJ_TAG = { QUESTIONABLE: "Q", DOUBTFUL: "D", OUT: "O", INJURY_RESERVE: "IR", SUSPENSION: "O" };
 const STARTER_SLOTS = ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "FLEX", "D/ST", "K"];
 const STATUSES = [
   ["notStarted", "Not started"],
@@ -224,6 +229,8 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
           slot: s.key,
           name: p.name,
           team: p.team,
+          status: p.status || "",
+          bye: byeWeekFor(state.byes || {}, p.team),
           pos: p.pos,
           k: `me:${p.id}`,
           // dist.mean is already injury-priced (expected points)
@@ -251,6 +258,11 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
             name: e.name,
             team: e.team,
             pos: e.pos,
+            // ESPN sends ACTIVE for healthy players, and charAt(0) turned that
+            // into an "A" badge on every opponent — a healthy-player warning.
+            // Only real designations get a tag.
+            status: INJ_TAG[e.injuryStatus] || "",
+            bye: byeWeekFor(state.byes || {}, e.team),
             k: `opp:${key(e.name)}`,
             proj: proj != null ? Math.round(proj * playProb * 10) / 10 : null,
             simProj: proj,
@@ -569,9 +581,9 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
           </div>
           {pairs.map((p) => (
             <div className="h2h-row" key={p.key}>
-              <H2HSide row={p.mine} side="l" />
+              <H2HSide row={p.mine} side="l" week={week} state={state} />
               <span className="h2h-slot">{p.slot}</span>
-              <H2HSide row={p.theirs} side="r" />
+              <H2HSide row={p.theirs} side="r" week={week} state={state} />
             </div>
           ))}
         </div>
@@ -586,7 +598,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
  * the slot badge, so the two numbers being compared are adjacent instead of a
  * screen apart.
  */
-const H2HSide = ({ row, side }) => {
+const H2HSide = ({ row, side, week, state }) => {
   if (!row || !row.name) {
     return (
       <div className={`h2h-side ${side} empty`}>
@@ -605,12 +617,44 @@ const H2HSide = ({ row, side }) => {
     playProb: row.playProb ?? 1,
   });
   const logo = teamLogoUrl(row.team);
+  const game = (state.espn && state.espn.games && row.team && state.espn.games[row.team]) || null;
+
+  // Fraction of the game PLAYED, for the progress track. pctRemaining counts
+  // down, so the bar fills as the game runs out.
+  const played = status === "final" ? 1 : status === "inProgress" ? 1 - (l.pctRemaining ?? 1) : 0;
+
+  // Not yet started / live clock / Final — one line, always present, so a row
+  // never leaves you guessing whether a zero means "hasn't played" or "did
+  // nothing". ESPN's shortDetail already reads as a clock mid-game.
+  let when = "";
+  if (status === "final") when = "Final";
+  else if (status === "inProgress") when = l.detail || "Live";
+  else {
+    const t = game && game.startTime ? untilKick(game.startTime) : null;
+    when = t ? `in ${t}` : l.detail || "Not yet started";
+  }
+
+  const opp = (row.weeks && row.weeks[week] && row.weeks[week].opp) || scheduleOpp(state, row.team, week) || "";
+
   return (
     <div className={`h2h-side ${side} ${status === "final" ? "final" : ""}`}>
       <span className="h2h-logo">{logo && <img src={logo} alt="" loading="lazy" />}</span>
-      <span className="h2h-name">
-        {status === "inProgress" && <span className="gd-live-dot" />}
-        {shortName(row.name)}
+      <span className="h2h-body">
+        <span className="h2h-name">
+          {status === "inProgress" && <span className="gd-live-dot" />}
+          <span className="h2h-nm">{shortName(row.name)}</span>
+          {row.status && <b className={`h2h-inj inj-${row.status.toLowerCase()}`}>{row.status}</b>}
+        </span>
+        <span className="h2h-detail">
+          {row.pos}
+          {row.team ? ` · ${row.team}` : ""}
+          {opp ? ` ${opp}` : ""}
+          {Number.isFinite(row.bye) ? ` · bye ${row.bye}` : ""}
+        </span>
+        <span className="h2h-track" aria-hidden="true">
+          <i style={{ width: `${Math.round(Math.max(0, Math.min(1, played)) * 100)}%` }} />
+        </span>
+        <span className={`h2h-when ${status}`}>{when}</span>
       </span>
       <span className="h2h-nums">
         <b className={`h2h-pts ${status === "final" ? "final" : ""}`}>{Number.isFinite(l.scored) ? l.scored : "—"}</b>
