@@ -1504,5 +1504,64 @@ check(
 );
 check("the slot order covers a full starting lineup", H2H_SLOT_ORDER.length === 7);
 
+// ---- 35. yet-to-play breakdown ----
+// "yet to play (10)" hides the difference between a QB + 3 RB + 3 WR still to
+// come and a kicker plus a defense. That distinction IS the read on whether a
+// lead is comfortable or cooked.
+const { yetToPlay, yetToPlayLabel, seedFor, recordLabel, opponentOf } = await import("../src/headToHead.js");
+
+const ytpRows = [
+  { name: "QB", slot: "QB", pos: "QB", l: { status: "notStarted" } },
+  { name: "RB1", slot: "RB", pos: "RB", l: { status: "notStarted" } },
+  { name: "RB2", slot: "RB", pos: "RB", l: { status: "notStarted" } },
+  { name: "FlexRB", slot: "FLEX", pos: "RB", l: { status: "notStarted" } },
+  { name: "WR1", slot: "WR", pos: "WR", l: { status: "notStarted" } },
+  { name: "DST", slot: "D/ST", pos: "D/ST", l: { status: "notStarted" } },
+  { name: "K", slot: "K", pos: "K", l: { status: "notStarted" } },
+  { name: "Playing", slot: "WR", pos: "WR", l: { status: "inProgress" } },
+  { name: "Done", slot: "TE", pos: "TE", l: { status: "final" } },
+  { name: "Bench", slot: "BE", pos: "WR", l: { status: "notStarted" } },
+];
+const ytp = yetToPlay(ytpRows);
+check(
+  "in-progress and final players are NOT yet to play — they are already accruing",
+  ytp.count === 7,
+  `got ${ytp.count}`
+);
+check("bench is excluded from the count", !ytp.parts.some((p) => p.pos === "BE"));
+check(
+  "a FLEX counts under the player's real position, not as 'FLEX'",
+  ytp.parts.find((p) => p.pos === "RB").n === 3,
+  "a flexed RB is RB firepower"
+);
+check(
+  "the label reads like Sleeper's, with a bare 1 left implicit",
+  yetToPlayLabel(ytp) === "QB, 3 RB, WR, DEF, K",
+  yetToPlayLabel(ytp)
+);
+check("nothing left to play yields an empty label, not '0'", yetToPlayLabel(yetToPlay([])) === "");
+check(
+  "record hides ties unless there are any",
+  recordLabel({ w: 0, l: 0, t: 0 }) === "0-0" && recordLabel({ w: 2, l: 1, t: 1 }) === "2-1-1"
+);
+check(
+  "seed ranks by wins, then points for",
+  seedFor(
+    [
+      { id: 1, record: { w: 1, l: 0 }, pointsFor: 90 },
+      { id: 2, record: { w: 1, l: 0 }, pointsFor: 120 },
+      { id: 3, record: { w: 0, l: 1 }, pointsFor: 200 },
+    ],
+    1
+  ) === 2,
+  "more points breaks a tie on record"
+);
+check("a team not in the list has no seed rather than a wrong one", seedFor([], 7) === null);
+check(
+  "opponent parses home and away",
+  opponentOf("@PIT").at === true && opponentOf("CLE").at === false && opponentOf("") === null,
+  "vs / @ must be right or the row lies about where the game is"
+);
+
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);

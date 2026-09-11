@@ -2,14 +2,17 @@
 //
 // Extracted from App.jsx (review finding: code health, step 2). SLOT_COLOR was
 // also duplicated verbatim in LeagueBrowser.jsx — one definition now.
+// One colour per position, used EVERYWHERE — slot badges, the identity line,
+// chips. From the approved matchup reference: TE is orange and FLEX violet,
+// which is the Sleeper convention and what the design was signed off against.
 export const SLOT_COLOR = {
-  QB: "#ff5c6c",
-  RB: "#2ed584",
-  WR: "#5b8cff",
-  TE: "#a78bfa",
-  FLEX: "#8b93a1",
-  "D/ST": "#8b93a1",
-  K: "#8b93a1",
+  QB: "#e8657a",
+  RB: "#5cc79a",
+  WR: "#5b9be8",
+  TE: "#e89a4a",
+  FLEX: "#a97fe8",
+  "D/ST": "#8fa1ba",
+  K: "#7fc4c4",
   BN: "#64708a",
   IR: "#c05a68",
 };

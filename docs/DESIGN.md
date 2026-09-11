@@ -93,6 +93,36 @@ A letter beside "RB2" reads as a verdict on the PLAYER — the app appearing to
 call the second-best back in football a D — when it means he drew a defense
 that guts running backs. Name the opponent read and the ambiguity disappears.
 
+## Gameday paired board — the three game states
+
+Reference: `docs/design/gameday-paired-board.png`, from the approved artifact
+study. Match the treatment, not the markup.
+
+**The problem it solves:** you could not tell at a glance which players were
+done. "Final" rendered as 8px grey type in a corner and all three states
+otherwise looked identical.
+
+| | number | name / meta | chip | track | row |
+| --- | --- | --- | --- | --- | --- |
+| **FINAL** | **ONE** number, white, solid — what he actually scored | recede to muted slate `#63768F` | solid `FINAL` | full, muted grey | — |
+| **LIVE** | decayed projection large, pregame struck through beneath | normal | red, quarter + clock (`Q3 6:14`) | partly filled, red | red edge |
+| **PRE** | projection alone, grey | normal | kickoff time | empty | — |
+
+**Never show two numbers except while live.** A projection is dead once the
+game ends — it is a fact now, not an estimate, and showing both invites a
+comparison that no longer means anything. Pre-kickoff there is one number and
+it is an estimate. Two numbers means *this is moving*.
+
+**Rows where BOTH sides are final sink** — dimmer background, dimmer slot
+badge. Ten rows then collapse into "here's what's left" without reading a word.
+
+**Live projections read DIRECTIONALLY:** below pregame is red, above is green.
+A player fading and a player going off must not look the same.
+
+**Every state carries a WORD** — `Final`, a clock, a kickoff time. Never colour
+alone: it has to survive a glance in sunlight, and colour alone also fails a
+colour-blind reader entirely.
+
 ## Typography and layout
 
 - **Oversized hero numbers** — the projection is the loudest thing on a card
