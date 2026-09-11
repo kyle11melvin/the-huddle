@@ -621,13 +621,16 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
           {pairs.map((p) => {
             const A = sideData(p.mine, week, state);
             const B = sideData(p.theirs, week, state);
-            const isLive = (A && A.status === "inProgress") || (B && B.status === "inProgress");
+            const isLive = (A && A.isLive) || (B && B.isLive);
+            // Both sides done -> the row sinks. Ten rows collapse into "here is
+            // what's left" without reading a word.
+            const isDone = A && B && A.isFinal && B.isFinal;
             return (
-              <div className={`h2h-row ${isLive ? "islive" : ""}`} key={p.key}>
+              <div className={`h2h-row ${isLive ? "islive" : ""} ${isDone ? "isdone" : ""}`} key={p.key}>
                 <div className="h2h-l1">
                   <button
                     type="button"
-                    className="h2h-nm"
+                    className={`h2h-nm ${A && A.isFinal ? "spent" : ""}`}
                     onClick={() => A && onOpenPlayer && onOpenPlayer(A.row)}
                     disabled={!A}
                   >
@@ -638,12 +641,16 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                     {p.slot}
                   </span>
                   <Proj d={B} right />
-                  <span className="h2h-nm r">{B ? shortName(B.row.name) : "Empty"}</span>
+                  <span className={`h2h-nm r ${B && B.isFinal ? "spent" : ""}`}>{B ? shortName(B.row.name) : "Empty"}</span>
                 </div>
 
                 <div className="h2h-l2">
-                  <Ident d={A} />
-                  <Ident d={B} right />
+                  <span className={A && A.isFinal ? "spent" : ""}>
+                    <Ident d={A} />
+                  </span>
+                  <span className={`r ${B && B.isFinal ? "spent" : ""}`}>
+                    <Ident d={B} right />
+                  </span>
                 </div>
 
                 <div className="h2h-l3">
@@ -660,8 +667,8 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                 </div>
 
                 <div className="h2h-l5">
-                  <span className={A && A.status === "inProgress" ? "on" : ""}>{A ? A.statusLine : ""}</span>
-                  <span className={`r ${B && B.status === "inProgress" ? "on" : ""}`}>{B ? B.statusLine : ""}</span>
+                  <Chip d={A} />
+                  <Chip d={B} right />
                 </div>
               </div>
             );
@@ -678,11 +685,21 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
  * the slot badge, so the two numbers being compared are adjacent instead of a
  * screen apart.
  */
-/** Everything one side of a paired row needs, derived once. */
+/**
+ * Everything one side of a paired row needs, derived once.
+ *
+ * The three game states are the point of this screen. Before this they were
+ * rendered almost identically — "Final" as 8px grey type in a corner — so you
+ * could not tell at a glance which of your players were done. Each state now
+ * gets its own number treatment, its own chip, and its own track.
+ */
 function sideData(row, week, state) {
   if (!row || !row.name) return null;
   const l = row.l || {};
   const status = l.status || "notStarted";
+  const isFinal = status === "final";
+  const isLive = status === "inProgress";
+  const scored = Number.isFinite(l.scored) ? l.scored : 0;
   const live = liveProjection({
     pregame: row.proj,
     ifPlays: row.simProj ?? row.proj,
@@ -693,18 +710,35 @@ function sideData(row, week, state) {
   });
   const game = (state.espn && state.espn.games && row.team && state.espn.games[row.team]) || null;
   const opp = opponentOf((row.weeks && row.weeks[week] && row.weeks[week].opp) || scheduleOpp(state, row.team, week));
+  const when = game && game.startTime ? kickoffLabel(game.startTime) : "";
+
+  // FINAL shows ONE number: what he actually scored. A projection is dead once
+  // the game ends — it is a fact now, not an estimate, and showing both invites
+  // a comparison that no longer means anything.
+  // LIVE shows the decayed projection with the pregame figure struck beneath.
+  // PRE shows the projection alone.
+  const value = isFinal ? scored : live;
+  const was = isLive && Number.isFinite(row.proj) && live != null && Math.abs(row.proj - live) >= 0.1 ? row.proj : null;
+
+  // Directional: a player fading and a player going off must not look the same.
+  const dir = was == null ? "" : live > row.proj ? "up" : "down";
+
+  // Every state carries a WORD, never colour alone — it has to survive a glance
+  // in sunlight, and colour alone fails that and fails colour-blind readers.
+  const chip = isFinal ? "FINAL" : isLive ? l.detail || "LIVE" : when || "PRE";
+
   return {
     row,
     status,
-    live,
-    // The pregame figure, shown struck through once the live number has moved
-    // off it. This is the differentiator against a frozen board: the number you
-    // saw this morning is visibly no longer the number.
-    was: status === "inProgress" && Number.isFinite(row.proj) && live != null && Math.abs(row.proj - live) >= 0.1 ? row.proj : null,
-    prog: status === "final" ? 1 : status === "inProgress" ? 1 - (l.pctRemaining ?? 1) : 0,
-    when: game && game.startTime ? kickoffLabel(game.startTime) : "",
+    isFinal,
+    isLive,
+    value,
+    was,
+    dir,
+    chip,
+    prog: isFinal ? 1 : isLive ? 1 - (l.pctRemaining ?? 1) : 0,
+    when,
     opp,
-    statusLine: status === "final" ? "Final" : status === "inProgress" ? l.detail || "Live" : "Not yet started",
     logo: teamLogoUrl(row.team),
   };
 }
@@ -712,8 +746,8 @@ function sideData(row, week, state) {
 const Proj = ({ d, right }) => {
   if (!d) return <span className="h2h-pr" />;
   return (
-    <span className={`h2h-pr ${d.was ? "down" : ""} ${right ? "r" : ""}`}>
-      {d.live != null ? d.live.toFixed(1) : "–"}
+    <span className={`h2h-pr ${d.isFinal ? "isfinal" : d.dir} ${right ? "r" : ""}`}>
+      {d.value != null ? d.value.toFixed(1) : "–"}
       {d.was != null && <small>{d.was.toFixed(1)}</small>}
     </span>
   );
@@ -734,11 +768,24 @@ const Ident = ({ d, right }) => {
   );
 };
 
+const Chip = ({ d, right }) => {
+  if (!d) return <span className={right ? "r" : ""} />;
+  const kind = d.isFinal ? "final" : d.isLive ? "live" : "pre";
+  return (
+    <span className={right ? "r" : ""}>
+      <b className={`h2h-chip ${kind}`}>{d.chip}</b>
+    </span>
+  );
+};
+
 const Track = ({ d, right }) => (
   <div className={`h2h-trk ${right ? "r" : ""}`}>
     <span className="h2h-logo">{d && d.logo && <img src={d.logo} alt="" loading="lazy" />}</span>
     <span className="h2h-bar">
-      <i style={{ width: `${Math.round(Math.max(0, Math.min(1, d ? d.prog : 0)) * 100)}%` }} />
+      <i
+        className={d ? (d.isFinal ? "done" : d.isLive ? "on" : "") : ""}
+        style={{ width: `${Math.round(Math.max(0, Math.min(1, d ? d.prog : 0)) * 100)}%` }}
+      />
     </span>
   </div>
 );

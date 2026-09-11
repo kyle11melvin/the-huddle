@@ -4070,6 +4070,27 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   box-shadow: 0 0 0 1px rgba(255, 93, 93, 0.24) inset;
 }
 
+/* BOTH sides done — the row sinks. Ten rows collapse into "here is what's
+   left" without reading a word, which is the whole complaint this fixes. */
+.h2h-row.isdone {
+  background: rgba(255, 255, 255, 0.012);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.035) inset;
+}
+
+.h2h-row.isdone .h2h-slot {
+  opacity: 0.4;
+}
+
+/* A finished player's name and meta recede — he is settled, and the live rows
+   should own your attention. */
+.h2h-nm.spent {
+  color: #63768f;
+}
+
+.h2h-l2 .spent {
+  opacity: 0.55;
+}
+
 /* LINE 1 — names and projections, badge between */
 .h2h-l1 {
   display: grid;
@@ -4119,7 +4140,9 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   text-align: left;
 }
 
-/* The pregame figure, struck through, once the live number has moved off it. */
+/* The pregame figure, struck through, shown ONLY while live. At final there is
+   one number and it is a fact; pre-kickoff there is one number and it is an
+   estimate. Two numbers only ever means "this is moving". */
 .h2h-pr small {
   display: block;
   margin-top: 2px;
@@ -4130,9 +4153,23 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   text-decoration: line-through;
 }
 
-/* A projection that has fallen is a different claim from one that hasn't. */
+/* Directional. A player fading and a player going off must not look the same. */
 .h2h-pr.down {
-  color: var(--negative);
+  color: #ff5d5d;
+}
+
+.h2h-pr.up {
+  color: var(--positive);
+}
+
+/* Final: white and solid. It happened. */
+.h2h-pr.isfinal {
+  color: #ffffff;
+}
+
+/* Pre-kickoff: grey, because it is only an estimate. */
+.h2h-pr {
+  color: var(--text-muted);
 }
 
 .h2h-slot {
@@ -4230,30 +4267,65 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   overflow: hidden;
 }
 
+/* Track carries the state too: empty pre-kickoff, red while live, full and
+   muted once done. */
 .h2h-bar i {
   display: block;
   height: 100%;
   border-radius: 99px;
-  background: linear-gradient(90deg, rgba(var(--gold-rgb), 0.5), var(--gold));
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.h2h-bar i.on {
+  background: linear-gradient(90deg, rgba(255, 93, 93, 0.45), #ff5d5d);
+}
+
+.h2h-bar i.done {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .h2h-trk.r .h2h-bar i {
   float: right;
-  background: linear-gradient(270deg, rgba(var(--gold-rgb), 0.5), var(--gold));
+}
+
+.h2h-trk.r .h2h-bar i.on {
+  background: linear-gradient(270deg, rgba(255, 93, 93, 0.45), #ff5d5d);
 }
 
 /* LINE 5 — status */
+/* State chips. Every state carries a WORD — never colour alone, which fails a
+   glance in sunlight and fails a colour-blind reader entirely. */
 .h2h-l5 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  color: var(--text-dim);
 }
 
-.h2h-l5 .on {
-  color: #ff5d5d;
+.h2h-chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 3px 6px;
+  border-radius: 5px;
+}
+
+.h2h-chip.final {
+  background: rgba(255, 255, 255, 0.13);
+  color: #cfdaea;
+}
+
+.h2h-chip.live {
+  background: #ff5d5d;
+  color: #1a0508;
+}
+
+.h2h-chip.pre {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-dim);
+  font-weight: 600;
+  letter-spacing: 0.05em;
 }
 
 @media (max-width: 380px) {
