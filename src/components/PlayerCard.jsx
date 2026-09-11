@@ -87,6 +87,7 @@ export default function PlayerCard({
   player,
   dist,
   propsEdge,
+  source,
   matchup,
   consensus,
   book,
@@ -158,11 +159,13 @@ export default function PlayerCard({
       </div>
 
       <div className="pc-three">
+        {/* Was the matchup grade. It had no automatic source and read "no
+            data" for nearly every player; this is computed for all of them. */}
         <Tile
-          label="Matchup"
-          value={matchup ? matchup.grade : null}
-          tone={matchup ? MATCHUP_TONE[matchup.grade] || "" : ""}
-          sub={matchup ? matchup.detail : ""}
+          label="Source"
+          value={source ? source.label : null}
+          tone={source && source.edge ? "pc-src-edge" : ""}
+          sub={source ? source.detail : ""}
         />
         <Tile
           label="Consensus"
