@@ -1,4 +1,4 @@
-# Status — handoff as of 2026-09-10
+# Status — handoff as of 2026-09-10 (late)
 
 Written for whoever picks this up next. Current state, what's deployed, what
 isn't, and what to do in what order. `docs/DESIGN.md` holds the locked visual
@@ -8,10 +8,12 @@ direction; this file holds the state of play.
 
 | branch | state |
 | --- | --- |
-| `main` | deployed to production. Everything below under "shipped" is live. |
-| `feat/player-card` | **3 commits ahead, unmerged, NOT deployed.** The gauge and player card. Kyle reviews screenshots and says merge; do not merge unasked. |
+| `main` | deployed. **Everything is shipped — nothing is stranded on a branch.** |
 
-Working tree clean. `main` and `origin/main` are in sync.
+Working tree clean, `main` and `origin/main` in sync.
+
+**Read `docs/QUEUE.md` first** — it is the live list of what is and isn't done.
+`docs/SUNDAY.md` is the validation plan for the Week 1 slate.
 
 ## Working agreement
 
@@ -27,7 +29,16 @@ Working tree clean. `main` and `origin/main` are in sync.
 
 ## Shipped and deployed today
 
-Six fixes, all verified in production:
+All verified in production:
+
+**Visual / feature**
+- live projection **decay** — Gameday rows fall as games are played
+- **side-by-side matchup board** — slot against slot, detail line, progress track
+- **player card** in the modal — projection gauge, lit arc, real Vegas props
+- **one gold** (`#e8b95a`) app-wide through a single token
+- matchup tile made honest — no fictional `+2.1 pts`, no letter grade on a player
+
+**Correctness**
 
 1. dev reads the live team document but never writes to it — `remoteStore.js`
    was the only client module missing the `import.meta.env.DEV` prod-base, so
