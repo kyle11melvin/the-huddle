@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
-import { simulateLive, liveNarrative, liveProjection, opponentSource, espnAgeMs, STALE_AFTER_MS } from "../simulate.js";
+import { simulateLive, liveNarrative, liveProjection, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
 import { teamLogoUrl } from "../data/teams.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
 import { scheduleOpp } from "../scheduleSync.js";
@@ -368,11 +368,10 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
         fine: "Your side uses real projections; the opponent's are rank estimates.",
       };
     }
-    if (src === "live" && age != null && age > STALE_AFTER_MS) {
-      const hrs = Math.floor(age / 3600000);
+    if (src === "live" && age != null && age > staleAfterMs(state)) {
       return {
         tag: "STALE",
-        warn: `Last ESPN sync was ${hrs >= 24 ? `${Math.floor(hrs / 24)}d` : `${hrs}h`} ago. Scores and projections are frozen at that moment — tap ⟳ ESPN to refresh.`,
+        warn: `Last ESPN sync was ${agoLabel(age)} ago. Scores and projections are frozen at that moment — tap ⟳ ESPN to refresh.`,
         fine: "Both sides use real ESPN projections, from the last sync.",
       };
     }

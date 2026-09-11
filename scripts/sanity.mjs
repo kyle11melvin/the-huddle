@@ -1363,7 +1363,7 @@ check(
 // truthy. That blob is persisted from the last good sync and outlives the
 // sync itself, so the screen claimed real ESPN numbers while running rank
 // estimates. Ask the code that builds them instead.
-const { opponentSource, espnAgeMs, STALE_AFTER_MS } = await import("../src/simulate.js");
+const { opponentSource, espnAgeMs, staleAfterMs, myGameLive, agoLabel, STALE_LIVE_MS, STALE_IDLE_MS } = await import("../src/simulate.js");
 
 const oppBase = {
   week: "1",
@@ -1400,10 +1400,40 @@ check(
   "staleness is measured from fetchedAt",
   espnAgeMs({ espn: { fetchedAt: 1000 } }, 1000 + 7200000) === 7200000
 );
+// The threshold is conditional: "too old" at 1pm Sunday is not "too old" on a
+// Tuesday. Gameday polls every 2 minutes while a game is live, so the tight
+// bound is five missed polls and cannot fire during healthy operation.
+const liveSt = {
+  players: { a: { team: "JAX" }, b: { team: "ATL" } },
+  espn: { fetchedAt: 0, games: { JAX: { state: "in" }, ATL: { state: "pre" } } },
+};
+const idleSt = {
+  players: { a: { team: "JAX" } },
+  espn: { fetchedAt: 0, games: { JAX: { state: "pre" } } },
+};
+check("a player on the field makes the state live", myGameLive(liveSt) === true);
+check("nobody on the field is not live", myGameLive(idleSt) === false);
 check(
-  "three hours is the game-day staleness line",
-  espnAgeMs({ espn: { fetchedAt: 0 } }, STALE_AFTER_MS + 1) > STALE_AFTER_MS &&
-    espnAgeMs({ espn: { fetchedAt: 0 } }, STALE_AFTER_MS - 1) < STALE_AFTER_MS
+  "a game live for a team I have NO player on does not tighten the bound",
+  myGameLive({ players: { a: { team: "JAX" } }, espn: { games: { KC: { state: "in" } } } }) === false,
+  "scoped to this roster on purpose — frozen data isn't urgent if nobody is playing"
+);
+check(
+  "live slate uses the tight 10-minute bound",
+  staleAfterMs(liveSt) === STALE_LIVE_MS && STALE_LIVE_MS === 10 * 60 * 1000
+);
+check(
+  "off-slate falls back to 3 hours, so a Wednesday doesn't nag",
+  staleAfterMs(idleSt) === STALE_IDLE_MS && STALE_IDLE_MS === 3 * 60 * 60 * 1000
+);
+check(
+  "the tight bound is well outside the 2-minute poll — no false positives when healthy",
+  STALE_LIVE_MS / 120000 === 5
+);
+check(
+  "age reads at a scale that makes sense — an hours-only label would render the most important warning as '0h'",
+  agoLabel(12 * 60000) === "12m" && agoLabel(4 * 3600000) === "4h" && agoLabel(50 * 3600000) === "2d",
+  `${agoLabel(12 * 60000)} / ${agoLabel(4 * 3600000)} / ${agoLabel(50 * 3600000)}`
 );
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

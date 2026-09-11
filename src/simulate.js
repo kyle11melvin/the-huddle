@@ -349,8 +349,61 @@ export function espnAgeMs(state, now = Date.now()) {
   return Number.isFinite(at) ? Math.max(0, now - at) : null;
 }
 
-/** Human-scale staleness for display. Tuned for a game day, not a Tuesday. */
-export const STALE_AFTER_MS = 3 * 60 * 60 * 1000;
+/**
+ * Staleness thresholds. Conditional, because "too old" means something
+ * completely different at 1pm on a Sunday than it does on a Tuesday.
+ *
+ * WHILE MY PLAYERS ARE ON THE FIELD: 10 minutes. Gameday polls ESPN every 2
+ * minutes whenever a game is live (Gameday.jsx), so 10 is five missed polls —
+ * comfortably outside healthy operation, and a tight bound costs nothing when
+ * the normal refresh is 5x faster. A 3-hour threshold here would stay silent
+ * through the entire early window while the screen showed pregame numbers,
+ * which is precisely the failure the banner exists to catch.
+ *
+ * OTHERWISE: 3 hours. Nothing is moving, the poll isn't running, and warning
+ * about a two-hour-old sync on a Wednesday is noise that teaches you to ignore
+ * the banner — which would cost more than it saves.
+ */
+export const STALE_LIVE_MS = 10 * 60 * 1000;
+export const STALE_IDLE_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Does the user have a player whose NFL game is in progress right now?
+ *
+ * Deliberately scoped to teams on THIS roster rather than the league-wide
+ * anyGameLive(): if none of my players are on the field, frozen data is not
+ * urgent. It is a strict subset of the condition that drives the 2-minute
+ * poll, so a tight threshold can never fire while that poll is healthy.
+ */
+export function myGameLive(state) {
+  const games = state && state.espn && state.espn.games;
+  if (!games) return false;
+  for (const p of Object.values((state && state.players) || {})) {
+    const g = p && p.team ? games[p.team] : null;
+    if (g && g.state === "in") return true;
+  }
+  return false;
+}
+
+/** The staleness bound that applies to this state right now. */
+export function staleAfterMs(state) {
+  return myGameLive(state) ? STALE_LIVE_MS : STALE_IDLE_MS;
+}
+
+/**
+ * "12m" / "4h" / "2d" — the age, at whatever scale reads naturally.
+ *
+ * The live threshold is 10 minutes, so an hours-only formatter renders the
+ * warning that matters most as "0h ago" and destroys its own credibility.
+ */
+export function agoLabel(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
+}
 
 // -------------------------------------------------------------- simulation ---
 

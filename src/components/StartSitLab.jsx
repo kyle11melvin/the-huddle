@@ -14,7 +14,8 @@ import {
   opponentDistributions,
   opponentSource,
   espnAgeMs,
-  STALE_AFTER_MS,
+  staleAfterMs,
+  agoLabel,
   opponentLineups,
 } from "../simulate.js";
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
@@ -87,9 +88,8 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
     if (src === "estimated") {
       return "Opponent scores are estimated from expert ranks and are NOT injury-adjusted — a ruled-out starter still counts as healthy. Treat the number as directional and re-sync ESPN.";
     }
-    if (src === "live" && age != null && age > STALE_AFTER_MS) {
-      const hrs = Math.floor(age / 3600000);
-      return `Both sides run on real ESPN projections, but the last sync was ${hrs >= 24 ? `${Math.floor(hrs / 24)}d` : `${hrs}h`} ago — refresh before acting on a close call.`;
+    if (src === "live" && age != null && age > staleAfterMs(state)) {
+      return `Both sides run on real ESPN projections, but the last sync was ${agoLabel(age)} ago — refresh before acting on a close call.`;
     }
     return "Both sides run on real ESPN projections; FantasyPros pastes add expert-rank uncertainty on top.";
   }, [state, week, oppTeam]);
