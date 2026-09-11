@@ -58,11 +58,20 @@ roster reach** — measured, not assumed. Until the real model exists the card
 must present it as a READ, never as a contribution. It printed "+2.1 pts" for a
 while; that was fiction.
 
-**2. Vegas already priced the opponent — do not charge twice.** Projections
-lead with Vegas props, and a book line for a player facing PIT *is* the line
-against PIT. Multiplying that by a separate matchup factor penalises him twice
-for the same defense. Any matchup adjustment has to know which projection
-source it is adjusting, and mostly the answer will be "don't".
+**2. Vegas already priced the opponent — so key off SURPRISE, not state.**
+Projections lead with Vegas props, and a book line for a player facing PIT *is*
+the line against PIT. Multiplying that by a separate matchup factor penalises
+him twice for the same defense.
+
+The fix is the same one that rescues the game-script model (`docs/GAME_SCRIPT.md`):
+adjust on the difference between what happens and what the book implied, never
+on the raw state. For a matchup that means the signal is not "PIT is a good run
+defense" — the market knows that and it is in the line already. It is "PIT is
+better against the run than the market has priced," which is a claim about the
+market being wrong, and is the only version that can carry an edge.
+
+In practice that makes the spread and implied total INPUTS to the matchup model,
+not just display fields on the card.
 
 **3. Elite players are matchup-resistant; the effect is tier-dependent.**
 Kyle's framing: *"I'm not dropping Gibbs to RB30 because he plays a top-10 run

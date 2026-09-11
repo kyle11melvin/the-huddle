@@ -1452,5 +1452,57 @@ check(
   `${agoLabel(12 * 60000)} / ${agoLabel(4 * 3600000)} / ${agoLabel(50 * 3600000)}`
 );
 
+// ---- 34. head-to-head pairing ----
+// The layout's whole value is that row N left and row N right are the SAME
+// slot. If the alignment is ever wrong the screen invites a comparison that
+// isn't real — a QB opposite a kicker.
+const { pairBySlot, shortName, H2H_SLOT_ORDER } = await import("../src/headToHead.js");
+
+const L = [
+  { slot: "QB", name: "My QB" }, { slot: "RB", name: "My RB1" }, { slot: "RB", name: "My RB2" },
+  { slot: "K", name: "My K" }, { slot: "BE", name: "My Bench" },
+];
+const Rr = [
+  { slot: "K", name: "Opp K" }, { slot: "QB", name: "Opp QB" }, { slot: "RB", name: "Opp RB1" },
+  { slot: "IR", name: "Opp IR" },
+];
+const paired = pairBySlot(L, Rr);
+check(
+  "every row pairs the SAME slot on both sides",
+  paired.every((p) => (!p.mine || p.mine.slot === p.slot) && (!p.theirs || p.theirs.slot === p.slot))
+);
+check(
+  "slots come out in display order regardless of input order",
+  paired.map((p) => p.slot).join(",") === "QB,RB,RB,K",
+  paired.map((p) => p.slot).join(",")
+);
+check(
+  "bench and IR are excluded — they have no counterpart to pair against",
+  !paired.some((p) => p.slot === "BE" || p.slot === "IR")
+);
+check(
+  "an uneven slot zips to the LONGER side rather than dropping a player",
+  paired.filter((p) => p.slot === "RB").length === 2 &&
+    paired.find((p) => p.slot === "RB" && p.theirs === null) != null,
+  "my 2 RBs vs their 1 must still show both of mine"
+);
+check("an empty opponent still renders my whole lineup", pairBySlot(L, []).length === 4);
+check("both sides empty is empty, not a crash", pairBySlot([], []).length === 0);
+check(
+  "names shorten to initial + surname so a two-column board doesn't shred them",
+  shortName("Trevor Lawrence") === "T. Lawrence" && shortName("Mike Washington Jr.") === "M. Washington Jr.",
+  `${shortName("Trevor Lawrence")} / ${shortName("Mike Washington Jr.")}`
+);
+check(
+  "single-word names are left alone — 'S. teelers' would be nonsense",
+  shortName("Steelers") === "Steelers" && shortName("") === ""
+);
+check(
+  "a defense keeps its TEAM name — 'L. D/ST' reads as a player with a slot for a surname",
+  shortName("Lions D/ST") === "Lions" && shortName("Steelers D/ST") === "Steelers",
+  `${shortName("Lions D/ST")} / ${shortName("Steelers D/ST")}`
+);
+check("the slot order covers a full starting lineup", H2H_SLOT_ORDER.length === 7);
+
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);
