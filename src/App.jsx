@@ -105,6 +105,7 @@ import { SLOT_COLOR, CALL_COLOR, STATUS_LABEL, destKey, zoneLabel } from "./cons
 import { initials, Avatar, StatusPill, Stars, StarPicker, TeamChip, SectionHeader, EmptyState } from "./components/ui/index.jsx";
 import RosterRow from "./components/RosterRow.jsx";
 import { MoveSheet, PlayerModal, AddPlayerModal } from "./components/modals/index.jsx";
+import OpponentCard from "./components/modals/OpponentCard.jsx";
 
 
 function ClaimCard({ claim, state, onEdit, onResult, onDelete }) {
@@ -700,6 +701,20 @@ export default function App({ initialTab } = {}) {
   const [state, setState] = useState(buildInitialState);
   const [notice, setNotice] = useState("");
   const [modalId, setModalId] = useState(null);
+  // An opponent's players aren't in state.players, so they can't open
+  // PlayerModal. They get their own read-only card instead.
+  const [oppRow, setOppRow] = useState(null);
+
+  /**
+   * Open a card for whichever player was tapped, mine or the opponent's.
+   * Gameday rows carry `id` for my players and nothing for theirs, which is
+   * the only reliable way to tell them apart — names collide across rosters.
+   */
+  const openRow = useCallback((row) => {
+    if (!row) return;
+    if (row.id) setModalId(row.id);
+    else setOppRow(row);
+  }, []);
   const [moveId, setMoveId] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
@@ -2263,7 +2278,7 @@ export default function App({ initialTab } = {}) {
             onSetLive={onSetLive}
             onSetOpponent={onSetOpponent}
             onRefresh={syncEspn}
-            onOpenPlayer={setModalId}
+            onOpenRow={openRow}
           />
         )}
         {tab === "today" && alertStrip}
@@ -2901,6 +2916,8 @@ export default function App({ initialTab } = {}) {
       </footer>
 
       {notice && <div className="toast">{notice}</div>}
+
+      {oppRow && <OpponentCard row={oppRow} week={week} state={state} onClose={() => setOppRow(null)} />}
 
       {modalId && (
         <PlayerModal

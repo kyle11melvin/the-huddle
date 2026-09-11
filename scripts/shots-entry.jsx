@@ -9,3 +9,4 @@ export { default as StartSitLab } from "../src/components/StartSitLab.jsx";
 export { default as LeagueBrowser } from "../src/components/LeagueBrowser.jsx";
 export { default as DataPanel } from "../src/components/DataPanel.jsx";
 export { PlayerModal } from "../src/components/modals/index.jsx";
+export { default as OpponentCard } from "../src/components/modals/OpponentCard.jsx";

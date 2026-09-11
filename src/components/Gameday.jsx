@@ -133,7 +133,7 @@ const Row = ({ row, l, autoMode, isOpen, onToggle, onSetLive, week }) => {
  * has football left" — a lead means nothing if the other side has three players
  * yet to play, and a deficit means nothing if you have Monday night left.
  */
-export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefresh, onOpenPlayer }) {
+export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefresh, onOpenRow }) {
   // While any NFL game is being played, poll ESPN so scores and the win bar
   // move on their own — no tapping required.
   // The 120s live poll. Depending on [state, onRefresh] meant the interval was
@@ -234,6 +234,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
           bye: byeWeekFor(state.byes || {}, p.team),
           pos: p.pos,
           k: `me:${p.id}`,
+          id: p.id,
           // dist.mean is already injury-priced (expected points)
           proj: dist ? dist.mean : a && a.proj ? a.proj : null,
           simProj: dist ? dist.condMean ?? dist.mean : a && a.proj ? a.proj : null,
@@ -265,6 +266,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
             status: INJ_TAG[e.injuryStatus] || "",
             bye: byeWeekFor(state.byes || {}, e.team),
             k: `opp:${key(e.name)}`,
+            espnId: e.espnId || "",
             proj: proj != null ? Math.round(proj * playProb * 10) / 10 : null,
             simProj: proj,
             playProb,
@@ -631,7 +633,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                   <button
                     type="button"
                     className={`h2h-nm ${A && A.isFinal ? "spent" : ""}`}
-                    onClick={() => A && onOpenPlayer && onOpenPlayer(A.row)}
+                    onClick={() => A && onOpenRow && onOpenRow(A.row)}
                     disabled={!A}
                   >
                     {A ? shortName(A.row.name) : "Empty"}
@@ -641,7 +643,14 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                     {p.slot}
                   </span>
                   <Proj d={B} right />
-                  <span className={`h2h-nm r ${B && B.isFinal ? "spent" : ""}`}>{B ? shortName(B.row.name) : "Empty"}</span>
+                  <button
+                    type="button"
+                    className={`h2h-nm r ${B && B.isFinal ? "spent" : ""}`}
+                    onClick={() => B && onOpenRow && onOpenRow(B.row)}
+                    disabled={!B}
+                  >
+                    {B ? shortName(B.row.name) : "Empty"}
+                  </button>
                 </div>
 
                 <div className="h2h-l2">
