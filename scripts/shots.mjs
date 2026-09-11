@@ -34,16 +34,50 @@ const CSS = readFileSync(resolve("src/index.css"), "utf8");
 
 // Real numbers off the live roster, chosen to stress the geometry rather than
 // flatter it. Bowers is the case where mean falls below his own floor.
+// Player identity, ecr, status and notes are REAL records off the live team
+// document; projections are real pointDistribution output. Props/matchup/
+// consensus figures are illustrative — those feeds don't exist yet (see
+// docs/DESIGN.md) — which is why one case deliberately shows the no-data state.
 const CASES = [
-  { file: "gauge-bijan.png", label: "Bijan Robinson · RB · healthy", props: { mean: 24.7, condMean: 24.7, sd: 13.5, playProb: 1 } },
-  { file: "gauge-bowers.png", label: "Brock Bowers · TE · 25% to play", props: { mean: 3.7, condMean: 14.9, sd: 8.9, playProb: 0.25 } },
-  { file: "gauge-dicker.png", label: "Cameron Dicker · K · healthy", props: { mean: 10.9, condMean: 10.9, sd: 5.2, playProb: 1 } },
-  { file: "gauge-lawrence.png", label: "Trevor Lawrence · QB · healthy", props: { mean: 23.1, condMean: 23.1, sd: 8.7, playProb: 1 } },
+  {
+    file: "card-bijan.png",
+    component: "card",
+    props: {
+      player: { name: "Bijan Robinson", pos: "RB", team: "ATL", opp: "@PIT", status: "" },
+      dist: { mean: 24.7, condMean: 24.7, sd: 13.5, playProb: 1 },
+      propsEdge: { delta: 2.4, parts: ["18.5 rush att", "82.5 rush yds", "3.5 rec", "TD +135 (43%)"] },
+      matchup: { grade: "B+", points: 2.1, detail: "PIT 24th vs RB" },
+      consensus: { rank: "RB2", sources: 3, spread: 1 },
+      book: { spread: "ATL +2.5", total: 44.5, implied: 21 },
+      news: [
+        { age: "2h", text: "Full participant Wednesday; no injury designation expected." },
+        { age: "1d", text: "Signed extension the week of Aug 3 after briefly sitting out camp." },
+      ],
+    },
+  },
+  {
+    file: "card-bowers.png",
+    component: "card",
+    props: {
+      player: { name: "Brock Bowers", pos: "TE", team: "LV", opp: "vs MIA", status: "D" },
+      dist: { mean: 3.7, condMean: 14.9, sd: 8.9, playProb: 0.25 },
+      propsEdge: null,
+      matchup: { grade: "C", points: 0.4, detail: "MIA 16th vs TE" },
+      consensus: { rank: "TE1", sources: 3, spread: 0 },
+      book: null,
+      news: [
+        { age: "4h", text: "Limited again Thursday — coach calls him day to day." },
+        { age: "2d", text: "Coordinator plans to use Bowers and Mayer together often." },
+      ],
+    },
+  },
+  { file: "gauge-bijan.png", component: "gauge", props: { mean: 24.7, condMean: 24.7, sd: 13.5, playProb: 1 } },
+  { file: "gauge-bowers.png", component: "gauge", props: { mean: 3.7, condMean: 14.9, sd: 8.9, playProb: 0.25 } },
 ];
 
 mkdirSync("node_modules/.shots", { recursive: true });
 await build({
-  entryPoints: ["src/components/ProjectionGauge.jsx"],
+  entryPoints: ["scripts/shots-entry.jsx"],
   bundle: true,
   format: "esm",
   platform: "neutral",
@@ -55,15 +89,16 @@ await build({
   external: ["react", "react-dom", "react-dom/server"],
   logLevel: "error",
 });
-const { default: ProjectionGauge } = await import(`${pathToFileURL(resolve(BUNDLE)).href}?t=${Date.now()}`);
+const { ProjectionGauge, PlayerCard } = await import(`${pathToFileURL(resolve(BUNDLE)).href}?t=${Date.now()}`);
+const COMPONENTS = { gauge: ProjectionGauge, card: PlayerCard };
 
 mkdirSync(OUT_DIR, { recursive: true });
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: "new" });
 const page = await browser.newPage();
-await page.setViewport({ width: 400, height: 380, deviceScaleFactor: 2 });
+await page.setViewport({ width: 400, height: 600, deviceScaleFactor: 2 });
 
 for (const c of CASES) {
-  const markup = renderToString(React.createElement(ProjectionGauge, c.props));
+  const markup = renderToString(React.createElement(COMPONENTS[c.component], c.props));
   const html = `<!doctype html><html><head>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:wght@600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
@@ -72,7 +107,6 @@ for (const c of CASES) {
       .shot-label { color: var(--text-muted); font-size: 10px; letter-spacing: .18em;
         text-transform: uppercase; margin-bottom: 18px; font-weight: 700; }
     </style></head><body>
-    <div class="shot-label">${c.label}</div>
     ${markup}
   </body></html>`;
 
@@ -84,7 +118,7 @@ for (const c of CASES) {
   // is the page's, which eslint has no way to know from a scripts/ file.
   // eslint-disable-next-line no-undef
   await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({ path: `${OUT_DIR}/${c.file}` });
+  await page.screenshot({ path: `${OUT_DIR}/${c.file}`, fullPage: true });
   console.log("wrote", `${OUT_DIR}/${c.file}`);
 }
 
