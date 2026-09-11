@@ -14,11 +14,12 @@ import PlayerCard from "../PlayerCard.jsx";
 import { playerCardData } from "../../playerCardData.js";
 import { pointDistribution, playerAnalytics, floorCeiling } from "../../analytics.js";
 import { scheduleOpp, nextOpponents } from "../../scheduleSync.js";
+import { opponentOf, kickoffLabel } from "../../headToHead.js";
 import { whoRosters, MY_TEAM } from "../../data/leagueRosters.js";
 import { searchFreeAgents } from "../../data/freeAgents.js";
 import Autocomplete from "../Autocomplete.jsx";
 import { SLOT_COLOR, STATUS_LABEL, destKey, zoneLabel } from "../../constants.js";
-import { Avatar, StatusPill, Stars, StarPicker, TeamChip, SectionHeader, EmptyState, initials } from "../ui/index.jsx";
+import { Avatar, StatusPill, StarPicker, TeamChip, SectionHeader, EmptyState, initials } from "../ui/index.jsx";
 
 export function MoveSheet({ state, playerId, onClose, onMove, coarse }) {
   const player = state.players[playerId];
@@ -111,12 +112,17 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
   if (!player) return null;
 
   const team = teamOf(player.team);
-  const loc = findLocation(state, playerId);
   const wd = weekData(player, week);
   const posColor = SLOT_COLOR[player.pos] || "var(--border-hi)";
   const byes = state.byes || {};
   const shownStatus = effectiveStatus(player, week, byes);
   const byeWk = byeWeekFor(byes, player.team);
+  // Typed override first, then the synced NFL schedule. On a bye week the
+  // schedule has no entry and `vs` is null, which the box renders as BYE
+  // rather than as a missing opponent.
+  const autoOpp = scheduleOpp(state, player.team, week);
+  const vs = opponentOf(wd.opp || autoOpp);
+  const kick = kickoffLabel(((state.espn && state.espn.games) || {})[player.team]?.startTime);
   const owner = whoRosters(player.name);
   const cardData = playerCardData(state, player, week);
 
@@ -158,16 +164,15 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
               than in the app is worse than no screenshot at all. */}
           {cardData && <PlayerCard {...cardData} showHeader={false} />}
 
+          {/* Slot was here. You know which of your own players is the QB — the tile
+              spent a third of the row telling you something the lineup screen
+              already shows. Two tiles now, so the grid tracks its children. */}
           <div className="modal-stat-grid">
             <div className="stat-tile">
               <div className="stat-label">ECR</div>
               <div className="stat-value" style={{ color: "var(--accent-bright)" }}>
                 {player.ecr || "—"}
               </div>
-            </div>
-            <div className="stat-tile">
-              <div className="stat-label">Slot</div>
-              <div className="stat-value">{loc ? zoneLabel(loc) : "—"}</div>
             </div>
             <div className="stat-tile">
               <div className="stat-label">Bye</div>
@@ -233,9 +238,6 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
             </>
           ) : (
             <div className="detail-strip">
-              <span>
-                Matchup {wd.matchup ? <Stars n={wd.matchup} /> : <em>not set</em>}
-              </span>
               {owner && owner !== MY_TEAM && <span className="owner-tag">rostered by {owner}</span>}
               <button className="link-btn" onClick={startEdit}>
                 Edit details
@@ -243,16 +245,34 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
             </div>
           )}
 
+          {/* This box asked you to TYPE the opponent, so it rendered blank for
+              all 16 players while state.schedule.opps already held every NFL
+              pairing for all 18 weeks. The schedule is the truth; the typed
+              field is only an override for when it is wrong or missing. */}
           <div className="modal-section-label">{weekLabel(week)} matchup</div>
           <div className="week-editor">
-            <label className="field">
+            <div className="field">
               <span className="field-label">Opponent</span>
-              <input
-                value={wd.opp}
-                placeholder="e.g. CLE or @PIT"
-                onChange={(e) => onWeek(playerId, { opp: e.target.value })}
-              />
-            </label>
+              {autoOpp || wd.opp ? (
+                <div className="week-opp">
+                  {vs ? (
+                    <>
+                      <span className="week-opp-at">{vs.at ? "@" : "vs"}</span>
+                      <TeamChip abbr={vs.opp} />
+                    </>
+                  ) : (
+                    <span className="week-opp-at">BYE</span>
+                  )}
+                  {kick && <span className="week-opp-kick">{kick}</span>}
+                </div>
+              ) : (
+                <input
+                  value={wd.opp}
+                  placeholder="e.g. CLE or @PIT"
+                  onChange={(e) => onWeek(playerId, { opp: e.target.value })}
+                />
+              )}
+            </div>
             <div className="field">
               <span className="field-label">Matchup grade</span>
               <StarPicker value={wd.matchup} onChange={(n) => onWeek(playerId, { matchup: n })} />

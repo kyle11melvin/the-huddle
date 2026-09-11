@@ -940,7 +940,7 @@ select option {
 
 .modal-stat-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -3145,15 +3145,18 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 /* Pre-kickoff the PROJECTION is the story: at 10pm Friday everyone is near
    zero and the score is noise. Once the ball is in the air, that inverts. */
-.gd-total.proj {
-  font-size: 2.5rem;
-  color: var(--gold);
-}
+.gd-total.proj { font-size: 2.5rem; }
+.gd-total.live { font-size: 2.9rem; }
 
-.gd-total.live {
-  font-size: 2.9rem;
-  color: var(--text);
-}
+/* Both scores rendered gold, which broke the one rule the rest of the board
+   is built on: gold is YOU, slate is THEM. Colour here says whose number it
+   is, never who is winning — the prob bar and the margin pill already carry
+   the prediction, and putting a win/lose colour on a score makes a forecast
+   look like a fact. On another league matchup nobody owns gold, so the hero
+   drops the .mine class and both sides go neutral. */
+.gd-total { color: var(--text); }
+.gd-hero.mine .gd-team:not(.right) .gd-total { color: var(--gold); }
+.gd-hero.mine .gd-team.right .gd-total { color: var(--text-muted); }
 
 .gd-scored {
   font-family: var(--font-mono);
@@ -4597,3 +4600,14 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   color: var(--gold-hi);
   text-shadow: 0 0 18px rgba(var(--gold-rgb), 0.45);
 }
+
+/* Derived opponent, shown where a blank text input used to sit. */
+.week-opp { display: flex; align-items: center; gap: 7px; min-height: 34px; flex-wrap: wrap; }
+.week-opp-at {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.week-opp-kick { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); }

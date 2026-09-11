@@ -141,7 +141,7 @@ for (const [file, key, props] of [
   ["screen-data.png", "data", { state: realState, onClose: noop, onApplyEcr: noop, onApplyByes: noop, onSetBye: noop, onImportTeam: noop, onApplyProps: noop, onApplyProjections: noop, flash: noop, link: { id: "kmzrw943", key: "k".repeat(32), mode: "owner" }, syncStatus: "saved", syncError: "", onGoLive: noop, onStopLive: noop, onJoinTeam: noop, onReconnectTeam: noop, onRefreshLive: noop, liveUrl: "https://example.test/?team=kmzrw943" }],
   ["screen-modal.png", "modal", { state: realState, playerId: firstPlayerId, week: "1", onClose: noop, onStatus: noop, onWeek: noop, onMoveOpen: noop, onDrop: noop, onEdit: noop }],
 ]) {
-  CASES.push({ file, component: key, props, palette: "current" });
+  CASES.push({ file, component: key, props, palette: "current", unpinModal: key === "modal" });
 }
 
 CASES.push({
@@ -248,6 +248,21 @@ for (const c of CASES) {
   // is the page's, which eslint has no way to know from a scripts/ file.
   // eslint-disable-next-line no-undef
   await page.evaluate(() => document.fonts.ready);
+  // The modal is position:fixed with its own scroll container, so fullPage
+  // captures only the first screenful. Unpin it and let the page grow, or the
+  // shot can never show the matchup box that lives below the fold.
+  if (c.unpinModal) {
+    // eslint-disable-next-line no-undef
+    await page.evaluate(() => {
+      const bd = document.querySelector(".modal-backdrop");
+      const m = document.querySelector(".modal");
+      if (bd) { bd.style.position = "static"; bd.style.alignItems = "flex-start"; }
+      document.documentElement.style.height = "auto";
+      document.body.style.height = "auto";
+      document.body.style.overflow = "visible";
+      if (m) { m.style.maxHeight = "none"; m.style.overflow = "visible"; }
+    });
+  }
   await page.screenshot({ path: `${OUT_DIR}/${c.file}`, fullPage: true });
   console.log("wrote", `${OUT_DIR}/${c.file}`);
 }

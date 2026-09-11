@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
-import { simulateLive, liveNarrative, liveProjection, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
+import { simulateLive, liveProjection, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
 import { teamLogoUrl, headshotUrl, teamOf } from "../data/teams.js";
 import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, kickoffLabel, opponentOf, pairingEdge } from "../headToHead.js";
 import { SLOT_COLOR } from "../constants.js";
@@ -416,7 +416,6 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
     () => (myEntries.length && oppEntries.length ? simulateLive(myEntries, oppEntries) : null),
     [myEntries, oppEntries]
   );
-  const narrative = useMemo(() => liveNarrative(sim), [sim]);
 
   // Does ANY of my starters' games have a ball in the air? The hero's
   // hierarchy flips on this: pre-kickoff the projection is the story and the
@@ -442,17 +441,15 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
         tag: "NOT SYNCED",
         warn:
           "Opponent projections are estimated from expert ranks, and are not adjusted for injuries — a ruled-out starter is still valued as if healthy. Re-sync ESPN for real numbers.",
-        fine: "Your side uses real projections; the opponent's are rank estimates.",
       };
     }
     if (src === "live" && age != null && age > staleAfterMs(state)) {
       return {
         tag: "STALE",
         warn: `Last ESPN sync was ${agoLabel(age)} ago. Scores and projections are frozen at that moment — tap ⟳ ESPN to refresh.`,
-        fine: "Both sides use real ESPN projections, from the last sync.",
       };
     }
-    return { tag: "", warn: "", fine: "Both sides use real ESPN projections." };
+    return { tag: "", warn: "" };
   }, [state, week, oppTeam]);
 
   const Row = ({ row, side }) => {
@@ -650,17 +647,15 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
             </div>
           </div>
 
-          {viewingMine && narrative && <div className="gd-narrative">{narrative}</div>}
+          {/* The narrative callout and the P10-P90 fine print lived here. Both
+              restated what the number, the bar and the two "players left" boxes
+              already say — three sentences of prose under a 58px score is noise,
+              not intelligence. The provenance warning below stays: it only
+              appears when the opponent data is actually suspect. */}
           {viewingMine && oppProvenance.warn && (
             <div className="data-warn">
               <span className="data-warn-tag">{oppProvenance.tag}</span>
               <span>{oppProvenance.warn}</span>
-            </div>
-          )}
-          {viewingMine && (
-            <div className="sim-fine">
-              Your range if the week finished a thousand different ways: {sim.myP10}–{sim.myP90}.{" "}
-              {oppProvenance.fine}
             </div>
           )}
         </div>
