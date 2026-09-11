@@ -4,7 +4,8 @@ import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
 import { simulateLive, liveNarrative, liveProjection, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
 import { teamLogoUrl } from "../data/teams.js";
-import { pairBySlot, shortName } from "../headToHead.js";
+import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, kickoffLabel, opponentOf } from "../headToHead.js";
+import { SLOT_COLOR } from "../constants.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
 import { scheduleOpp } from "../scheduleSync.js";
 import { byeWeekFor } from "../analysis.js";
@@ -132,7 +133,7 @@ const Row = ({ row, l, autoMode, isOpen, onToggle, onSetLive, week }) => {
  * has football left" — a lead means nothing if the other side has three players
  * yet to play, and a deficit means nothing if you have Monday night left.
  */
-export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefresh }) {
+export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefresh, onOpenPlayer }) {
   // While any NFL game is being played, poll ESPN so scores and the win bar
   // move on their own — no tapping required.
   // The 120s live poll. Depending on [state, onRefresh] meant the interval was
@@ -353,6 +354,27 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
   // Sorted by SLOT, not by live status — the two columns only mean anything if
   // row N on the left is the same slot as row N on the right.
   const pairs = useMemo(() => pairBySlot(leftResolved, rightResolved), [leftResolved, rightResolved]);
+
+  // What firepower is LEFT on each side, by slot.
+  const leftYtp = useMemo(() => yetToPlay(leftResolved), [leftResolved]);
+  const rightYtp = useMemo(() => yetToPlay(rightResolved), [rightResolved]);
+
+  // "0-0 (#4)". No @handle: api/espn.js does not extract owner handles from
+  // ESPN's payload, so there is nothing to render — inventing one would be
+  // worse than leaving it out.
+  const subFor = useCallback(
+    (teamName) => {
+      const teams = (state.espn && state.espn.teams) || [];
+      const t = teams.find((x) => (x.mapped || x.name) === teamName);
+      if (!t) return "";
+      const rec = recordLabel(t.record);
+      const seed = seedFor(teams, t.id);
+      return seed ? `${rec} (#${seed})` : rec;
+    },
+    [state.espn]
+  );
+  const leftSub = subFor(leftName);
+  const rightSub = subFor(rightName);
 
   const myEntries = useMemo(
     () => leftResolved.filter((r) => r.name && r.proj != null).map(entryFor),
@@ -575,17 +597,75 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
       {(leftRows.length > 0 || rightRows.length > 0) && (
         <div className="h2h">
           <div className="h2h-head">
-            <span className="h2h-head-l">{leftName}</span>
-            <span className="h2h-head-c">SLOT</span>
-            <span className="h2h-head-r">{rightName}</span>
-          </div>
-          {pairs.map((p) => (
-            <div className="h2h-row" key={p.key}>
-              <H2HSide row={p.mine} side="l" week={week} state={state} />
-              <span className="h2h-slot">{p.slot}</span>
-              <H2HSide row={p.theirs} side="r" week={week} state={state} />
+            <div className="h2h-team">
+              <div className="h2h-team-name">{leftName}</div>
+              <div className="h2h-team-sub">{leftSub}</div>
+              {leftYtp.count > 0 && (
+                <div className="h2h-ytp">
+                  <span className="h2h-ytp-n">yet to play ({leftYtp.count})</span>
+                  <span className="h2h-ytp-parts">{yetToPlayLabel(leftYtp)}</span>
+                </div>
+              )}
             </div>
-          ))}
+            <div className="h2h-team r">
+              <div className="h2h-team-name">{rightName}</div>
+              <div className="h2h-team-sub">{rightSub}</div>
+              {rightYtp.count > 0 && (
+                <div className="h2h-ytp">
+                  <span className="h2h-ytp-n">yet to play ({rightYtp.count})</span>
+                  <span className="h2h-ytp-parts">{yetToPlayLabel(rightYtp)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+          {pairs.map((p) => {
+            const A = sideData(p.mine, week, state);
+            const B = sideData(p.theirs, week, state);
+            const isLive = (A && A.status === "inProgress") || (B && B.status === "inProgress");
+            return (
+              <div className={`h2h-row ${isLive ? "islive" : ""}`} key={p.key}>
+                <div className="h2h-l1">
+                  <button
+                    type="button"
+                    className="h2h-nm"
+                    onClick={() => A && onOpenPlayer && onOpenPlayer(A.row)}
+                    disabled={!A}
+                  >
+                    {A ? shortName(A.row.name) : "Empty"}
+                  </button>
+                  <Proj d={A} />
+                  <span className="h2h-slot" style={{ background: SLOT_COLOR[p.slot] || "var(--text-dim)" }}>
+                    {p.slot}
+                  </span>
+                  <Proj d={B} right />
+                  <span className="h2h-nm r">{B ? shortName(B.row.name) : "Empty"}</span>
+                </div>
+
+                <div className="h2h-l2">
+                  <Ident d={A} />
+                  <Ident d={B} right />
+                </div>
+
+                <div className="h2h-l3">
+                  <span>{A ? `${A.when}${A.opp ? ` ${A.opp.at ? "@" : "vs"} ${A.opp.opp}` : ""}` : ""}</span>
+                  <span className="r">
+                    {B ? `${B.when}${B.opp ? ` ${B.opp.at ? "@" : "vs"} ${B.opp.opp}` : ""}` : ""}
+                    {B ? " ›" : ""}
+                  </span>
+                </div>
+
+                <div className="h2h-l4">
+                  <Track d={A} />
+                  <Track d={B} right />
+                </div>
+
+                <div className="h2h-l5">
+                  <span className={A && A.status === "inProgress" ? "on" : ""}>{A ? A.statusLine : ""}</span>
+                  <span className={`r ${B && B.status === "inProgress" ? "on" : ""}`}>{B ? B.statusLine : ""}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -598,17 +678,12 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
  * the slot badge, so the two numbers being compared are adjacent instead of a
  * screen apart.
  */
-const H2HSide = ({ row, side, week, state }) => {
-  if (!row || !row.name) {
-    return (
-      <div className={`h2h-side ${side} empty`}>
-        <span className="h2h-name dim">Empty</span>
-      </div>
-    );
-  }
+/** Everything one side of a paired row needs, derived once. */
+function sideData(row, week, state) {
+  if (!row || !row.name) return null;
   const l = row.l || {};
   const status = l.status || "notStarted";
-  const liveProj = liveProjection({
+  const live = liveProjection({
     pregame: row.proj,
     ifPlays: row.simProj ?? row.proj,
     scored: l.scored,
@@ -616,53 +691,57 @@ const H2HSide = ({ row, side, week, state }) => {
     status,
     playProb: row.playProb ?? 1,
   });
-  const logo = teamLogoUrl(row.team);
   const game = (state.espn && state.espn.games && row.team && state.espn.games[row.team]) || null;
+  const opp = opponentOf((row.weeks && row.weeks[week] && row.weeks[week].opp) || scheduleOpp(state, row.team, week));
+  return {
+    row,
+    status,
+    live,
+    // The pregame figure, shown struck through once the live number has moved
+    // off it. This is the differentiator against a frozen board: the number you
+    // saw this morning is visibly no longer the number.
+    was: status === "inProgress" && Number.isFinite(row.proj) && live != null && Math.abs(row.proj - live) >= 0.1 ? row.proj : null,
+    prog: status === "final" ? 1 : status === "inProgress" ? 1 - (l.pctRemaining ?? 1) : 0,
+    when: game && game.startTime ? kickoffLabel(game.startTime) : "",
+    opp,
+    statusLine: status === "final" ? "Final" : status === "inProgress" ? l.detail || "Live" : "Not yet started",
+    logo: teamLogoUrl(row.team),
+  };
+}
 
-  // Fraction of the game PLAYED, for the progress track. pctRemaining counts
-  // down, so the bar fills as the game runs out.
-  const played = status === "final" ? 1 : status === "inProgress" ? 1 - (l.pctRemaining ?? 1) : 0;
-
-  // Not yet started / live clock / Final — one line, always present, so a row
-  // never leaves you guessing whether a zero means "hasn't played" or "did
-  // nothing". ESPN's shortDetail already reads as a clock mid-game.
-  let when = "";
-  if (status === "final") when = "Final";
-  else if (status === "inProgress") when = l.detail || "Live";
-  else {
-    const t = game && game.startTime ? untilKick(game.startTime) : null;
-    when = t ? `in ${t}` : l.detail || "Not yet started";
-  }
-
-  const opp = (row.weeks && row.weeks[week] && row.weeks[week].opp) || scheduleOpp(state, row.team, week) || "";
-
+const Proj = ({ d, right }) => {
+  if (!d) return <span className="h2h-pr" />;
   return (
-    <div className={`h2h-side ${side} ${status === "final" ? "final" : ""}`}>
-      <span className="h2h-logo">{logo && <img src={logo} alt="" loading="lazy" />}</span>
-      <span className="h2h-body">
-        <span className="h2h-name">
-          {status === "inProgress" && <span className="gd-live-dot" />}
-          <span className="h2h-nm">{shortName(row.name)}</span>
-          {row.status && <b className={`h2h-inj inj-${row.status.toLowerCase()}`}>{row.status}</b>}
-        </span>
-        <span className="h2h-detail">
-          {row.pos}
-          {row.team ? ` · ${row.team}` : ""}
-          {opp ? ` ${opp}` : ""}
-          {Number.isFinite(row.bye) ? ` · bye ${row.bye}` : ""}
-        </span>
-        <span className="h2h-track" aria-hidden="true">
-          <i style={{ width: `${Math.round(Math.max(0, Math.min(1, played)) * 100)}%` }} />
-        </span>
-        <span className={`h2h-when ${status}`}>{when}</span>
-      </span>
-      <span className="h2h-nums">
-        <b className={`h2h-pts ${status === "final" ? "final" : ""}`}>{Number.isFinite(l.scored) ? l.scored : "—"}</b>
-        <i className={`h2h-proj ${status === "inProgress" ? "live" : ""}`}>{liveProj != null ? liveProj : "—"}</i>
-      </span>
-    </div>
+    <span className={`h2h-pr ${d.was ? "down" : ""} ${right ? "r" : ""}`}>
+      {d.live != null ? d.live.toFixed(1) : "–"}
+      {d.was != null && <small>{d.was.toFixed(1)}</small>}
+    </span>
   );
 };
+
+const Ident = ({ d, right }) => {
+  if (!d) return <span className={right ? "r" : ""} />;
+  const { row } = d;
+  return (
+    <span className={right ? "r" : ""}>
+      {row.status && <span className="h2h-inj">{row.status} · </span>}
+      <span className="h2h-pos" style={{ color: SLOT_COLOR[row.pos] || "var(--text-muted)" }}>
+        {row.pos}
+      </span>
+      {` · ${row.team}`}
+      {Number.isFinite(row.bye) ? ` (${row.bye})` : ""}
+    </span>
+  );
+};
+
+const Track = ({ d, right }) => (
+  <div className={`h2h-trk ${right ? "r" : ""}`}>
+    <span className="h2h-logo">{d && d.logo && <img src={d.logo} alt="" loading="lazy" />}</span>
+    <span className="h2h-bar">
+      <i style={{ width: `${Math.round(Math.max(0, Math.min(1, d ? d.prog : 0)) * 100)}%` }} />
+    </span>
+  </div>
+);
 
 function EmptyBox({ children }) {
   return (

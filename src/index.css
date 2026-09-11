@@ -3979,87 +3979,233 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 /* ============================================================================
    HEAD-TO-HEAD BOARD
-   One row per starting slot: my player left, the opponent's same-slot player
-   mirrored right, slot badge between them. Projections sit on the INSIDE
-   edges so the two numbers being compared are adjacent rather than a screen
-   apart — which is the entire reason for the layout.
+   One CARD per starting slot. Mine left, theirs mirrored right, filled slot
+   badge centred, projections on the inside edges flanking it so the comparison
+   happens in a single glance. Built phone-first, checked at 375px.
    ============================================================================ */
 
 .h2h {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
+
+/* ---- top strip: who, record, and what firepower is LEFT ---- */
 
 .h2h-head {
   display: grid;
-  grid-template-columns: 1fr 42px 1fr;
-  align-items: center;
-  gap: 6px;
-  padding: 11px 12px 9px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-raised);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text);
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 12px 12px 11px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
 }
 
-.h2h-head-r {
+.h2h-team.r {
   text-align: right;
 }
 
-.h2h-head-c {
-  text-align: center;
-  font-family: var(--font-mono);
-  font-size: 8.5px;
+.h2h-team-name {
+  font-family: var(--font-display);
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.h2h-team-sub {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
   color: var(--text-dim);
 }
 
-.h2h-row {
-  display: grid;
-  grid-template-columns: 1fr 42px 1fr;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  border-bottom: 1px solid var(--border);
+/* A bare "(10)" hides the difference between a QB plus three RBs and a kicker
+   plus a defense — and that distinction is the whole read on whether a lead is
+   safe. So the breakdown, not just the count. */
+.h2h-ytp {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.h2h-row:last-child {
-  border-bottom: 0;
+.h2h-ytp-n {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.h2h-ytp-parts {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #9fb0c6;
+}
+
+/* ---- the paired row ---- */
+
+.h2h-row {
+  border-radius: 13px;
+  padding: 11px 11px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0.008));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+/* A row with a game in progress is the one you're actually watching. */
+.h2h-row.islive {
+  background: linear-gradient(180deg, rgba(255, 93, 93, 0.07), rgba(255, 255, 255, 0.01));
+  box-shadow: 0 0 0 1px rgba(255, 93, 93, 0.24) inset;
+}
+
+/* LINE 1 — names and projections, badge between */
+.h2h-l1 {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.h2h-nm {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.h2h-nm:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.h2h-nm.r {
+  text-align: right;
+}
+
+.h2h-pr {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: right;
+  color: var(--text);
+  min-width: 34px;
+}
+
+.h2h-pr.r {
+  text-align: left;
+}
+
+/* The pregame figure, struck through, once the live number has moved off it. */
+.h2h-pr small {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 400;
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
+/* A projection that has fallen is a different claim from one that hasn't. */
+.h2h-pr.down {
+  color: var(--negative);
 }
 
 .h2h-slot {
-  text-align: center;
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--text-dim);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 3px 0;
+  letter-spacing: 0.04em;
+  padding: 4px 5px;
+  border-radius: 5px;
+  min-width: 40px;
+  text-align: center;
+  color: #07101c;
 }
 
-.h2h-side {
+/* LINE 2 — identity. Injury FIRST: it qualifies everything after it. */
+.h2h-l2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.h2h-l2 .r,
+.h2h-l3 .r,
+.h2h-l5 .r {
+  text-align: right;
+}
+
+.h2h-pos {
+  font-weight: 700;
+}
+
+.h2h-inj {
+  color: var(--gold-hi);
+  font-weight: 700;
+}
+
+/* LINE 3 — the game */
+.h2h-l3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  font-size: 11px;
+  color: #93a5bc;
+}
+
+.h2h-l3 span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* LINE 4 — progress, logo at the OUTER end, fill running inward */
+.h2h-l4 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: center;
+  padding-top: 1px;
+}
+
+.h2h-trk {
   display: flex;
   align-items: center;
-  gap: 7px;
-  min-width: 0;
+  gap: 6px;
 }
 
-/* Mirrored: the opponent reads right-to-left so both projections land beside
-   the slot badge in the middle. */
-.h2h-side.r {
+.h2h-trk.r {
   flex-direction: row-reverse;
-}
-
-.h2h-side.final {
-  opacity: 0.68;
 }
 
 .h2h-logo {
@@ -4076,165 +4222,60 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   object-fit: contain;
 }
 
-.h2h-body {
+.h2h-bar {
   flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.h2h-side.r .h2h-body {
-  align-items: flex-end;
-}
-
-.h2h-name {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  max-width: 100%;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-/* The name itself must be the thing that ellipses, not the flex row around it
-   — otherwise it simply overflows its container and collides with the numbers. */
-.h2h-name > span.h2h-nm {
-  min-width: 0;
-  white-space: nowrap;
+  height: 3px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.09);
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.h2h-side.r .h2h-name {
-  flex-direction: row-reverse;
-}
-
-/* Injury tag sits inline with the name — it qualifies the name, and a reader
-   should never have to look elsewhere to find out a starter is doubtful. */
-.h2h-inj {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 8.5px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text-muted);
-}
-
-.h2h-inj.inj-q {
-  color: var(--gold-hi);
-  background: rgba(var(--gold-rgb), 0.16);
-}
-
-.h2h-inj.inj-d,
-.h2h-inj.inj-o,
-.h2h-inj.inj-i {
-  color: var(--negative);
-  background: rgba(255, 92, 108, 0.14);
-}
-
-.h2h-detail {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.02em;
-  color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-/* Game progress. Fills as the game is played, so a glance down the column
-   shows who is done, who is mid-game and who hasn't kicked off. */
-.h2h-track {
-  display: block;
-  width: 100%;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--border);
-  overflow: hidden;
-  margin-top: 1px;
-}
-
-.h2h-track i {
+.h2h-bar i {
   display: block;
   height: 100%;
-  background: var(--gold);
-  border-radius: 2px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, rgba(var(--gold-rgb), 0.5), var(--gold));
 }
 
-.h2h-when {
+.h2h-trk.r .h2h-bar i {
+  float: right;
+  background: linear-gradient(270deg, rgba(var(--gold-rgb), 0.5), var(--gold));
+}
+
+/* LINE 5 — status */
+.h2h-l5 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
   font-family: var(--font-mono);
-  font-size: 8.5px;
-  letter-spacing: 0.06em;
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-
-.h2h-when.inProgress {
-  color: var(--gold);
-}
-
-.h2h-when.final {
+  font-size: 9.5px;
   color: var(--text-dim);
 }
 
-.h2h-name.dim {
-  color: var(--text-dim);
-  font-weight: 500;
-}
-
-.h2h-nums {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.15;
-  min-width: 36px;
-}
-
-.h2h-side.r .h2h-nums {
-  align-items: flex-start;
-}
-
-.h2h-pts {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-.h2h-pts.final {
-  color: var(--positive);
-}
-
-.h2h-proj {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-style: normal;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
-}
-
-/* A decaying projection is a different claim from a pregame estimate. */
-.h2h-proj.live {
-  color: var(--gold);
+.h2h-l5 .on {
+  color: #ff5d5d;
 }
 
 @media (max-width: 380px) {
-  .h2h-row,
-  .h2h-head {
-    grid-template-columns: 1fr 40px 1fr;
-    padding-left: 8px;
-    padding-right: 8px;
+  .h2h-row {
+    padding: 10px 8px 9px;
   }
-  .h2h-name {
-    font-size: 12px;
+  .h2h-nm {
+    font-size: 14px;
+  }
+  .h2h-pr {
+    font-size: 13.5px;
+    min-width: 30px;
+  }
+  .h2h-slot {
+    min-width: 34px;
+    font-size: 9px;
+    padding: 4px 3px;
+  }
+  .h2h-l2 {
+    font-size: 9.5px;
+  }
+  .h2h-l3 {
+    font-size: 10px;
   }
 }

@@ -183,7 +183,9 @@ const COMPONENTS = {
 mkdirSync(OUT_DIR, { recursive: true });
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: "new" });
 const page = await browser.newPage();
-await page.setViewport({ width: 420, height: 700, deviceScaleFactor: 2 });
+// 375px is the iPhone SE / mini width and the narrowest real target. Phone-first
+// means checking the tightest case, not a comfortable one.
+await page.setViewport({ width: 375, height: 700, deviceScaleFactor: 2 });
 
 for (const c of CASES) {
   const markup = renderToString(React.createElement(COMPONENTS[c.component], c.props));
@@ -199,7 +201,7 @@ for (const c of CASES) {
         animation: none !important;
         transition: none !important;
       }
-      body { background: var(--bg); padding: 22px 24px; font-family: var(--font-body); }
+      body { background: var(--bg); padding: 14px 10px; font-family: var(--font-body); }
       .shot-label { color: var(--text-muted); font-size: 10px; letter-spacing: .18em;
         text-transform: uppercase; margin-bottom: 18px; font-weight: 700; }
     </style></head><body>

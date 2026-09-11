@@ -84,3 +84,89 @@ export function shortName(name) {
   const [first, ...rest] = parts;
   return `${first.charAt(0)}. ${rest.join(" ")}`;
 }
+
+/**
+ * What firepower is left, by slot — not just how much.
+ *
+ * "yet to play (10)" hides the difference between a QB, three RBs and three
+ * WRs still to come, and a kicker plus a defense. That distinction is the
+ * whole read on whether a lead is comfortable or cooked, so the breakdown is
+ * the number worth showing.
+ *
+ * Counts a player as yet to play when his game has not started. In progress
+ * counts as played — he is already accruing.
+ *
+ * @returns {{count:number, parts:Array<{pos:string, n:number}>}}
+ */
+export function yetToPlay(rows = []) {
+  const order = ["QB", "RB", "WR", "TE", "FLEX", "D/ST", "K"];
+  const tally = new Map();
+  let count = 0;
+  for (const r of rows) {
+    if (!r || !r.name) continue;
+    if (r.slot === "BE" || r.slot === "IR") continue;
+    const status = (r.l && r.l.status) || "notStarted";
+    if (status !== "notStarted") continue;
+    count++;
+    const key = r.slot === "FLEX" ? r.pos || "FLEX" : r.slot;
+    tally.set(key, (tally.get(key) || 0) + 1);
+  }
+  const parts = [...tally.entries()]
+    .sort((a, b) => {
+      const i = order.indexOf(a[0]);
+      const j = order.indexOf(b[0]);
+      return (i === -1 ? 99 : i) - (j === -1 ? 99 : j);
+    })
+    .map(([pos, n]) => ({ pos, n }));
+  return { count, parts };
+}
+
+/** "QB, 3 RB, 3 WR, TE, K, DEF" — a bare 1 is left implicit, as Sleeper does. */
+export function yetToPlayLabel(breakdown) {
+  if (!breakdown || !breakdown.parts.length) return "";
+  return breakdown.parts.map(({ pos, n }) => `${n > 1 ? `${n} ` : ""}${pos === "D/ST" ? "DEF" : pos}`).join(", ");
+}
+
+/**
+ * Standings seed, 1-based. Wins first, then points for as the tiebreak.
+ *
+ * Week 1 every team is 0-0, so this is near-arbitrary until games are played —
+ * which is honest rather than a defect, but worth knowing before reading much
+ * into "#4" on opening weekend.
+ */
+export function seedFor(teams = [], teamId) {
+  const ranked = [...teams]
+    .filter((t) => t && t.record)
+    .sort((a, b) => {
+      const w = (b.record.w || 0) - (a.record.w || 0);
+      if (w !== 0) return w;
+      return (b.pointsFor || 0) - (a.pointsFor || 0);
+    });
+  const i = ranked.findIndex((t) => t.id === teamId);
+  return i === -1 ? null : i + 1;
+}
+
+/** "0-0" or "2-1-1" — ties only shown when there are any. */
+export function recordLabel(record) {
+  if (!record) return "";
+  const { w = 0, l = 0, t = 0 } = record;
+  return t ? `${w}-${l}-${t}` : `${w}-${l}`;
+}
+
+/** "Sun 1:25 PM" in the viewer's own timezone. */
+export function kickoffLabel(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const day = d.toLocaleDateString(undefined, { weekday: "short" });
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${day} ${time}`;
+}
+
+/** "@PIT" -> {at:true, opp:"PIT"}; "CLE" -> {at:false, opp:"CLE"}. */
+export function opponentOf(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return null;
+  const at = s.startsWith("@");
+  return { at, opp: s.replace(/^@/, "") };
+}
