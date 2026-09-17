@@ -168,6 +168,11 @@ export default function DataPanel({
   };
 
   // ---- rankings ----
+  // What the index currently holds, and which week's paste put it there. A
+  // paste replaces the names it carries and leaves the rest alone, so without
+  // this line there is no way to tell a refreshed index from a stale one.
+  const ecrCount = Object.keys(state.ecrIndex || {}).length;
+  const ecrWhen = state.ecrWeek === "PRE" ? "preseason" : `week ${state.ecrWeek}`;
   const [rankText, setRankText] = useState("");
   const [rankPos, setRankPos] = useState("");
   const preview = useMemo(() => {
@@ -542,6 +547,28 @@ export default function DataPanel({
                 live. Pasting FantasyPros ranks still adds value: expert opinion sometimes disagrees with ESPN's
                 model, and pasted ranks override the automatic ones name-by-name. Format: <code>rank name team</code>.
               </p>
+              <div className="ecr-state">
+                <span className="ecr-state-label">Ranks last imported</span>
+                {ecrCount === 0 ? (
+                  <span className="ecr-state-dim">never — the index is empty</span>
+                ) : (
+                  <>
+                    {/* Gold mono is this app's treatment for a real value. An
+                        index carried over from before the stamp existed is an
+                        unknown, so it reads as one rather than borrowing the
+                        confidence of a week we can actually name. */}
+                    {state.ecrWeek ? (
+                      <strong>{ecrWhen}</strong>
+                    ) : (
+                      <span className="ecr-state-dim">unknown — indexed before this was recorded</span>
+                    )}
+                    <span>
+                      {ecrCount} player{ecrCount === 1 ? "" : "s"} indexed
+                    </span>
+                    <span className="ecr-state-note">A new paste replaces the ranks it names.</span>
+                  </>
+                )}
+              </div>
               <div className="field-row" style={{ marginTop: 0 }}>
                 <label className="field" style={{ width: 150 }}>
                   <span className="field-label">Position (if list omits it)</span>

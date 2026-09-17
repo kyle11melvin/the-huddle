@@ -1123,6 +1123,15 @@ check(
   JSON.stringify(plusQb)
 );
 
+// The stamp that makes the replace visible: which week's paste the index
+// currently reflects. It has to survive a reload, and a junk value must not
+// render as a week.
+check(
+  "the ranks-imported week round-trips through migrate",
+  migrate({ ecrWeek: "3" }).ecrWeek === "3" && migrate({}).ecrWeek === null && migrate({ ecrWeek: "99" }).ecrWeek === null,
+  JSON.stringify([migrate({ ecrWeek: "3" }).ecrWeek, migrate({}).ecrWeek, migrate({ ecrWeek: "99" }).ecrWeek])
+);
+
 // ---- 28. expert projections: parse, blend, widen, label ----
 const projRoster = [
   { id: "x1", name: "Chase Brown", team: "CIN", pos: "RB", ecr: "" },
@@ -1660,6 +1669,10 @@ check("matchup stars survive too", dec(enc(snapState)).analytics.a[1].matchupSta
 check(
   "ecrIndex still does NOT travel — 27KB of pasted rankings, re-pasteable",
   packed.ecrIndex === undefined
+);
+check(
+  "the ranks-imported week does not travel either — a stamp with no index behind it is a lie",
+  packed.ecrWeek === undefined
 );
 
 // ---- 37. no orphaned classNames ----
