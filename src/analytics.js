@@ -132,10 +132,26 @@ export const isOnByeWeek = (player, week, state) => {
  * headline number. `condMean`/`sd` describe the if-he-plays branch, which is
  * what the simulator samples from (with prob playProb, else 0).
  */
-export function pointDistribution(player, week, state) {
-  if (!player) return null;
-  const a = playerAnalytics(state, player.id, week);
-  const cv = BASE_CV[player.pos] ?? 0.55;
+/**
+ * The projection blend, as a pure function of ONE analytics record.
+ *
+ * Split out of pointDistribution so the opponent side can price players
+ * through the same pipeline instead of reading raw ESPN. pointDistribution
+ * looks its record up by `player.id`, which only Kyle's roster has — an
+ * opponent starter has no player record and no id, so the lookup was the one
+ * thing standing between the two sides. Everything below it is arithmetic on
+ * the record and works for anyone.
+ *
+ * Kept as ONE implementation on purpose: a second copy of a precedence ladder
+ * this fiddly would drift within a week.
+ *
+ * @param {object|null} a analytics record: {proj, fpProj, propsProj, expertRanks, seasonAvg}
+ * @param {string} pos position, for the base coefficient of variation
+ * @param {string} team NFL team, for the Vegas implied-total tilt
+ * @returns {{mu, sd, source, dispersion}|null} null when there is no number at all
+ */
+export function blendProjection(a, pos, team, state) {
+  const cv = BASE_CV[pos] ?? 0.55;
   const implied = state.espn && state.espn.impliedTotals;
 
   let mu = null;
@@ -182,11 +198,11 @@ export function pointDistribution(player, week, state) {
   // high-total games get nudged up, low-total down. Capped ±12% — the line
   // prices the game environment, not the player's share of it. Props are
   // already the market, so they're never re-adjusted.
-  if (source !== "vegas props" && implied && Number.isFinite(implied[player.team])) {
+  if (source !== "vegas props" && implied && Number.isFinite(implied[team])) {
     const vals = Object.values(implied).filter(Number.isFinite);
     if (vals.length >= 4) {
       const avg = vals.reduce((n, v) => n + v, 0) / vals.length;
-      const factor = Math.max(0.88, Math.min(1.12, implied[player.team] / avg));
+      const factor = Math.max(0.88, Math.min(1.12, implied[team] / avg));
       if (Math.abs(factor - 1) > 0.005) {
         mu *= factor;
         source = `${source} × vegas line`;
@@ -207,6 +223,15 @@ export function pointDistribution(player, week, state) {
     uncertainty = Math.max(uncertainty, 1 + Math.min(0.5, gap));
   }
   const sd = mu * cv * uncertainty;
+  return { mu, sd, source, dispersion: disp };
+}
+
+export function pointDistribution(player, week, state) {
+  if (!player) return null;
+  const blend = blendProjection(playerAnalytics(state, player.id, week), player.pos, player.team, state);
+  if (!blend) return null;
+  const { mu, sd, dispersion: disp } = blend;
+  let { source } = blend;
 
   // Injury risk and byes price in here, not as a penalty downstream.
   const bye = isOnByeWeek(player, week, state);
