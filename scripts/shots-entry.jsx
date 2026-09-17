@@ -8,5 +8,8 @@ export { default as Today } from "../src/components/Today.jsx";
 export { default as StartSitLab } from "../src/components/StartSitLab.jsx";
 export { default as LeagueBrowser } from "../src/components/LeagueBrowser.jsx";
 export { default as DataPanel } from "../src/components/DataPanel.jsx";
+// The roster row carries the three game states now (A4), so it is worth
+// shooting on its own rather than only inside a full screen.
+export { default as RosterRow } from "../src/components/RosterRow.jsx";
 export { PlayerModal } from "../src/components/modals/index.jsx";
 export { default as OpponentCard } from "../src/components/modals/OpponentCard.jsx";

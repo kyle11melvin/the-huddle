@@ -25,6 +25,7 @@ import { pointDistribution, blendProjection, fpProjFor } from "./analytics.js";
 import { LEAGUE_ROSTERS } from "./data/leagueRosters.js";
 import { espnTeamRoster, liveEntryFor } from "./espnSync.js";
 import { scheduleOpp } from "./scheduleSync.js";
+import { kickoffLabel } from "./headToHead.js";
 
 const RUNS = 20000;
 
@@ -641,6 +642,67 @@ export function liveProjection({ pregame, ifPlays, scored, pctRemaining, status,
   // Never below points already on the board — those are facts, and a
   // projection under them would be nonsense on its face.
   return Math.max(banked, Math.round(live * 10) / 10);
+}
+
+/**
+ * The approved three-state view-model for ONE player, for any surface that
+ * renders him. DESIGN.md's table is approved for anywhere a player row
+ * renders, not only the paired board — but only the board had it, so the
+ * roster screen went on showing a projection for a player whose game had
+ * finished hours earlier.
+ *
+ *   FINAL  one number: what he actually scored. No struck-through pregame —
+ *          a projection is dead once the game ends, and showing both invites
+ *          a comparison that no longer means anything.
+ *   LIVE   the decayed projection, with the pregame figure to strike beneath
+ *          it, plus a direction so fading and going off do not look alike.
+ *   PRE    the projection alone.
+ *
+ * Every state carries a WORD as well as a colour, because colour alone fails
+ * a glance in sunlight and fails a colour-blind reader completely.
+ *
+ * `liveEntry` overrides the ESPN lookup for Gameday's manual (non-auto) mode,
+ * where a human has typed the score.
+ *
+ * @param {{name, team}} player anything carrying a name and an NFL team
+ * @param {{mean, condMean, playProb}|null} dist his pregame distribution
+ */
+export function rowGameState(state, player, week, dist, liveEntry) {
+  const l = liveEntry || (player && liveEntryFor(state, player.name, player.team)) || {};
+  const status = l.status || "notStarted";
+  const isFinal = status === "final";
+  const isLive = status === "inProgress";
+  const scored = Number.isFinite(l.scored) ? l.scored : 0;
+
+  const pregame = dist && Number.isFinite(dist.mean) ? dist.mean : null;
+  const ifPlays = dist && Number.isFinite(dist.condMean) ? dist.condMean : pregame;
+  const live = liveProjection({
+    pregame,
+    ifPlays,
+    scored: l.scored,
+    pctRemaining: l.pctRemaining,
+    status,
+    playProb: dist && Number.isFinite(dist.playProb) ? dist.playProb : 1,
+  });
+
+  const value = isFinal ? scored : live;
+  const was = isLive && pregame != null && live != null && Math.abs(pregame - live) >= 0.1 ? pregame : null;
+  const dir = was == null ? "" : live > pregame ? "up" : "down";
+
+  const game = (state.espn && state.espn.games && player && player.team && state.espn.games[player.team]) || null;
+  const when = game && game.startTime ? kickoffLabel(game.startTime) : "";
+
+  return {
+    status,
+    isFinal,
+    isLive,
+    value,
+    was,
+    dir,
+    chip: isFinal ? "FINAL" : isLive ? l.detail || "LIVE" : when || "PRE",
+    prog: isFinal ? 1 : isLive ? 1 - (l.pctRemaining ?? 1) : 0,
+    when,
+  };
 }
 
 function liveParts(entries, rand) {

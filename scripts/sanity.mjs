@@ -15,6 +15,7 @@ import {
   simulateMatchup,
   simulateSwap,
   simulateMatchupLive,
+  rowGameState,
   simulateLive,
   liveNarrative,
   lineupDistributions,
@@ -579,6 +580,75 @@ check(
     JSON.stringify(migrate({}).fpProjIndex) === "{}" &&
     JSON.stringify(migrate({ fpProjIndex: "junk" }).fpProjIndex) === "{}",
   JSON.stringify([migrate({}).fpProjIndex, migrate({ fpProjIndex: "junk" }).fpProjIndex])
+);
+
+// ---- 12d. every surface that renders a player agrees on his game state ----
+// The board could tell you a player was done; the roster screen could not.
+// Same player, same week, two screens, and only one of them knew a game had
+// been played — so the roster kept showing a projection the game had already
+// settled. DESIGN.md's three-state table is approved for anywhere a player
+// row renders, not just the paired board.
+const a4State = {
+  ...swapState,
+  week: "1",
+  players: {
+    done: { id: "done", name: "Done Guy", team: "DET", pos: "WR", ecr: "WR5", status: "" },
+    soon: { id: "soon", name: "Soon Guy", team: "SF", pos: "WR", ecr: "WR9", status: "" },
+  },
+  lineup: { QB: [null], RB: [null, null], WR: ["done", "soon", null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  bench: [null, null, null, null, null, null],
+  analytics: { done: { 1: { proj: 22.2, projSource: "espn" } }, soon: { 1: { proj: 14, projSource: "espn" } } },
+  espn: {
+    myTeamId: 7, fetchedAt: Date.now(),
+    teams: [{ id: 7, name: "Brock Hard", mapped: "Brock Hard", roster: [
+      { name: "Done Guy", team: "DET", pos: "WR", slot: "WR", proj: 22.2, actual: 3, injuryStatus: "ACTIVE" },
+      { name: "Soon Guy", team: "SF", pos: "WR", slot: "WR", proj: 14, actual: 0, injuryStatus: "ACTIVE" },
+    ] }],
+    games: {
+      DET: { state: "post", pctRemaining: 0, detail: "Final" },
+      SF: { state: "pre", pctRemaining: 1, detail: "Sun 1:00" },
+    },
+  },
+};
+const gsDone = rowGameState(a4State, a4State.players.done, "1", pointDistribution(a4State.players.done, "1", a4State));
+const gsSoon = rowGameState(a4State, a4State.players.soon, "1", pointDistribution(a4State.players.soon, "1", a4State));
+check(
+  "a finished player reads FINAL and shows what he SCORED, not his projection",
+  gsDone.isFinal === true && gsDone.chip === "FINAL" && gsDone.value === 3,
+  JSON.stringify({ chip: gsDone.chip, value: gsDone.value, isFinal: gsDone.isFinal })
+);
+check(
+  "his track is full once the game is done",
+  gsDone.prog === 1,
+  `prog ${gsDone.prog}`
+);
+check(
+  "a player who has not kicked off still reads as an estimate",
+  gsSoon.isFinal === false && gsSoon.value === 14,
+  JSON.stringify({ chip: gsSoon.chip, value: gsSoon.value })
+);
+// A live player carries BOTH numbers and a direction; nobody else does.
+const a4Live = {
+  ...a4State,
+  espn: {
+    ...a4State.espn,
+    games: { ...a4State.espn.games, SF: { state: "in", pctRemaining: 0.25, detail: "Q3 6:14" } },
+    teams: [{ ...a4State.espn.teams[0], roster: a4State.espn.teams[0].roster.map((e) =>
+      e.name === "Soon Guy" ? { ...e, actual: 9 } : e) }],
+  },
+};
+const gsLive = rowGameState(a4Live, a4Live.players.soon, "1", pointDistribution(a4Live.players.soon, "1", a4Live));
+check(
+  "a live player shows the decayed number, the pregame one to strike, and a direction",
+  gsLive.isLive === true && gsLive.chip === "Q3 6:14" && gsLive.was === 14 && gsLive.dir === "down" && gsLive.value === 12.5,
+  JSON.stringify({ chip: gsLive.chip, value: gsLive.value, was: gsLive.was, dir: gsLive.dir })
+);
+
+// Never two numbers except while live: a final has no `was` to strike out.
+check(
+  "a finished player carries no struck-through pregame number",
+  gsDone.was == null,
+  `was ${gsDone.was}`
 );
 
 // ---- 13. bye weeks must reach the simulation (finding 10) ----

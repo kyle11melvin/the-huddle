@@ -19,7 +19,7 @@ import DataPanel from "./components/DataPanel.jsx";
 import LeagueBrowser from "./components/LeagueBrowser.jsx";
 import StartSitLab from "./components/StartSitLab.jsx";
 import { setPlayerAnalytics, playerAnalytics, pointDistribution } from "./analytics.js";
-import { opponentDistributions } from "./simulate.js";
+import { rowGameState, opponentDistributions } from "./simulate.js";
 import { propsToPoints, leagueScoring } from "./props.js";
 import { writeLineupMove } from "./espnWrite.js";
 import {
@@ -1993,6 +1993,13 @@ export default function App({ initialTab } = {}) {
     byes: state.byes || {},
     oppFor: (p) => scheduleOpp(state, p.team, week),
     projFor: (p) => pointDistribution(p, week, state)?.mean ?? null,
+    // The approved three-state view-model, same helper the paired board uses.
+    // Without it the roster screen showed a projection for a player whose
+    // game finished hours ago, with nothing on the row to say so.
+    // No sync means no game state — not "PRE". Claiming a state we cannot
+    // know would put a chip and an empty track on every row in offline mode
+    // saying nothing, which is the badge-honesty failure in miniature.
+    liveFor: (p) => (state.espn ? rowGameState(state, p, week, pointDistribution(p, week, state)) : null),
     dragId,
     legalKeys,
     onOpen: setModalId,

@@ -18,6 +18,7 @@ export default function RosterRow({
   byes,
   oppFor,
   projFor,
+  liveFor,
   index,
   dragId,
   legalKeys,
@@ -43,6 +44,11 @@ export default function RosterRow({
   useEffect(() => () => stopDragAutoScroll(), []);
 
   const badgeColor = SLOT_COLOR[label] || "var(--border-hi)";
+  // DESIGN.md's three states, approved for anywhere a player row renders.
+  // Without this the roster screen showed a projection for a player whose
+  // game had finished, with nothing on the row to say the number was stale.
+  const g = player && liveFor ? liveFor(player) : null;
+  const shown = g && g.value != null ? g.value : projFor ? projFor(player) : null;
   const team = player ? teamOf(player.team) : null;
   const wd = player ? weekData(player, week) : null;
   const shownStatus = player ? effectiveStatus(player, week, byes) : "";
@@ -142,7 +148,9 @@ export default function RosterRow({
         <Avatar player={player} />
         <div className="player-info">
           <div className="player-name-row">
-            <span className="player-name">{player.name}</span>
+            {/* FINAL recedes to muted slate: ten rows then collapse into
+                "here's what's left" without reading a word. */}
+            <span className={`player-name ${g && g.isFinal ? "spent" : ""}`}>{player.name}</span>
             <StatusPill status={shownStatus} />
           </div>
           <div className="player-meta">
@@ -154,15 +162,43 @@ export default function RosterRow({
           </div>
         </div>
         <div className="player-right">
-          {projFor && projFor(player) != null && (
-            <span className="row-proj" title="Projected points this week (props > ESPN, Vegas-tilted)">
-              {projFor(player)}
+          {shown != null && (
+            <span className="row-num">
+              <span
+                className={`row-proj ${g ? (g.isFinal ? "isfinal" : g.dir) : ""}`}
+                title={
+                  g && g.isFinal
+                    ? "Final — what he actually scored"
+                    : g && g.isLive
+                      ? "Live: points banked plus the rest of his projection"
+                      : "Projected points this week (props > ESPN, Vegas-tilted)"
+                }
+              >
+                {shown}
+              </span>
+              {/* Two numbers ONLY while live. A projection is dead once the
+                  game ends, and showing both invites a comparison that no
+                  longer means anything. */}
+              {g && g.was != null && <span className="row-was">{g.was}</span>}
             </span>
           )}
           <span className="ecr-badge">{player.ecr || "—"}</span>
           <Stars n={wd.matchup} />
         </div>
       </div>
+      {/* Every state carries a WORD as well as a colour — colour alone fails a
+          glance in sunlight and fails a colour-blind reader completely. */}
+      {g && (
+        <div className="row-state-line">
+          <b className={`row-state ${g.isFinal ? "final" : g.isLive ? "live" : "pre"}`}>{g.chip}</b>
+          <span className="row-track">
+            <i
+              className={g.isFinal ? "done" : g.isLive ? "on" : ""}
+              style={{ width: `${Math.round(Math.max(0, Math.min(1, g.prog)) * 100)}%` }}
+            />
+          </span>
+        </div>
+      )}
       {illegalStart && (
         <div className="illegal-note">IR-flagged — move to an IR slot or the bench before kickoff.</div>
       )}
