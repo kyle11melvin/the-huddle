@@ -602,6 +602,18 @@ export default function DataPanel({
                     <span className="import-stat dim">
                       <strong>{preview.unmatched.length}</strong> not on your roster
                     </span>
+                    {preview.unchanged.length > 0 && (
+                      <span className="import-stat dim">
+                        <strong>{preview.unchanged.length}</strong> already applied
+                      </span>
+                    )}
+                    {/* These two used to be counted nowhere, so the numbers on
+                        this row could simply fail to add up to "parsed". */}
+                    {preview.duplicate.length > 0 && (
+                      <span className="import-stat warn">
+                        <strong>{preview.duplicate.length}</strong> duplicate
+                      </span>
+                    )}
                     {preview.ambiguous.length > 0 && (
                       <span className="import-stat warn">
                         <strong>{preview.ambiguous.length}</strong> ambiguous
@@ -627,6 +639,13 @@ export default function DataPanel({
                     <div className="panel-warn">
                       Skipping {preview.ambiguous.map((a) => a.name).join(", ")} — more than one player on your roster
                       matches that surname and initial.
+                    </div>
+                  )}
+                  {preview.duplicate.length > 0 && (
+                    <div className="panel-warn">
+                      {preview.duplicate.length} row{preview.duplicate.length === 1 ? "" : "s"} matched a player an
+                      earlier row already claimed: {preview.duplicate.map((d) => d.claimedBy).join(", ")}. The first
+                      rank for each player wins; these were not applied.
                     </div>
                   )}
                   <button
@@ -671,6 +690,7 @@ export default function DataPanel({
                   <div className="import-summary">
                     <strong>{projPreview.matched.length}</strong> matched
                     {projPreview.unmatched.length > 0 && ` · ${projPreview.unmatched.length} not on your roster`}
+                    {projPreview.duplicate.length > 0 && ` · ${projPreview.duplicate.length} duplicate`}
                     {projPreview.ambiguous.length > 0 && ` · ${projPreview.ambiguous.length} ambiguous`}
                     {projPreview.skipped > 0 && ` · ${projPreview.skipped} unreadable`}
                     {projPreview.sawHeader && " · CSV header detected"}

@@ -253,10 +253,18 @@ export function buildEcrIndex(rows, existing = {}) {
 
 /**
  * Apply parsed rankings to your roster's ECR strings.
- * @returns {{updates: Array, unmatched: Array, ambiguous: Array}}
+ *
+ * Every row lands in exactly ONE bucket, and the buckets sum to rows.length.
+ * Two of them used to be a bare `continue`, so a paste could report "633
+ * parsed / 16 matched / 597 not on your roster" with 20 rows counted nowhere
+ * and nothing on screen saying so.
+ *
+ * @returns {{updates, unchanged, duplicate, unmatched, ambiguous}}
  */
 export function planEcrUpdates(rows, players) {
   const updates = [];
+  const unchanged = []; // matched, but the ECR string is already this value
+  const duplicate = []; // matched a player an earlier row already claimed
   const unmatched = [];
   const ambiguous = [];
   const claimed = new Set();
@@ -273,15 +281,26 @@ export function planEcrUpdates(rows, players) {
       unmatched.push(r);
       continue;
     }
-    if (claimed.has(match.id)) continue;
+    if (claimed.has(match.id)) {
+      duplicate.push({ ...r, claimedBy: match.name });
+      continue;
+    }
+    // Claim on every match, not only on a change. Claiming inside the branch
+    // below meant a row that matched but changed nothing left the player
+    // unclaimed, so a LATER row for him still won — "first rank wins" was
+    // false in exactly the case where the first rank was already applied,
+    // which is the sentence the duplicate warning puts on screen. The
+    // projections path has always claimed on every match; this matches it.
+    claimed.add(match.id);
     const pos = r.pos || match.pos;
     const nextEcr = `${pos === "D/ST" ? "DST" : pos}${r.rank}`;
     if (nextEcr !== match.ecr) {
       updates.push({ id: match.id, name: match.name, from: match.ecr || "—", to: nextEcr });
-      claimed.add(match.id);
+    } else {
+      unchanged.push({ ...r, claimedBy: match.name });
     }
   }
-  return { updates, unmatched, ambiguous };
+  return { updates, unchanged, duplicate, unmatched, ambiguous };
 }
 
 // ------------------------------------------ FantasyPros projections ----------
@@ -331,7 +350,7 @@ function parseStars(raw) {
  * see pointDistribution: FantasyPros' own projection already prices the
  * matchup, so feeding the stars in as well would double-count it.
  *
- * @returns {{rows, matched, unmatched, ambiguous, skipped, sawHeader}}
+ * @returns {{rows, matched, duplicate, unmatched, ambiguous, skipped, sawHeader}}
  */
 export function parseProjections(text, rosterPlayers = []) {
   const lines = (text || "").split(/\r?\n/).map((l) => l.replace(/ /g, " ").trim()).filter(Boolean);
@@ -418,6 +437,7 @@ export function parseProjections(text, rosterPlayers = []) {
   // Same matcher the rankings import uses — team/pos hints included, which is
   // what makes the surname collisions on this roster resolvable.
   const matched = [];
+  const duplicate = []; // matched a player an earlier row already claimed
   const unmatched = [];
   const ambiguous = [];
   const claimed = new Set();
@@ -428,9 +448,9 @@ export function parseProjections(text, rosterPlayers = []) {
     else if (!claimed.has(match.id)) {
       claimed.add(match.id);
       matched.push({ player: match, proj: r.proj, stars: r.stars, team: r.team });
-    }
+    } else duplicate.push({ ...r, claimedBy: match.name });
   }
-  return { rows, matched, unmatched, ambiguous, skipped, sawHeader };
+  return { rows, matched, duplicate, unmatched, ambiguous, skipped, sawHeader };
 }
 
 // ------------------------------------- FantasyPros "Who Should I Start" ------

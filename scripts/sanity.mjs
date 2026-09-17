@@ -1192,6 +1192,80 @@ check(
   ])
 );
 
+// ---- 27d. every parsed row lands in exactly one bucket ----
+// The second half of the same defect: a row matching an already-claimed
+// player hit a bare `continue` and was counted nowhere, so a paste could
+// report "N parsed / M matched" with the arithmetic quietly not closing.
+// A shortfall has to be visible, whatever caused it.
+const dupRoster = [{ id: "c1", name: "Chase Brown", team: "CIN", pos: "RB", ecr: "" }];
+const dupRows = parseRankings(["4. Chase Brown RB - CIN", "9. Chase Brown RB - CIN"].join("\n")).rows;
+const dupPlan = planEcrUpdates(dupRows, dupRoster);
+check(
+  "a second row for an already-claimed player is reported as a duplicate",
+  (dupPlan.duplicate || []).length === 1 && (dupPlan.duplicate || [])[0]?.rank === 9,
+  JSON.stringify(dupPlan.duplicate ?? null)
+);
+check(
+  "rankings rows account for themselves: updates + unchanged + duplicate + unmatched + ambiguous",
+  dupPlan.updates.length + (dupPlan.unchanged || []).length + (dupPlan.duplicate || []).length +
+    dupPlan.unmatched.length + dupPlan.ambiguous.length === dupRows.length,
+  JSON.stringify({
+    rows: dupRows.length, updates: dupPlan.updates.length, unchanged: (dupPlan.unchanged || []).length,
+    duplicate: (dupPlan.duplicate || []).length, unmatched: dupPlan.unmatched.length, ambiguous: dupPlan.ambiguous.length,
+  })
+);
+// A row that matches but changes nothing is also a row, and was equally
+// invisible — this is the "already applied" case the panel talks about.
+const sameRows = parseRankings("4. Chase Brown RB - CIN").rows;
+const samePlan = planEcrUpdates(sameRows, [{ ...dupRoster[0], ecr: "RB4" }]);
+check(
+  "a row that matches but changes nothing is counted, not dropped",
+  samePlan.updates.length === 0 && (samePlan.unchanged || []).length === 1,
+  JSON.stringify({ updates: samePlan.updates.length, unchanged: (samePlan.unchanged || []).length })
+);
+
+// Caught by a screenshot, not by the assertions above: a row that matched but
+// changed nothing did not CLAIM the player, so a later row for the same player
+// still won. "First rank wins" was therefore false exactly when the first rank
+// was already applied — and the duplicate warning says first-wins on screen.
+// Claiming on every match, the way the projections path already does, is what
+// makes that sentence true.
+const noopFirst = parseRankings(["14. Tee Higgins WR - CIN", "50. Tee Higgins WR - CIN"].join("\n")).rows;
+const noopPlan = planEcrUpdates(noopFirst, [{ id: "h1", name: "Tee Higgins", team: "CIN", pos: "WR", ecr: "WR14" }]);
+check(
+  "a matched row claims its player even when it changes nothing, so first really does win",
+  noopPlan.updates.length === 0 &&
+    (noopPlan.unchanged || []).length === 1 &&
+    (noopPlan.duplicate || []).length === 1,
+  JSON.stringify({
+    updates: noopPlan.updates.map((u) => u.to),
+    unchanged: (noopPlan.unchanged || []).length,
+    duplicate: (noopPlan.duplicate || []).length,
+  })
+);
+
+const dupProj = parseProjections(
+  ['"RK","PLAYER NAME","TEAM","OPP","MATCHUP","PROJ. FPTS"',
+   '4,"Chase Brown","CIN","@CLE","3 out of 5 stars",17.6',
+   '9,"Chase Brown","CIN","@CLE","3 out of 5 stars",11.2'].join("\n"),
+  dupRoster
+);
+check(
+  "projection rows account for themselves too",
+  (dupProj.duplicate || []).length === 1 &&
+    dupProj.matched.length + (dupProj.duplicate || []).length + dupProj.unmatched.length +
+      dupProj.ambiguous.length === dupProj.rows.length,
+  JSON.stringify({
+    rows: dupProj.rows.length, matched: dupProj.matched.length, duplicate: (dupProj.duplicate || []).length,
+    unmatched: dupProj.unmatched.length, ambiguous: dupProj.ambiguous.length,
+  })
+);
+check(
+  "the first value wins, so a duplicate never overwrites what already matched",
+  dupProj.matched[0]?.proj === 17.6,
+  `got ${dupProj.matched[0]?.proj}`
+);
+
 // ---- 28. expert projections: parse, blend, widen, label ----
 const projRoster = [
   { id: "x1", name: "Chase Brown", team: "CIN", pos: "RB", ecr: "" },
