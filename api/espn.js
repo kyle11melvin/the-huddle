@@ -31,6 +31,54 @@ const SLOT = {
 };
 const POS = { 1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "D/ST" };
 
+/**
+ * One side of a league matchup, scored.
+ *
+ * The league scoreboard read 0-0 for every matchup on a Thursday, after games
+ * had been played. ESPN's mMatchup view only fills `totalPoints` once it
+ * SETTLES the matchup period, so mid-week it is genuinely zero and the strip
+ * was rendering that faithfully.
+ *
+ * The fix does NOT add the mMatchupScore view, which is what the tracker
+ * proposed. Two reasons. Its live field has been renamed between seasons and
+ * the note itself says to confirm the name against a real payload — which
+ * cannot be done from a sandbox with no route to ESPN, and guessing it would
+ * ship something that silently does nothing. And the view re-sends every
+ * roster for every matchup, doubling a payload this endpoint already fetches
+ * behind a 2-minute gate.
+ *
+ * It is not needed: the per-player `actual` values in THIS response are
+ * already correct mid-week. That is not an assumption — it is why Kyle's own
+ * matchup card showed real points while the league strip beside it showed
+ * nothing. Summing his starters is the same arithmetic ESPN will do when it
+ * settles.
+ *
+ * Precedence keeps ESPN authoritative wherever it has actually spoken:
+ *   1. a settled `totalPoints` — it carries stat corrections applied later
+ *   2. the starters' own actuals — the mid-week hole this fixes
+ *   3. zero
+ *
+ * (A live field from mMatchupScore would slot in at 2 if it is ever confirmed.)
+ */
+export function matchupSideScore(side, team) {
+  const settled = side && Number.isFinite(side.totalPoints) ? side.totalPoints : null;
+  if (settled != null && settled > 0) return Math.round(settled * 10) / 10;
+
+  let total = 0;
+  let counted = 0;
+  for (const e of (team && team.roster) || []) {
+    // Bench and IR do not score. Counting them would inflate every team by
+    // its whole bench and read as a scoring bug rather than a roster one.
+    if (e.slot === "BE" || e.slot === "IR") continue;
+    if (Number.isFinite(e.actual)) {
+      total += e.actual;
+      counted++;
+    }
+  }
+  if (counted) return Math.round(total * 10) / 10;
+  return settled != null ? settled : 0;
+}
+
 function send(res, status, body, cacheSeconds) {
   res.setHeader("Content-Type", "application/json");
   // PRIVATE cache only. This response is now token-gated, and a shared/CDN
@@ -225,12 +273,15 @@ export default async function handler(req, res) {
     const currentWeek = data.scoringPeriodId;
     const matchups = (data.schedule || [])
       .filter((m) => m.matchupPeriodId === currentMatchupPeriod(data))
-      .map((m) => ({
-        home: m.home && m.home.teamId,
-        away: m.away && m.away.teamId,
-        homeScore: m.home && m.home.totalPoints,
-        awayScore: m.away && m.away.totalPoints,
-      }));
+      .map((m) => {
+        const byId = (id) => teams.find((t) => t.id === id) || null;
+        return {
+          home: m.home && m.home.teamId,
+          away: m.away && m.away.teamId,
+          homeScore: matchupSideScore(m.home, byId(m.home && m.home.teamId)),
+          awayScore: matchupSideScore(m.away, byId(m.away && m.away.teamId)),
+        };
+      });
 
     // abbr -> { state: 'pre'|'in'|'post', pctRemaining, detail }
     const games = {};

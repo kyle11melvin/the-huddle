@@ -9,7 +9,7 @@
 import fsMod from "node:fs";
 import { propsToPoints, SCORING, parseProps } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
-import { extractScoring } from "../api/espn.js";
+import { extractScoring, matchupSideScore } from "../api/espn.js";
 import { pointDistribution, floorCeiling, fpProjFor } from "../src/analytics.js";
 import {
   simulateMatchup,
@@ -649,6 +649,51 @@ check(
   "a finished player carries no struck-through pregame number",
   gsDone.was == null,
   `was ${gsDone.was}`
+);
+
+// ---- 12e. the league scoreboard mid-week ----
+// Every matchup on the Today screen read 0-0 on a Thursday, after games had
+// been played. ESPN's mMatchup view only fills totalPoints once it SETTLES
+// the matchup period, so mid-week it is genuinely zero — and the strip
+// rendered that faithfully. The per-player actuals in the same response were
+// correct the whole time, which is why Kyle's own card showed real points
+// while the league strip beside it showed nothing.
+const b3Team = {
+  id: 9,
+  roster: [
+    { name: "Starter A", slot: "QB", actual: 18.4 },
+    { name: "Starter B", slot: "WR", actual: 7.2 },
+    { name: "Benched", slot: "BE", actual: 25.0 },
+    { name: "Stashed", slot: "IR", actual: 11.1 },
+    { name: "Yet to play", slot: "RB", actual: 0 },
+  ],
+};
+check(
+  "a mid-week matchup scores from the starters' actuals, not ESPN's unsettled zero",
+  matchupSideScore({ teamId: 9, totalPoints: 0 }, b3Team) === 25.6,
+  `got ${matchupSideScore({ teamId: 9, totalPoints: 0 }, b3Team)}; 18.4 + 7.2 = 25.6`
+);
+check(
+  "bench and IR points never reach the scoreboard",
+  matchupSideScore({ teamId: 9, totalPoints: 0 }, b3Team) === 25.6 &&
+    matchupSideScore(
+      { teamId: 9, totalPoints: 0 },
+      { id: 9, roster: [{ slot: "BE", actual: 25 }, { slot: "IR", actual: 11.1 }, { slot: "QB", actual: 0 }] }
+    ) === 0,
+  "a team whose only points are on the bench has scored nothing"
+);
+// Once ESPN settles the period its own number is authoritative and wins —
+// it carries stat corrections applied after the fact.
+check(
+  "a settled week still uses ESPN's own total",
+  matchupSideScore({ teamId: 9, totalPoints: 101.6 }, b3Team) === 101.6,
+  `got ${matchupSideScore({ teamId: 9, totalPoints: 101.6 }, b3Team)}`
+);
+check(
+  "a genuinely scoreless team reads zero rather than blank",
+  matchupSideScore({ teamId: 9, totalPoints: 0 }, { id: 9, roster: [{ slot: "QB", actual: 0 }] }) === 0 &&
+    matchupSideScore(null, null) === 0,
+  "no roster and no score is still a number"
 );
 
 // ---- 13. bye weeks must reach the simulation (finding 10) ----
