@@ -180,6 +180,10 @@ export function buildInitialState() {
     // captures from week 1 whether or not anything reads it yet.
     calibration: {},
     ecrIndex: {}, // normalized name -> rank, from pasted ranking sets
+    ecrWeek: null, // the week whose paste last wrote ecrIndex. Rendered in the
+    // import panel: ranks are weekly, a paste replaces the names it carries,
+    // and there is no clear button — so "which week is this" has to be
+    // answerable on screen rather than inferred.
     analytics: {}, // playerId -> week -> { proj, dvp, ou, expertRanks, ... }
     matchups: {}, // week -> { oppTeam, live: { rowKey -> {scored, status, pctRemaining} } }
     espn: null, // latest /api/espn snapshot (rosters, projections, pairings)
@@ -280,6 +284,7 @@ export function migrate(raw) {
       byesAuto: legacyByes ? {} : normalizeByes(raw.byesAuto),
       byesManual: normalizeByes(raw.byesManual && typeof raw.byesManual === "object" ? raw.byesManual : {}),
       ecrIndex: raw.ecrIndex && typeof raw.ecrIndex === "object" ? raw.ecrIndex : {},
+      ecrWeek: WEEKS.includes(raw.ecrWeek) ? raw.ecrWeek : null,
       analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
       matchups: raw.matchups && typeof raw.matchups === "object" ? raw.matchups : {},
       espn: raw.espn && typeof raw.espn === "object" ? raw.espn : null,
@@ -358,6 +363,7 @@ export function migrate(raw) {
     byesAuto: {},
     byesManual: normalizeByes(raw.byesManual && typeof raw.byesManual === "object" ? raw.byesManual : {}),
     ecrIndex: raw.ecrIndex && typeof raw.ecrIndex === "object" ? raw.ecrIndex : {},
+    ecrWeek: WEEKS.includes(raw.ecrWeek) ? raw.ecrWeek : null,
     analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
     matchups: raw.matchups && typeof raw.matchups === "object" ? raw.matchups : {},
     espn: raw.espn && typeof raw.espn === "object" ? raw.espn : null,

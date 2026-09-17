@@ -1527,7 +1527,10 @@ export default function App({ initialTab } = {}) {
         for (const u of updates) {
           if (players[u.id]) players[u.id] = { ...players[u.id], ecr: u.to };
         }
-        return { ...s, players, ecrIndex };
+        // Stamp the week this paste landed in. The index accumulates across
+        // pastes and has no clear button, so the stamp is the only way to see
+        // that the replace actually happened.
+        return { ...s, players, ecrIndex, ecrWeek: s.week };
       });
       flash(`Updated ${updates.length} ECR value${updates.length === 1 ? "" : "s"}.`);
     },

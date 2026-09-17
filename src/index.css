@@ -2524,6 +2524,53 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   letter-spacing: 0.5px;
 }
 
+/* The rankings index is cumulative and has no clear button, so the panel has
+   to say which week's paste it is currently showing. Deliberately NOT
+   .panel-meta: that is wide-tracked mono micro-type, and set next to the
+   POSITION field label directly below it the two merged into one grey block
+   with the status line unreadable. This reads as a state chip instead, and
+   owns the gap above the form. */
+.ecr-state {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 9px;
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.ecr-state-label {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.ecr-state strong {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  letter-spacing: 0.3px;
+  color: var(--gold);
+}
+
+.ecr-state-dim { color: var(--text-dim); }
+
+/* Full-width so the sentence never wedges itself into the gap after a short
+   player count. */
+.ecr-state-note {
+  flex-basis: 100%;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
 .panel-warn {
   margin-top: 11px;
   font-size: 12px;
