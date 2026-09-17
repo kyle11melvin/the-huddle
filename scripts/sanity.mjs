@@ -1132,6 +1132,66 @@ check(
   JSON.stringify([migrate({ ecrWeek: "3" }).ecrWeek, migrate({}).ecrWeek, migrate({ ecrWeek: "99" }).ecrWeek])
 );
 
+// ---- 27c. the D/ST last resort must not steal a row that names someone else ----
+// Live repro: "26 QB Aaron Rodgers PIT" was written onto Steelers D/ST —
+// ECR QB26 and a 15.1 projection on a defense that projects 8.2 — because the
+// last-resort defense match fires on team alone and ignored both the declared
+// position and the fact that "Aaron Rodgers" is a person. The genuine DST row
+// was then swallowed by the `claimed` guard, so the preview reported a clean
+// match while a row silently vanished.
+const stealRoster = [
+  { id: "d1", name: "Steelers D/ST", team: "PIT", pos: "D/ST", ecr: "" },
+  { id: "r1", name: "Chase Brown", team: "CIN", pos: "RB", ecr: "" },
+];
+const stealRows = parseRankings("26. Aaron Rodgers QB - PIT\n3. Steelers DST - PIT").rows;
+const stealPlan = planEcrUpdates(stealRows, stealRoster);
+const dstUpdate = stealPlan.updates.find((u) => u.id === "d1");
+check(
+  "a QB row is not written onto a same-team D/ST",
+  dstUpdate && dstUpdate.to === "DST3",
+  `D/ST got ${dstUpdate ? dstUpdate.to : "no update at all"}`
+);
+check(
+  "the unrostered QB lands in unmatched rather than nowhere",
+  stealPlan.unmatched.some((r) => /Rodgers/.test(r.name)),
+  `unmatched: ${JSON.stringify(stealPlan.unmatched.map((r) => r.name))}`
+);
+
+// The same steal through the projections CSV, which is where it was measured.
+// This export shape carries NO position column, so a positional gate cannot
+// fire here — the defense has to refuse a two-token personal name on a team
+// match alone. Both halves are needed; neither covers the other's path.
+const stealCsv = [
+  '"RK","PLAYER NAME","TEAM","OPP","MATCHUP","PROJ. FPTS"',
+  '26,"Aaron Rodgers","PIT","@CLE","3 out of 5 stars",15.1',
+  '3,"Steelers","PIT","@CLE","4 out of 5 stars",8.2',
+].join("\n");
+const stealProj = parseProjections(stealCsv, stealRoster);
+const dstProj = stealProj.matched.find((m) => m.player.id === "d1");
+check(
+  "a D/ST keeps its own projection, not the QB's",
+  dstProj && dstProj.proj === 8.2,
+  `D/ST projected ${dstProj ? dstProj.proj : "nothing"}; the QB row was 15.1`
+);
+check(
+  "a two-token personal name is never handed to a defense on team alone",
+  stealProj.unmatched.some((r) => /Rodgers/.test(r.name)),
+  `unmatched: ${JSON.stringify(stealProj.unmatched.map((r) => r.name))}`
+);
+// The nickname forms that MUST keep working — this is the match the last
+// resort exists for, and the gate must not cost them.
+check(
+  "a bare nickname still reaches the defense, with and without a team hint",
+  matchPlayer("Steelers", stealRoster, { team: "PIT" }).match?.id === "d1" &&
+    matchPlayer("Steelers", stealRoster, {}).match?.id === "d1" &&
+    matchPlayer("Pittsburgh Steelers", stealRoster, {}).match?.id === "d1",
+  JSON.stringify([
+    matchPlayer("Steelers", stealRoster, { team: "PIT" }).match?.name,
+    matchPlayer("Steelers", stealRoster, {}).match?.name,
+    matchPlayer("Pittsburgh Steelers", stealRoster, {}).match?.name,
+  ])
+);
+
 // ---- 28. expert projections: parse, blend, widen, label ----
 const projRoster = [
   { id: "x1", name: "Chase Brown", team: "CIN", pos: "RB", ecr: "" },

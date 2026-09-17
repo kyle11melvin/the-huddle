@@ -82,10 +82,16 @@ export function matchPlayer(rawName, players, hints = {}) {
   // ---- team defenses ----
   // FantasyPros lists these by nickname alone ("Steelers"); we store
   // "Steelers D/ST". Name matching can't bridge that, but the team can.
-  const matchDefense = () => {
+  // `teamOnly` gates the match-on-team-alone shortcut. It is right when the
+  // row has already identified itself as a defense, and catastrophic when it
+  // has not: ANY unmatched row whose team happened to equal our D/ST's team
+  // was handed to the defense. "26 QB Aaron Rodgers PIT" became ECR QB26 and
+  // a 15.1 projection on a defense that projects 8.2, and the real DST row
+  // was then swallowed as a duplicate.
+  const matchDefense = ({ teamOnly = true } = {}) => {
     const defs = players.filter((p) => p.pos === "D/ST");
     if (!defs.length) return null;
-    if (hintTeam) {
+    if (teamOnly && hintTeam) {
       const byTeam = defs.filter((p) => canonTeam(p.team) === hintTeam);
       if (byTeam.length === 1) return { match: byTeam[0], ambiguous: false };
     }
@@ -135,10 +141,23 @@ export function matchPlayer(rawName, players, hints = {}) {
   if (hits.length > 1) return { match: null, ambiguous: true, candidates: hits };
 
   // Last resort: a bare nickname like "Steelers" carries no position token
-  // and no surname our roster would recognise, so nothing above fires. If the
-  // roster has defenses and nothing else claimed this row, try them.
-  const d = matchDefense();
-  if (d) return d;
+  // and no surname our roster would recognise, so nothing above fires.
+  //
+  // Two guards, because the two import paths carry different evidence and
+  // neither guard covers the other's path:
+  //
+  //   1. A row that DECLARED a position is not a defense — if it had said
+  //      D/ST the branch above would already have matched it. The rankings
+  //      paste carries positions, so this is what protects that path.
+  //   2. The FantasyPros projections CSV has no position column, so nothing
+  //      is declared there and guard 1 cannot fire. What still distinguishes
+  //      them is the name: "Steelers" is one token, "Aaron Rodgers" is a
+  //      person. A personal name may still reach a defense BY NAME, it just
+  //      may not be handed one on a team match alone.
+  if (!hintPos) {
+    const d = matchDefense({ teamOnly: !want.first });
+    if (d) return d;
+  }
   return { match: null, ambiguous: false };
 }
 
