@@ -10,7 +10,7 @@ import fsMod from "node:fs";
 import { propsToPoints, SCORING, parseProps } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
 import { extractScoring } from "../api/espn.js";
-import { pointDistribution, floorCeiling } from "../src/analytics.js";
+import { pointDistribution, floorCeiling, fpProjFor } from "../src/analytics.js";
 import {
   simulateMatchup,
   simulateSwap,
@@ -513,6 +513,72 @@ check(
   "a final score carries no variance — a different seed cannot change it",
   labSimB && labSimB.oppNow === 3 && labSim && labSim.oppNow === 3,
   `seed 12345 banked ${labSim && labSim.oppNow}, seed 4242 banked ${labSimB && labSimB.oppNow}; both must be 3`
+);
+
+// ---- 12c. an opponent starter is priced through the SAME blend as my roster ----
+// Seen on the Ashton Jeanty card: "Opponent player — ESPN projection. Props,
+// matchup and consensus are computed for your roster only." oppDist read
+// `e.proj` raw while my own players went through props -> ESPN+FP blend -> FP
+// -> ESPN -> season average, plus the implied-total tilt and widen-on-
+// disagreement. Two sides of one matchup priced by two different models.
+//
+// The mirror: identical position, team, ESPN number and pasted FP number, one
+// on my roster and one on theirs. They must come out the same.
+const a2State = {
+  ...swapState,
+  week: "1",
+  players: { mirror: { id: "mirror", name: "Mirror Guy", team: "KC", pos: "WR", ecr: "WR5", status: "" } },
+  lineup: { QB: [null], RB: [null, null], WR: ["mirror", null, null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  bench: [null, null, null, null, null, null],
+  analytics: { mirror: { 1: { proj: 10, projSource: "espn", fpProj: 20 } } },
+  matchups: { 1: { oppTeam: "Them" } },
+  // The same pasted FantasyPros number, reachable by NAME rather than by a
+  // roster id the opponent does not have.
+  fpProjIndex: { 1: { oppguy: { proj: 20, stars: null } } },
+  espn: {
+    myTeamId: 7, fetchedAt: Date.now(),
+    teams: [{ id: 9, name: "Them", mapped: "Them", roster: [
+      { name: "Opp Guy", team: "KC", pos: "WR", slot: "WR", proj: 10, actual: 0, injuryStatus: "ACTIVE" },
+      { name: "Filler Guy", team: "SF", pos: "RB", slot: "RB", proj: 9, actual: 0, injuryStatus: "ACTIVE" },
+    ] }],
+    games: { KC: { state: "pre", pctRemaining: 1 }, SF: { state: "pre", pctRemaining: 1 } },
+  },
+};
+check(
+  "the pasted FantasyPros number is reachable for a player with no roster id",
+  fpProjFor(a2State, "1", "Opp Guy")?.proj === 20,
+  JSON.stringify(fpProjFor(a2State, "1", "Opp Guy"))
+);
+const a2Mine = pointDistribution(a2State.players.mirror, "1", a2State);
+const a2Opp = opponentDistributions(a2State, "1", "Them", "likely").find((d) => d.name === "Opp Guy");
+check(
+  "an opponent starter blends ESPN with the pasted expert number, like my own roster does",
+  a2Opp && a2Mine && Math.abs(a2Opp.condMean - a2Mine.condMean) < 0.06,
+  `opponent ${a2Opp && a2Opp.condMean} vs mine ${a2Mine && a2Mine.condMean}; raw ESPN alone would be 10, the 50/50 blend is 15`
+);
+check(
+  "disagreement widens the opponent too — a contested player is a less certain bet on BOTH sides",
+  a2Opp && a2Mine && Math.abs(a2Opp.sd - a2Mine.sd) < 0.06 && a2Opp.sd > 15 * (0.58 * 1.0),
+  `opponent sd ${a2Opp && a2Opp.sd} vs mine ${a2Mine && a2Mine.sd}`
+);
+// An opponent with NO pasted number must be unchanged — this may not quietly
+// reprice players the paste never mentioned.
+const a2Filler = opponentDistributions(a2State, "1", "Them", "likely").find((d) => d.name === "Filler Guy");
+check(
+  "an opponent with no pasted number still prices at ESPN's, unchanged",
+  a2Filler && Math.abs(a2Filler.condMean - 9) < 0.06,
+  `got ${a2Filler && a2Filler.condMean}`
+);
+
+// The index has to survive a reload, and must NOT travel in a share snapshot
+// — same call as ecrIndex: it is the paste, it is bulky, and it re-pastes.
+check(
+  "the pasted projection index round-trips through migrate",
+  JSON.stringify(migrate({ fpProjIndex: { 1: { x: { proj: 9, stars: 2 } } } }).fpProjIndex) ===
+    JSON.stringify({ 1: { x: { proj: 9, stars: 2 } } }) &&
+    JSON.stringify(migrate({}).fpProjIndex) === "{}" &&
+    JSON.stringify(migrate({ fpProjIndex: "junk" }).fpProjIndex) === "{}",
+  JSON.stringify([migrate({}).fpProjIndex, migrate({ fpProjIndex: "junk" }).fpProjIndex])
 );
 
 // ---- 13. bye weeks must reach the simulation (finding 10) ----
@@ -1869,6 +1935,10 @@ check(
 check(
   "the ranks-imported week does not travel either — a stamp with no index behind it is a lie",
   packed.ecrWeek === undefined
+);
+check(
+  "nor does the pasted projection index — bulky, re-pasteable, same call as ecrIndex",
+  packed.fpProjIndex === undefined
 );
 
 // ---- 37. no orphaned classNames ----

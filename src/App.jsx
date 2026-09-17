@@ -88,7 +88,7 @@ import {
   setLiveEntry,
 } from "./lineup.js";
 import Today from "./components/Today.jsx";
-import { fetchLeague, applyEspnSync, summaryToText, liveOwner, searchLeaguePlayers } from "./espnSync.js";
+import { normName, fetchLeague, applyEspnSync, summaryToText, liveOwner, searchLeaguePlayers } from "./espnSync.js";
 import {
   fetchSchedule,
   applySchedule,
@@ -1540,7 +1540,7 @@ export default function App({ initialTab } = {}) {
   /** Expert projections + matchup stars. Stored alongside ESPN's number,
    *  never over it — pointDistribution blends the two. */
   const onApplyProjections = useCallback(
-    (matched) => {
+    (matched, rows = []) => {
       setState((s) => {
         let next = s;
         for (const m of matched) {
@@ -1551,6 +1551,18 @@ export default function App({ initialTab } = {}) {
             ...(m.stars != null ? { matchupStars: m.stars } : {}),
           });
         }
+        // EVERY parsed row is also indexed by name, not just the ones on my
+        // roster. Those were previously dropped when the modal closed, which
+        // is why the opponent side had nothing to blend with and ran on raw
+        // ESPN. Replaces this week's index rather than merging into it — a
+        // weekly projection is only true for its week.
+        const forWeek = {};
+        for (const r of rows) {
+          const k = normName(r.name);
+          if (!k || !Number.isFinite(r.proj)) continue;
+          forWeek[k] = { proj: r.proj, stars: r.stars ?? null };
+        }
+        next = { ...next, fpProjIndex: { ...(next.fpProjIndex || {}), [s.week]: forWeek } };
         return next;
       });
       const disagreements = matched.filter((m) => {

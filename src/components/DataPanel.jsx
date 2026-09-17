@@ -689,7 +689,12 @@ export default function DataPanel({
                 <div className="import-preview">
                   <div className="import-summary">
                     <strong>{projPreview.matched.length}</strong> matched
-                    {projPreview.unmatched.length > 0 && ` · ${projPreview.unmatched.length} not on your roster`}
+                    {/* "not on your roster" used to mean the row was thrown
+                        away. It now means the opposite — those rows are what
+                        the opponent side prices against — so it says where
+                        they go rather than being counted twice. */}
+                    {projPreview.unmatched.length > 0 &&
+                      ` · ${projPreview.unmatched.length} not on your roster (indexed for opponent pricing)`}
                     {projPreview.duplicate.length > 0 && ` · ${projPreview.duplicate.length} duplicate`}
                     {projPreview.ambiguous.length > 0 && ` · ${projPreview.ambiguous.length} ambiguous`}
                     {projPreview.skipped > 0 && ` · ${projPreview.skipped} unreadable`}
@@ -725,7 +730,9 @@ export default function DataPanel({
                     style={{ marginTop: 14 }}
                     disabled={!projPreview.matched.length}
                     onClick={() => {
-                      onApplyProjections(projPreview.matched);
+                      // ALL rows, not just the ones on my roster: the rest are
+                      // what the opponent side blends with.
+                      onApplyProjections(projPreview.matched, projPreview.rows);
                       setProjText("");
                     }}
                   >

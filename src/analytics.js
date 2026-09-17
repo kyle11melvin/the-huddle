@@ -1,3 +1,5 @@
+import { normName } from "./espnSync.js";
+
 // ============================================================================
 // Per-player, per-week analytics — the inputs a projection needs.
 //
@@ -8,6 +10,28 @@
 // number is a heuristic rather than a measurement, it says so — the point of
 // this app is to be right, not to look confident.
 // ============================================================================
+
+/**
+ * A pasted FantasyPros projection, reachable BY NAME.
+ *
+ * state.analytics is keyed by roster player id, which only Kyle's players
+ * have — so a paste's numbers for everyone else had nowhere to live and were
+ * dropped on the floor when the import modal closed. fpProjIndex keeps the
+ * whole paste, week-scoped, so the opponent side can price a starter through
+ * the same blend instead of reading raw ESPN.
+ *
+ * Same shape of store as ecrIndex, for the same reasons: it is the paste,
+ * indexed; it is bulky; it is re-pasteable; and it does not travel in a share
+ * snapshot.
+ *
+ * @returns {{proj:number, stars:number|null}|null}
+ */
+export function fpProjFor(state, week, name) {
+  const byWeek = state.fpProjIndex && state.fpProjIndex[week];
+  if (!byWeek) return null;
+  const hit = byWeek[normName(name)];
+  return hit && Number.isFinite(hit.proj) ? hit : null;
+}
 
 export function playerAnalytics(state, playerId, week) {
   return (state.analytics && state.analytics[playerId] && state.analytics[playerId][week]) || null;

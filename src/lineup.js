@@ -184,6 +184,12 @@ export function buildInitialState() {
     // import panel: ranks are weekly, a paste replaces the names it carries,
     // and there is no clear button — so "which week is this" has to be
     // answerable on screen rather than inferred.
+    // week -> normalized name -> { proj, stars }. The whole FantasyPros paste,
+    // indexed by NAME so the opponent side can reach it: analytics is keyed by
+    // roster player id, which only my own players have. Same store shape and
+    // the same reasons as ecrIndex — it is the paste, it is bulky, it is
+    // re-pasteable, and it does not travel in a snapshot.
+    fpProjIndex: {},
     analytics: {}, // playerId -> week -> { proj, dvp, ou, expertRanks, ... }
     matchups: {}, // week -> { oppTeam, live: { rowKey -> {scored, status, pctRemaining} } }
     espn: null, // latest /api/espn snapshot (rosters, projections, pairings)
@@ -285,6 +291,7 @@ export function migrate(raw) {
       byesManual: normalizeByes(raw.byesManual && typeof raw.byesManual === "object" ? raw.byesManual : {}),
       ecrIndex: raw.ecrIndex && typeof raw.ecrIndex === "object" ? raw.ecrIndex : {},
       ecrWeek: WEEKS.includes(raw.ecrWeek) ? raw.ecrWeek : null,
+      fpProjIndex: raw.fpProjIndex && typeof raw.fpProjIndex === "object" ? raw.fpProjIndex : {},
       analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
       matchups: raw.matchups && typeof raw.matchups === "object" ? raw.matchups : {},
       espn: raw.espn && typeof raw.espn === "object" ? raw.espn : null,
@@ -364,6 +371,7 @@ export function migrate(raw) {
     byesManual: normalizeByes(raw.byesManual && typeof raw.byesManual === "object" ? raw.byesManual : {}),
     ecrIndex: raw.ecrIndex && typeof raw.ecrIndex === "object" ? raw.ecrIndex : {},
     ecrWeek: WEEKS.includes(raw.ecrWeek) ? raw.ecrWeek : null,
+    fpProjIndex: raw.fpProjIndex && typeof raw.fpProjIndex === "object" ? raw.fpProjIndex : {},
     analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
     matchups: raw.matchups && typeof raw.matchups === "object" ? raw.matchups : {},
     espn: raw.espn && typeof raw.espn === "object" ? raw.espn : null,

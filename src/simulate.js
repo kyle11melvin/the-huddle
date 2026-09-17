@@ -21,7 +21,7 @@
 // ============================================================================
 
 import { SLOT_DEFS, findLocation, slotAccepts, bestLineupFrom } from "./lineup.js";
-import { pointDistribution } from "./analytics.js";
+import { pointDistribution, blendProjection, fpProjFor } from "./analytics.js";
 import { LEAGUE_ROSTERS } from "./data/leagueRosters.js";
 import { espnTeamRoster, liveEntryFor } from "./espnSync.js";
 import { scheduleOpp } from "./scheduleSync.js";
@@ -196,21 +196,47 @@ export const rankToPoints = (rank) =>
 const oppKey = (e) =>
   (e && e.espnId ? `id:${e.espnId}` : `nm:${(e && e.name ? e.name : "").toLowerCase().replace(/[^a-z]/g, "")}`);
 
-/** One opponent roster entry → a distribution, injury-priced. */
+/**
+ * One opponent roster entry → a distribution, injury-priced.
+ *
+ * Priced through blendProjection — the SAME ladder Kyle's own roster gets —
+ * rather than raw `e.proj`. The card used to say it out loud: "Opponent
+ * player — ESPN projection. Props, matchup and consensus are computed for
+ * your roster only." Two sides of one matchup, two different models, and the
+ * win probability was the difference between them.
+ *
+ * The pasted expert number is fetched BY NAME, because an opponent starter
+ * has no roster id to look an analytics record up with. Where no paste
+ * mentions him the blend degrades to exactly ESPN's number, so nobody is
+ * quietly repriced.
+ */
 const oppDist = (state, week, e) => {
   const playProb = OPP_PLAY_PROB[e.injuryStatus] ?? 1;
+  const fp = fpProjFor(state, week, e.name);
+  const blend = blendProjection(
+    { proj: e.proj, fpProj: fp ? fp.proj : null },
+    e.pos,
+    e.team,
+    state
+  );
+  // blendProjection returns null only when there is no number at all; the
+  // callers above already filter on a finite e.proj, so this is belt-and-
+  // braces rather than a live path.
+  const mu = blend ? blend.mu : e.proj;
+  const sd = blend ? blend.sd : e.proj * (CVS[e.pos] ?? 0.55);
   return {
     id: oppKey(e),
     name: e.name,
     team: e.team || null,
     pos: e.pos,
     opp: nflOppOf(state, e.team, week),
-    mean: Math.round(e.proj * playProb * 10) / 10,
-    condMean: e.proj,
-    sd: e.proj * (CVS[e.pos] ?? 0.55),
+    mean: Math.round(mu * playProb * 10) / 10,
+    condMean: Math.round(mu * 10) / 10,
+    sd: Math.round(sd * 10) / 10,
     playProb,
     slot: e.slot,
     injuryStatus: e.injuryStatus,
+    source: blend ? blend.source : "projection",
   };
 };
 
