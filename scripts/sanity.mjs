@@ -14,6 +14,7 @@ import { pointDistribution, floorCeiling } from "../src/analytics.js";
 import {
   simulateMatchup,
   simulateSwap,
+  simulateMatchupLive,
   simulateLive,
   liveNarrative,
   lineupDistributions,
@@ -451,6 +452,67 @@ check(
   "a legal same-position swap still returns a delta",
   legal && !legal.illegal && typeof legal.delta === "number",
   `delta = ${legal && legal.delta}`
+);
+
+// ---- 12b. the Lab must price a FINISHED opponent player at his actual ----
+// Live repro: the Lab showed the opponent at 155.5 "ESPN proj" and Kyle at 43%
+// — but Stafford (22.2 projected) had finished on 3. ESPN's real total was
+// ~127 and Kyle was the FAVOURITE, 149.1 vs 127.1. The Lab ran the PREGAME
+// simulator on both sides, so a finished player still contributed a full
+// variance distribution around a projection the game had already disproved.
+// Gameday got this right through simulateLive; the Lab never reached it.
+const labState = {
+  ...swapState,
+  players: { me: { id: "me", name: "My Guy", team: "KC", pos: "WR", ecr: "WR5", status: "" } },
+  lineup: { QB: [null], RB: [null, null], WR: ["me", null, null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  bench: [null, null, null, null, null, null],
+  analytics: { me: { 1: { proj: 20, projSource: "espn" } } },
+  matchups: { 1: { oppTeam: "Them" } },
+  espn: {
+    myTeamId: 7,
+    fetchedAt: Date.now(),
+    teams: [
+      {
+        id: 9, name: "Them", mapped: "Them",
+        roster: [
+          // FINISHED: projected 22.2, actually scored 3. The whole point.
+          { name: "Done Guy", team: "DET", pos: "WR", slot: "WR", proj: 22.2, actual: 3, injuryStatus: "ACTIVE" },
+          { name: "Later Guy", team: "SF", pos: "WR", slot: "WR", proj: 10, actual: 0, injuryStatus: "ACTIVE" },
+        ],
+      },
+    ],
+    games: {
+      DET: { state: "post", pctRemaining: 0, detail: "Final" },
+      SF: { state: "pre", pctRemaining: 1, detail: "Sun 1:00" },
+      KC: { state: "pre", pctRemaining: 1, detail: "Sun 1:00" },
+    },
+  },
+};
+const labMine = lineupDistributions(labState, labState.lineup, "1").dists;
+const labOpp = opponentDistributions(labState, "1", "Them", "likely");
+const labSim = simulateMatchupLive(labState, labMine, labOpp);
+check(
+  "a finished opponent player is priced at his ACTUAL, not his projection",
+  labSim && Math.abs(labSim.oppProjFinal - 13) < 1.5,
+  `opponent projected ${labSim && labSim.oppProjFinal}; 3 banked + 10 to come = 13, the pregame sim says ~32`
+);
+check(
+  "and that flips the matchup — 20 vs 13 is a favourite, 20 vs 32 is not",
+  labSim && labSim.winProb > 0.5,
+  `winProb ${labSim && labSim.winProb}`
+);
+check(
+  "points already banked are reported as banked, not as projection",
+  labSim && labSim.oppNow === 3 && labSim.oppLeft === 1,
+  JSON.stringify(labSim && { oppNow: labSim.oppNow, oppLeft: labSim.oppLeft })
+);
+// A finished player is a CONSTANT: zero variance, so repeated runs and a
+// different seed cannot move what he contributes.
+const labSimB = simulateMatchupLive(labState, labMine, labOpp, 4242);
+check(
+  "a final score carries no variance — a different seed cannot change it",
+  labSimB && labSimB.oppNow === 3 && labSim && labSim.oppNow === 3,
+  `seed 12345 banked ${labSim && labSim.oppNow}, seed 4242 banked ${labSimB && labSimB.oppNow}; both must be 3`
 );
 
 // ---- 13. bye weeks must reach the simulation (finding 10) ----
