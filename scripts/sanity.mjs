@@ -10,10 +10,12 @@ import fsMod from "node:fs";
 import { propsToPoints, SCORING, parseProps } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
 import { extractScoring } from "../api/espn.js";
-import { pointDistribution, floorCeiling } from "../src/analytics.js";
+import { pointDistribution, floorCeiling, fpProjFor } from "../src/analytics.js";
 import {
   simulateMatchup,
   simulateSwap,
+  simulateMatchupLive,
+  rowGameState,
   simulateLive,
   liveNarrative,
   lineupDistributions,
@@ -451,6 +453,202 @@ check(
   "a legal same-position swap still returns a delta",
   legal && !legal.illegal && typeof legal.delta === "number",
   `delta = ${legal && legal.delta}`
+);
+
+// ---- 12b. the Lab must price a FINISHED opponent player at his actual ----
+// Live repro: the Lab showed the opponent at 155.5 "ESPN proj" and Kyle at 43%
+// — but Stafford (22.2 projected) had finished on 3. ESPN's real total was
+// ~127 and Kyle was the FAVOURITE, 149.1 vs 127.1. The Lab ran the PREGAME
+// simulator on both sides, so a finished player still contributed a full
+// variance distribution around a projection the game had already disproved.
+// Gameday got this right through simulateLive; the Lab never reached it.
+const labState = {
+  ...swapState,
+  players: { me: { id: "me", name: "My Guy", team: "KC", pos: "WR", ecr: "WR5", status: "" } },
+  lineup: { QB: [null], RB: [null, null], WR: ["me", null, null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  bench: [null, null, null, null, null, null],
+  analytics: { me: { 1: { proj: 20, projSource: "espn" } } },
+  matchups: { 1: { oppTeam: "Them" } },
+  espn: {
+    myTeamId: 7,
+    fetchedAt: Date.now(),
+    teams: [
+      {
+        id: 9, name: "Them", mapped: "Them",
+        roster: [
+          // FINISHED: projected 22.2, actually scored 3. The whole point.
+          { name: "Done Guy", team: "DET", pos: "WR", slot: "WR", proj: 22.2, actual: 3, injuryStatus: "ACTIVE" },
+          { name: "Later Guy", team: "SF", pos: "WR", slot: "WR", proj: 10, actual: 0, injuryStatus: "ACTIVE" },
+        ],
+      },
+    ],
+    games: {
+      DET: { state: "post", pctRemaining: 0, detail: "Final" },
+      SF: { state: "pre", pctRemaining: 1, detail: "Sun 1:00" },
+      KC: { state: "pre", pctRemaining: 1, detail: "Sun 1:00" },
+    },
+  },
+};
+const labMine = lineupDistributions(labState, labState.lineup, "1").dists;
+const labOpp = opponentDistributions(labState, "1", "Them", "likely");
+const labSim = simulateMatchupLive(labState, labMine, labOpp);
+check(
+  "a finished opponent player is priced at his ACTUAL, not his projection",
+  labSim && Math.abs(labSim.oppProjFinal - 13) < 1.5,
+  `opponent projected ${labSim && labSim.oppProjFinal}; 3 banked + 10 to come = 13, the pregame sim says ~32`
+);
+check(
+  "and that flips the matchup — 20 vs 13 is a favourite, 20 vs 32 is not",
+  labSim && labSim.winProb > 0.5,
+  `winProb ${labSim && labSim.winProb}`
+);
+check(
+  "points already banked are reported as banked, not as projection",
+  labSim && labSim.oppNow === 3 && labSim.oppLeft === 1,
+  JSON.stringify(labSim && { oppNow: labSim.oppNow, oppLeft: labSim.oppLeft })
+);
+// A finished player is a CONSTANT: zero variance, so repeated runs and a
+// different seed cannot move what he contributes.
+const labSimB = simulateMatchupLive(labState, labMine, labOpp, 4242);
+check(
+  "a final score carries no variance — a different seed cannot change it",
+  labSimB && labSimB.oppNow === 3 && labSim && labSim.oppNow === 3,
+  `seed 12345 banked ${labSim && labSim.oppNow}, seed 4242 banked ${labSimB && labSimB.oppNow}; both must be 3`
+);
+
+// ---- 12c. an opponent starter is priced through the SAME blend as my roster ----
+// Seen on the Ashton Jeanty card: "Opponent player — ESPN projection. Props,
+// matchup and consensus are computed for your roster only." oppDist read
+// `e.proj` raw while my own players went through props -> ESPN+FP blend -> FP
+// -> ESPN -> season average, plus the implied-total tilt and widen-on-
+// disagreement. Two sides of one matchup priced by two different models.
+//
+// The mirror: identical position, team, ESPN number and pasted FP number, one
+// on my roster and one on theirs. They must come out the same.
+const a2State = {
+  ...swapState,
+  week: "1",
+  players: { mirror: { id: "mirror", name: "Mirror Guy", team: "KC", pos: "WR", ecr: "WR5", status: "" } },
+  lineup: { QB: [null], RB: [null, null], WR: ["mirror", null, null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  bench: [null, null, null, null, null, null],
+  analytics: { mirror: { 1: { proj: 10, projSource: "espn", fpProj: 20 } } },
+  matchups: { 1: { oppTeam: "Them" } },
+  // The same pasted FantasyPros number, reachable by NAME rather than by a
+  // roster id the opponent does not have.
+  fpProjIndex: { 1: { oppguy: { proj: 20, stars: null } } },
+  espn: {
+    myTeamId: 7, fetchedAt: Date.now(),
+    teams: [{ id: 9, name: "Them", mapped: "Them", roster: [
+      { name: "Opp Guy", team: "KC", pos: "WR", slot: "WR", proj: 10, actual: 0, injuryStatus: "ACTIVE" },
+      { name: "Filler Guy", team: "SF", pos: "RB", slot: "RB", proj: 9, actual: 0, injuryStatus: "ACTIVE" },
+    ] }],
+    games: { KC: { state: "pre", pctRemaining: 1 }, SF: { state: "pre", pctRemaining: 1 } },
+  },
+};
+check(
+  "the pasted FantasyPros number is reachable for a player with no roster id",
+  fpProjFor(a2State, "1", "Opp Guy")?.proj === 20,
+  JSON.stringify(fpProjFor(a2State, "1", "Opp Guy"))
+);
+const a2Mine = pointDistribution(a2State.players.mirror, "1", a2State);
+const a2Opp = opponentDistributions(a2State, "1", "Them", "likely").find((d) => d.name === "Opp Guy");
+check(
+  "an opponent starter blends ESPN with the pasted expert number, like my own roster does",
+  a2Opp && a2Mine && Math.abs(a2Opp.condMean - a2Mine.condMean) < 0.06,
+  `opponent ${a2Opp && a2Opp.condMean} vs mine ${a2Mine && a2Mine.condMean}; raw ESPN alone would be 10, the 50/50 blend is 15`
+);
+check(
+  "disagreement widens the opponent too — a contested player is a less certain bet on BOTH sides",
+  a2Opp && a2Mine && Math.abs(a2Opp.sd - a2Mine.sd) < 0.06 && a2Opp.sd > 15 * (0.58 * 1.0),
+  `opponent sd ${a2Opp && a2Opp.sd} vs mine ${a2Mine && a2Mine.sd}`
+);
+// An opponent with NO pasted number must be unchanged — this may not quietly
+// reprice players the paste never mentioned.
+const a2Filler = opponentDistributions(a2State, "1", "Them", "likely").find((d) => d.name === "Filler Guy");
+check(
+  "an opponent with no pasted number still prices at ESPN's, unchanged",
+  a2Filler && Math.abs(a2Filler.condMean - 9) < 0.06,
+  `got ${a2Filler && a2Filler.condMean}`
+);
+
+// The index has to survive a reload, and must NOT travel in a share snapshot
+// — same call as ecrIndex: it is the paste, it is bulky, and it re-pastes.
+check(
+  "the pasted projection index round-trips through migrate",
+  JSON.stringify(migrate({ fpProjIndex: { 1: { x: { proj: 9, stars: 2 } } } }).fpProjIndex) ===
+    JSON.stringify({ 1: { x: { proj: 9, stars: 2 } } }) &&
+    JSON.stringify(migrate({}).fpProjIndex) === "{}" &&
+    JSON.stringify(migrate({ fpProjIndex: "junk" }).fpProjIndex) === "{}",
+  JSON.stringify([migrate({}).fpProjIndex, migrate({ fpProjIndex: "junk" }).fpProjIndex])
+);
+
+// ---- 12d. every surface that renders a player agrees on his game state ----
+// The board could tell you a player was done; the roster screen could not.
+// Same player, same week, two screens, and only one of them knew a game had
+// been played — so the roster kept showing a projection the game had already
+// settled. DESIGN.md's three-state table is approved for anywhere a player
+// row renders, not just the paired board.
+const a4State = {
+  ...swapState,
+  week: "1",
+  players: {
+    done: { id: "done", name: "Done Guy", team: "DET", pos: "WR", ecr: "WR5", status: "" },
+    soon: { id: "soon", name: "Soon Guy", team: "SF", pos: "WR", ecr: "WR9", status: "" },
+  },
+  lineup: { QB: [null], RB: [null, null], WR: ["done", "soon", null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  bench: [null, null, null, null, null, null],
+  analytics: { done: { 1: { proj: 22.2, projSource: "espn" } }, soon: { 1: { proj: 14, projSource: "espn" } } },
+  espn: {
+    myTeamId: 7, fetchedAt: Date.now(),
+    teams: [{ id: 7, name: "Brock Hard", mapped: "Brock Hard", roster: [
+      { name: "Done Guy", team: "DET", pos: "WR", slot: "WR", proj: 22.2, actual: 3, injuryStatus: "ACTIVE" },
+      { name: "Soon Guy", team: "SF", pos: "WR", slot: "WR", proj: 14, actual: 0, injuryStatus: "ACTIVE" },
+    ] }],
+    games: {
+      DET: { state: "post", pctRemaining: 0, detail: "Final" },
+      SF: { state: "pre", pctRemaining: 1, detail: "Sun 1:00" },
+    },
+  },
+};
+const gsDone = rowGameState(a4State, a4State.players.done, "1", pointDistribution(a4State.players.done, "1", a4State));
+const gsSoon = rowGameState(a4State, a4State.players.soon, "1", pointDistribution(a4State.players.soon, "1", a4State));
+check(
+  "a finished player reads FINAL and shows what he SCORED, not his projection",
+  gsDone.isFinal === true && gsDone.chip === "FINAL" && gsDone.value === 3,
+  JSON.stringify({ chip: gsDone.chip, value: gsDone.value, isFinal: gsDone.isFinal })
+);
+check(
+  "his track is full once the game is done",
+  gsDone.prog === 1,
+  `prog ${gsDone.prog}`
+);
+check(
+  "a player who has not kicked off still reads as an estimate",
+  gsSoon.isFinal === false && gsSoon.value === 14,
+  JSON.stringify({ chip: gsSoon.chip, value: gsSoon.value })
+);
+// A live player carries BOTH numbers and a direction; nobody else does.
+const a4Live = {
+  ...a4State,
+  espn: {
+    ...a4State.espn,
+    games: { ...a4State.espn.games, SF: { state: "in", pctRemaining: 0.25, detail: "Q3 6:14" } },
+    teams: [{ ...a4State.espn.teams[0], roster: a4State.espn.teams[0].roster.map((e) =>
+      e.name === "Soon Guy" ? { ...e, actual: 9 } : e) }],
+  },
+};
+const gsLive = rowGameState(a4Live, a4Live.players.soon, "1", pointDistribution(a4Live.players.soon, "1", a4Live));
+check(
+  "a live player shows the decayed number, the pregame one to strike, and a direction",
+  gsLive.isLive === true && gsLive.chip === "Q3 6:14" && gsLive.was === 14 && gsLive.dir === "down" && gsLive.value === 12.5,
+  JSON.stringify({ chip: gsLive.chip, value: gsLive.value, was: gsLive.was, dir: gsLive.dir })
+);
+
+// Never two numbers except while live: a final has no `was` to strike out.
+check(
+  "a finished player carries no struck-through pregame number",
+  gsDone.was == null,
+  `was ${gsDone.was}`
 );
 
 // ---- 13. bye weeks must reach the simulation (finding 10) ----
@@ -1132,6 +1330,140 @@ check(
   JSON.stringify([migrate({ ecrWeek: "3" }).ecrWeek, migrate({}).ecrWeek, migrate({ ecrWeek: "99" }).ecrWeek])
 );
 
+// ---- 27c. the D/ST last resort must not steal a row that names someone else ----
+// Live repro: "26 QB Aaron Rodgers PIT" was written onto Steelers D/ST —
+// ECR QB26 and a 15.1 projection on a defense that projects 8.2 — because the
+// last-resort defense match fires on team alone and ignored both the declared
+// position and the fact that "Aaron Rodgers" is a person. The genuine DST row
+// was then swallowed by the `claimed` guard, so the preview reported a clean
+// match while a row silently vanished.
+const stealRoster = [
+  { id: "d1", name: "Steelers D/ST", team: "PIT", pos: "D/ST", ecr: "" },
+  { id: "r1", name: "Chase Brown", team: "CIN", pos: "RB", ecr: "" },
+];
+const stealRows = parseRankings("26. Aaron Rodgers QB - PIT\n3. Steelers DST - PIT").rows;
+const stealPlan = planEcrUpdates(stealRows, stealRoster);
+const dstUpdate = stealPlan.updates.find((u) => u.id === "d1");
+check(
+  "a QB row is not written onto a same-team D/ST",
+  dstUpdate && dstUpdate.to === "DST3",
+  `D/ST got ${dstUpdate ? dstUpdate.to : "no update at all"}`
+);
+check(
+  "the unrostered QB lands in unmatched rather than nowhere",
+  stealPlan.unmatched.some((r) => /Rodgers/.test(r.name)),
+  `unmatched: ${JSON.stringify(stealPlan.unmatched.map((r) => r.name))}`
+);
+
+// The same steal through the projections CSV, which is where it was measured.
+// This export shape carries NO position column, so a positional gate cannot
+// fire here — the defense has to refuse a two-token personal name on a team
+// match alone. Both halves are needed; neither covers the other's path.
+const stealCsv = [
+  '"RK","PLAYER NAME","TEAM","OPP","MATCHUP","PROJ. FPTS"',
+  '26,"Aaron Rodgers","PIT","@CLE","3 out of 5 stars",15.1',
+  '3,"Steelers","PIT","@CLE","4 out of 5 stars",8.2',
+].join("\n");
+const stealProj = parseProjections(stealCsv, stealRoster);
+const dstProj = stealProj.matched.find((m) => m.player.id === "d1");
+check(
+  "a D/ST keeps its own projection, not the QB's",
+  dstProj && dstProj.proj === 8.2,
+  `D/ST projected ${dstProj ? dstProj.proj : "nothing"}; the QB row was 15.1`
+);
+check(
+  "a two-token personal name is never handed to a defense on team alone",
+  stealProj.unmatched.some((r) => /Rodgers/.test(r.name)),
+  `unmatched: ${JSON.stringify(stealProj.unmatched.map((r) => r.name))}`
+);
+// The nickname forms that MUST keep working — this is the match the last
+// resort exists for, and the gate must not cost them.
+check(
+  "a bare nickname still reaches the defense, with and without a team hint",
+  matchPlayer("Steelers", stealRoster, { team: "PIT" }).match?.id === "d1" &&
+    matchPlayer("Steelers", stealRoster, {}).match?.id === "d1" &&
+    matchPlayer("Pittsburgh Steelers", stealRoster, {}).match?.id === "d1",
+  JSON.stringify([
+    matchPlayer("Steelers", stealRoster, { team: "PIT" }).match?.name,
+    matchPlayer("Steelers", stealRoster, {}).match?.name,
+    matchPlayer("Pittsburgh Steelers", stealRoster, {}).match?.name,
+  ])
+);
+
+// ---- 27d. every parsed row lands in exactly one bucket ----
+// The second half of the same defect: a row matching an already-claimed
+// player hit a bare `continue` and was counted nowhere, so a paste could
+// report "N parsed / M matched" with the arithmetic quietly not closing.
+// A shortfall has to be visible, whatever caused it.
+const dupRoster = [{ id: "c1", name: "Chase Brown", team: "CIN", pos: "RB", ecr: "" }];
+const dupRows = parseRankings(["4. Chase Brown RB - CIN", "9. Chase Brown RB - CIN"].join("\n")).rows;
+const dupPlan = planEcrUpdates(dupRows, dupRoster);
+check(
+  "a second row for an already-claimed player is reported as a duplicate",
+  (dupPlan.duplicate || []).length === 1 && (dupPlan.duplicate || [])[0]?.rank === 9,
+  JSON.stringify(dupPlan.duplicate ?? null)
+);
+check(
+  "rankings rows account for themselves: updates + unchanged + duplicate + unmatched + ambiguous",
+  dupPlan.updates.length + (dupPlan.unchanged || []).length + (dupPlan.duplicate || []).length +
+    dupPlan.unmatched.length + dupPlan.ambiguous.length === dupRows.length,
+  JSON.stringify({
+    rows: dupRows.length, updates: dupPlan.updates.length, unchanged: (dupPlan.unchanged || []).length,
+    duplicate: (dupPlan.duplicate || []).length, unmatched: dupPlan.unmatched.length, ambiguous: dupPlan.ambiguous.length,
+  })
+);
+// A row that matches but changes nothing is also a row, and was equally
+// invisible — this is the "already applied" case the panel talks about.
+const sameRows = parseRankings("4. Chase Brown RB - CIN").rows;
+const samePlan = planEcrUpdates(sameRows, [{ ...dupRoster[0], ecr: "RB4" }]);
+check(
+  "a row that matches but changes nothing is counted, not dropped",
+  samePlan.updates.length === 0 && (samePlan.unchanged || []).length === 1,
+  JSON.stringify({ updates: samePlan.updates.length, unchanged: (samePlan.unchanged || []).length })
+);
+
+// Caught by a screenshot, not by the assertions above: a row that matched but
+// changed nothing did not CLAIM the player, so a later row for the same player
+// still won. "First rank wins" was therefore false exactly when the first rank
+// was already applied — and the duplicate warning says first-wins on screen.
+// Claiming on every match, the way the projections path already does, is what
+// makes that sentence true.
+const noopFirst = parseRankings(["14. Tee Higgins WR - CIN", "50. Tee Higgins WR - CIN"].join("\n")).rows;
+const noopPlan = planEcrUpdates(noopFirst, [{ id: "h1", name: "Tee Higgins", team: "CIN", pos: "WR", ecr: "WR14" }]);
+check(
+  "a matched row claims its player even when it changes nothing, so first really does win",
+  noopPlan.updates.length === 0 &&
+    (noopPlan.unchanged || []).length === 1 &&
+    (noopPlan.duplicate || []).length === 1,
+  JSON.stringify({
+    updates: noopPlan.updates.map((u) => u.to),
+    unchanged: (noopPlan.unchanged || []).length,
+    duplicate: (noopPlan.duplicate || []).length,
+  })
+);
+
+const dupProj = parseProjections(
+  ['"RK","PLAYER NAME","TEAM","OPP","MATCHUP","PROJ. FPTS"',
+   '4,"Chase Brown","CIN","@CLE","3 out of 5 stars",17.6',
+   '9,"Chase Brown","CIN","@CLE","3 out of 5 stars",11.2'].join("\n"),
+  dupRoster
+);
+check(
+  "projection rows account for themselves too",
+  (dupProj.duplicate || []).length === 1 &&
+    dupProj.matched.length + (dupProj.duplicate || []).length + dupProj.unmatched.length +
+      dupProj.ambiguous.length === dupProj.rows.length,
+  JSON.stringify({
+    rows: dupProj.rows.length, matched: dupProj.matched.length, duplicate: (dupProj.duplicate || []).length,
+    unmatched: dupProj.unmatched.length, ambiguous: dupProj.ambiguous.length,
+  })
+);
+check(
+  "the first value wins, so a duplicate never overwrites what already matched",
+  dupProj.matched[0]?.proj === 17.6,
+  `got ${dupProj.matched[0]?.proj}`
+);
+
 // ---- 28. expert projections: parse, blend, widen, label ----
 const projRoster = [
   { id: "x1", name: "Chase Brown", team: "CIN", pos: "RB", ecr: "" },
@@ -1673,6 +2005,10 @@ check(
 check(
   "the ranks-imported week does not travel either — a stamp with no index behind it is a lie",
   packed.ecrWeek === undefined
+);
+check(
+  "nor does the pasted projection index — bulky, re-pasteable, same call as ecrIndex",
+  packed.fpProjIndex === undefined
 );
 
 // ---- 37. no orphaned classNames ----

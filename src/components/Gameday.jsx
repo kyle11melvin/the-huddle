@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
-import { simulateLive, liveNarrative, liveProjection, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
+import { simulateLive, liveNarrative, liveProjection, rowGameState, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
 import { teamLogoUrl, headshotUrl, teamOf } from "../data/teams.js";
 import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, kickoffLabel, opponentOf, pairingEdge } from "../headToHead.js";
 import { SLOT_COLOR } from "../constants.js";
@@ -815,36 +815,19 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
 function sideData(row, week, state) {
   if (!row || !row.name) return null;
   const l = row.l || {};
-  const status = l.status || "notStarted";
-  const isFinal = status === "final";
-  const isLive = status === "inProgress";
-  const scored = Number.isFinite(l.scored) ? l.scored : 0;
-  const live = liveProjection({
-    pregame: row.proj,
-    ifPlays: row.simProj ?? row.proj,
-    scored: l.scored,
-    pctRemaining: l.pctRemaining,
-    status,
-    playProb: row.playProb ?? 1,
-  });
+  // The three-state model itself lives in rowGameState now, shared with the
+  // roster screen. `row.l` is passed through because Gameday supports a MANUAL
+  // mode where a human typed the score, which no ESPN lookup would find.
+  const g = rowGameState(
+    state,
+    row,
+    week,
+    { mean: row.proj, condMean: row.simProj ?? row.proj, playProb: row.playProb ?? 1 },
+    l
+  );
+  const { status, isFinal, isLive, value, was, dir, chip, when } = g;
   const game = (state.espn && state.espn.games && row.team && state.espn.games[row.team]) || null;
   const opp = opponentOf((row.weeks && row.weeks[week] && row.weeks[week].opp) || scheduleOpp(state, row.team, week));
-  const when = game && game.startTime ? kickoffLabel(game.startTime) : "";
-
-  // FINAL shows ONE number: what he actually scored. A projection is dead once
-  // the game ends — it is a fact now, not an estimate, and showing both invites
-  // a comparison that no longer means anything.
-  // LIVE shows the decayed projection with the pregame figure struck beneath.
-  // PRE shows the projection alone.
-  const value = isFinal ? scored : live;
-  const was = isLive && Number.isFinite(row.proj) && live != null && Math.abs(row.proj - live) >= 0.1 ? row.proj : null;
-
-  // Directional: a player fading and a player going off must not look the same.
-  const dir = was == null ? "" : live > row.proj ? "up" : "down";
-
-  // Every state carries a WORD, never colour alone — it has to survive a glance
-  // in sunlight, and colour alone fails that and fails colour-blind readers.
-  const chip = isFinal ? "FINAL" : isLive ? l.detail || "LIVE" : when || "PRE";
 
   return {
     row,
@@ -858,7 +841,7 @@ function sideData(row, week, state) {
     // What he is worth RIGHT NOW — the same number the row displays: banked
     // points once final, the live projection while football remains.
     worth: value,
-    prog: isFinal ? 1 : isLive ? 1 - (l.pctRemaining ?? 1) : 0,
+    prog: g.prog,
     when,
     opp,
     logo: teamLogoUrl(row.team),

@@ -19,7 +19,7 @@ import DataPanel from "./components/DataPanel.jsx";
 import LeagueBrowser from "./components/LeagueBrowser.jsx";
 import StartSitLab from "./components/StartSitLab.jsx";
 import { setPlayerAnalytics, playerAnalytics, pointDistribution } from "./analytics.js";
-import { opponentDistributions } from "./simulate.js";
+import { rowGameState, opponentDistributions } from "./simulate.js";
 import { propsToPoints, leagueScoring } from "./props.js";
 import { writeLineupMove } from "./espnWrite.js";
 import {
@@ -88,7 +88,7 @@ import {
   setLiveEntry,
 } from "./lineup.js";
 import Today from "./components/Today.jsx";
-import { fetchLeague, applyEspnSync, summaryToText, liveOwner, searchLeaguePlayers } from "./espnSync.js";
+import { normName, fetchLeague, applyEspnSync, summaryToText, liveOwner, searchLeaguePlayers } from "./espnSync.js";
 import {
   fetchSchedule,
   applySchedule,
@@ -1540,7 +1540,7 @@ export default function App({ initialTab } = {}) {
   /** Expert projections + matchup stars. Stored alongside ESPN's number,
    *  never over it — pointDistribution blends the two. */
   const onApplyProjections = useCallback(
-    (matched) => {
+    (matched, rows = []) => {
       setState((s) => {
         let next = s;
         for (const m of matched) {
@@ -1551,6 +1551,18 @@ export default function App({ initialTab } = {}) {
             ...(m.stars != null ? { matchupStars: m.stars } : {}),
           });
         }
+        // EVERY parsed row is also indexed by name, not just the ones on my
+        // roster. Those were previously dropped when the modal closed, which
+        // is why the opponent side had nothing to blend with and ran on raw
+        // ESPN. Replaces this week's index rather than merging into it — a
+        // weekly projection is only true for its week.
+        const forWeek = {};
+        for (const r of rows) {
+          const k = normName(r.name);
+          if (!k || !Number.isFinite(r.proj)) continue;
+          forWeek[k] = { proj: r.proj, stars: r.stars ?? null };
+        }
+        next = { ...next, fpProjIndex: { ...(next.fpProjIndex || {}), [s.week]: forWeek } };
         return next;
       });
       const disagreements = matched.filter((m) => {
@@ -1981,6 +1993,13 @@ export default function App({ initialTab } = {}) {
     byes: state.byes || {},
     oppFor: (p) => scheduleOpp(state, p.team, week),
     projFor: (p) => pointDistribution(p, week, state)?.mean ?? null,
+    // The approved three-state view-model, same helper the paired board uses.
+    // Without it the roster screen showed a projection for a player whose
+    // game finished hours ago, with nothing on the row to say so.
+    // No sync means no game state — not "PRE". Claiming a state we cannot
+    // know would put a chip and an empty track on every row in offline mode
+    // saying nothing, which is the badge-honesty failure in miniature.
+    liveFor: (p) => (state.espn ? rowGameState(state, p, week, pointDistribution(p, week, state)) : null),
     dragId,
     legalKeys,
     onOpen: setModalId,

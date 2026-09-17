@@ -602,6 +602,18 @@ export default function DataPanel({
                     <span className="import-stat dim">
                       <strong>{preview.unmatched.length}</strong> not on your roster
                     </span>
+                    {preview.unchanged.length > 0 && (
+                      <span className="import-stat dim">
+                        <strong>{preview.unchanged.length}</strong> already applied
+                      </span>
+                    )}
+                    {/* These two used to be counted nowhere, so the numbers on
+                        this row could simply fail to add up to "parsed". */}
+                    {preview.duplicate.length > 0 && (
+                      <span className="import-stat warn">
+                        <strong>{preview.duplicate.length}</strong> duplicate
+                      </span>
+                    )}
                     {preview.ambiguous.length > 0 && (
                       <span className="import-stat warn">
                         <strong>{preview.ambiguous.length}</strong> ambiguous
@@ -627,6 +639,13 @@ export default function DataPanel({
                     <div className="panel-warn">
                       Skipping {preview.ambiguous.map((a) => a.name).join(", ")} — more than one player on your roster
                       matches that surname and initial.
+                    </div>
+                  )}
+                  {preview.duplicate.length > 0 && (
+                    <div className="panel-warn">
+                      {preview.duplicate.length} row{preview.duplicate.length === 1 ? "" : "s"} matched a player an
+                      earlier row already claimed: {preview.duplicate.map((d) => d.claimedBy).join(", ")}. The first
+                      rank for each player wins; these were not applied.
                     </div>
                   )}
                   <button
@@ -670,7 +689,13 @@ export default function DataPanel({
                 <div className="import-preview">
                   <div className="import-summary">
                     <strong>{projPreview.matched.length}</strong> matched
-                    {projPreview.unmatched.length > 0 && ` · ${projPreview.unmatched.length} not on your roster`}
+                    {/* "not on your roster" used to mean the row was thrown
+                        away. It now means the opposite — those rows are what
+                        the opponent side prices against — so it says where
+                        they go rather than being counted twice. */}
+                    {projPreview.unmatched.length > 0 &&
+                      ` · ${projPreview.unmatched.length} not on your roster (indexed for opponent pricing)`}
+                    {projPreview.duplicate.length > 0 && ` · ${projPreview.duplicate.length} duplicate`}
                     {projPreview.ambiguous.length > 0 && ` · ${projPreview.ambiguous.length} ambiguous`}
                     {projPreview.skipped > 0 && ` · ${projPreview.skipped} unreadable`}
                     {projPreview.sawHeader && " · CSV header detected"}
@@ -705,7 +730,9 @@ export default function DataPanel({
                     style={{ marginTop: 14 }}
                     disabled={!projPreview.matched.length}
                     onClick={() => {
-                      onApplyProjections(projPreview.matched);
+                      // ALL rows, not just the ones on my roster: the rest are
+                      // what the opponent side blends with.
+                      onApplyProjections(projPreview.matched, projPreview.rows);
                       setProjText("");
                     }}
                   >

@@ -21,10 +21,11 @@
 // ============================================================================
 
 import { SLOT_DEFS, findLocation, slotAccepts, bestLineupFrom } from "./lineup.js";
-import { pointDistribution } from "./analytics.js";
+import { pointDistribution, blendProjection, fpProjFor } from "./analytics.js";
 import { LEAGUE_ROSTERS } from "./data/leagueRosters.js";
-import { espnTeamRoster } from "./espnSync.js";
+import { espnTeamRoster, liveEntryFor } from "./espnSync.js";
 import { scheduleOpp } from "./scheduleSync.js";
+import { kickoffLabel } from "./headToHead.js";
 
 const RUNS = 20000;
 
@@ -196,21 +197,47 @@ export const rankToPoints = (rank) =>
 const oppKey = (e) =>
   (e && e.espnId ? `id:${e.espnId}` : `nm:${(e && e.name ? e.name : "").toLowerCase().replace(/[^a-z]/g, "")}`);
 
-/** One opponent roster entry → a distribution, injury-priced. */
+/**
+ * One opponent roster entry → a distribution, injury-priced.
+ *
+ * Priced through blendProjection — the SAME ladder Kyle's own roster gets —
+ * rather than raw `e.proj`. The card used to say it out loud: "Opponent
+ * player — ESPN projection. Props, matchup and consensus are computed for
+ * your roster only." Two sides of one matchup, two different models, and the
+ * win probability was the difference between them.
+ *
+ * The pasted expert number is fetched BY NAME, because an opponent starter
+ * has no roster id to look an analytics record up with. Where no paste
+ * mentions him the blend degrades to exactly ESPN's number, so nobody is
+ * quietly repriced.
+ */
 const oppDist = (state, week, e) => {
   const playProb = OPP_PLAY_PROB[e.injuryStatus] ?? 1;
+  const fp = fpProjFor(state, week, e.name);
+  const blend = blendProjection(
+    { proj: e.proj, fpProj: fp ? fp.proj : null },
+    e.pos,
+    e.team,
+    state
+  );
+  // blendProjection returns null only when there is no number at all; the
+  // callers above already filter on a finite e.proj, so this is belt-and-
+  // braces rather than a live path.
+  const mu = blend ? blend.mu : e.proj;
+  const sd = blend ? blend.sd : e.proj * (CVS[e.pos] ?? 0.55);
   return {
     id: oppKey(e),
     name: e.name,
     team: e.team || null,
     pos: e.pos,
     opp: nflOppOf(state, e.team, week),
-    mean: Math.round(e.proj * playProb * 10) / 10,
-    condMean: e.proj,
-    sd: e.proj * (CVS[e.pos] ?? 0.55),
+    mean: Math.round(mu * playProb * 10) / 10,
+    condMean: Math.round(mu * 10) / 10,
+    sd: Math.round(sd * 10) / 10,
     playProb,
     slot: e.slot,
     injuryStatus: e.injuryStatus,
+    source: blend ? blend.source : "projection",
   };
 };
 
@@ -449,10 +476,62 @@ export function simulateMatchup(myDists, oppDists, seed = 12345, runs = RUNS) {
 }
 
 /**
+ * Distributions -> live simulation entries.
+ *
+ * The bridge that was missing. `lineupDistributions` and `opponentDistributions`
+ * both produce PREGAME distributions, and the Lab fed them straight to
+ * `simulateMatchup`, which has no concept of a game having been played. A
+ * player who had already finished still contributed a full-variance
+ * distribution around a projection the game had disproved.
+ *
+ * Everything needed to fix that already existed — `simulateLive` prices
+ * final/live/pre correctly and Gameday has used it all along. This is the
+ * adapter, so there is ONE live model rather than a second copy of it.
+ *
+ * `condMean` is the if-he-plays number and is what `simulateLive` wants:
+ * it applies playProb itself, and once a player is on the field his Q/D coin
+ * flip has already resolved. Falls back to `mean` for the hand-built
+ * distributions some callers pass.
+ *
+ * cv comes from each distribution's OWN sd rather than a shared position
+ * table, so a blended or widened projection keeps the spread it earned.
+ */
+export function liveEntriesFrom(state, dists) {
+  return (dists || []).map((d) => {
+    const l = liveEntryFor(state, d.name, d.team) || {};
+    const ifPlays = Number.isFinite(d.condMean) ? d.condMean : d.mean;
+    return {
+      proj: Number.isFinite(ifPlays) ? ifPlays : 0,
+      playProb: Number.isFinite(d.playProb) ? d.playProb : 1,
+      scored: Number.isFinite(l.scored) ? l.scored : 0,
+      pctRemaining: Number.isFinite(l.pctRemaining) ? l.pctRemaining : 1,
+      status: l.status || "notStarted",
+      cv: Number.isFinite(d.sd) && ifPlays > 0 ? d.sd / ifPlays : CVS[d.pos] ?? 0.55,
+      // correlation metadata: same NFL game -> shared factor
+      team: d.team || null,
+      pos: d.pos || null,
+      opp: d.opp || null,
+    };
+  });
+}
+
+/**
+ * The matchup as it stands RIGHT NOW, from pregame distributions.
+ *
+ * Before kickoff every entry is `notStarted` and this is the pregame sim with
+ * extra steps — which is the point: one code path that is correct on Sunday
+ * afternoon as well as Saturday night, instead of two that disagree.
+ */
+export function simulateMatchupLive(state, myDists, oppDists, seed = 12345) {
+  if (!myDists || !oppDists || !myDists.length || !oppDists.length) return null;
+  return simulateLive(liveEntriesFrom(state, myDists), liveEntriesFrom(state, oppDists), seed);
+}
+
+/**
  * Win probability if `inId` started in place of `outId`.
  * This is the number that actually answers "who should I start".
  */
-export function simulateSwap(state, week, oppDists, outId, inId, seed = 12345, runs = RUNS) {
+export function simulateSwap(state, week, oppDists, outId, inId, seed = 12345) {
   const p = state.players[inId];
   if (!p) return null;
 
@@ -474,8 +553,12 @@ export function simulateSwap(state, week, oppDists, outId, inId, seed = 12345, r
   if (!d) return null;
   swapped.push({ id: inId, name: p.name, team: p.team || null, pos: p.pos, opp: nflOppOf(state, p.team, week), ...d });
 
-  const before = simulateMatchup(base.dists, oppDists, seed, runs);
-  const after = simulateMatchup(swapped, oppDists, seed, runs);
+  // Live-aware, same as the headline number this delta is compared against.
+  // On the pregame sim a swap delta was measured against a matchup that could
+  // already be decided, and the two numbers on screen came from different
+  // models. (`runs` went with it — simulateLive uses one fixed run count.)
+  const before = simulateMatchupLive(state, base.dists, oppDists, seed);
+  const after = simulateMatchupLive(state, swapped, oppDists, seed);
   if (!before || !after) return null;
   return { before, after, delta: after.winProb - before.winProb };
 }
@@ -559,6 +642,67 @@ export function liveProjection({ pregame, ifPlays, scored, pctRemaining, status,
   // Never below points already on the board — those are facts, and a
   // projection under them would be nonsense on its face.
   return Math.max(banked, Math.round(live * 10) / 10);
+}
+
+/**
+ * The approved three-state view-model for ONE player, for any surface that
+ * renders him. DESIGN.md's table is approved for anywhere a player row
+ * renders, not only the paired board — but only the board had it, so the
+ * roster screen went on showing a projection for a player whose game had
+ * finished hours earlier.
+ *
+ *   FINAL  one number: what he actually scored. No struck-through pregame —
+ *          a projection is dead once the game ends, and showing both invites
+ *          a comparison that no longer means anything.
+ *   LIVE   the decayed projection, with the pregame figure to strike beneath
+ *          it, plus a direction so fading and going off do not look alike.
+ *   PRE    the projection alone.
+ *
+ * Every state carries a WORD as well as a colour, because colour alone fails
+ * a glance in sunlight and fails a colour-blind reader completely.
+ *
+ * `liveEntry` overrides the ESPN lookup for Gameday's manual (non-auto) mode,
+ * where a human has typed the score.
+ *
+ * @param {{name, team}} player anything carrying a name and an NFL team
+ * @param {{mean, condMean, playProb}|null} dist his pregame distribution
+ */
+export function rowGameState(state, player, week, dist, liveEntry) {
+  const l = liveEntry || (player && liveEntryFor(state, player.name, player.team)) || {};
+  const status = l.status || "notStarted";
+  const isFinal = status === "final";
+  const isLive = status === "inProgress";
+  const scored = Number.isFinite(l.scored) ? l.scored : 0;
+
+  const pregame = dist && Number.isFinite(dist.mean) ? dist.mean : null;
+  const ifPlays = dist && Number.isFinite(dist.condMean) ? dist.condMean : pregame;
+  const live = liveProjection({
+    pregame,
+    ifPlays,
+    scored: l.scored,
+    pctRemaining: l.pctRemaining,
+    status,
+    playProb: dist && Number.isFinite(dist.playProb) ? dist.playProb : 1,
+  });
+
+  const value = isFinal ? scored : live;
+  const was = isLive && pregame != null && live != null && Math.abs(pregame - live) >= 0.1 ? pregame : null;
+  const dir = was == null ? "" : live > pregame ? "up" : "down";
+
+  const game = (state.espn && state.espn.games && player && player.team && state.espn.games[player.team]) || null;
+  const when = game && game.startTime ? kickoffLabel(game.startTime) : "";
+
+  return {
+    status,
+    isFinal,
+    isLive,
+    value,
+    was,
+    dir,
+    chip: isFinal ? "FINAL" : isLive ? l.detail || "LIVE" : when || "PRE",
+    prog: isFinal ? 1 : isLive ? 1 - (l.pctRemaining ?? 1) : 0,
+    when,
+  };
 }
 
 function liveParts(entries, rand) {

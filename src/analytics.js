@@ -1,3 +1,5 @@
+import { normName } from "./espnSync.js";
+
 // ============================================================================
 // Per-player, per-week analytics — the inputs a projection needs.
 //
@@ -8,6 +10,28 @@
 // number is a heuristic rather than a measurement, it says so — the point of
 // this app is to be right, not to look confident.
 // ============================================================================
+
+/**
+ * A pasted FantasyPros projection, reachable BY NAME.
+ *
+ * state.analytics is keyed by roster player id, which only Kyle's players
+ * have — so a paste's numbers for everyone else had nowhere to live and were
+ * dropped on the floor when the import modal closed. fpProjIndex keeps the
+ * whole paste, week-scoped, so the opponent side can price a starter through
+ * the same blend instead of reading raw ESPN.
+ *
+ * Same shape of store as ecrIndex, for the same reasons: it is the paste,
+ * indexed; it is bulky; it is re-pasteable; and it does not travel in a share
+ * snapshot.
+ *
+ * @returns {{proj:number, stars:number|null}|null}
+ */
+export function fpProjFor(state, week, name) {
+  const byWeek = state.fpProjIndex && state.fpProjIndex[week];
+  if (!byWeek) return null;
+  const hit = byWeek[normName(name)];
+  return hit && Number.isFinite(hit.proj) ? hit : null;
+}
 
 export function playerAnalytics(state, playerId, week) {
   return (state.analytics && state.analytics[playerId] && state.analytics[playerId][week]) || null;
@@ -132,10 +156,26 @@ export const isOnByeWeek = (player, week, state) => {
  * headline number. `condMean`/`sd` describe the if-he-plays branch, which is
  * what the simulator samples from (with prob playProb, else 0).
  */
-export function pointDistribution(player, week, state) {
-  if (!player) return null;
-  const a = playerAnalytics(state, player.id, week);
-  const cv = BASE_CV[player.pos] ?? 0.55;
+/**
+ * The projection blend, as a pure function of ONE analytics record.
+ *
+ * Split out of pointDistribution so the opponent side can price players
+ * through the same pipeline instead of reading raw ESPN. pointDistribution
+ * looks its record up by `player.id`, which only Kyle's roster has — an
+ * opponent starter has no player record and no id, so the lookup was the one
+ * thing standing between the two sides. Everything below it is arithmetic on
+ * the record and works for anyone.
+ *
+ * Kept as ONE implementation on purpose: a second copy of a precedence ladder
+ * this fiddly would drift within a week.
+ *
+ * @param {object|null} a analytics record: {proj, fpProj, propsProj, expertRanks, seasonAvg}
+ * @param {string} pos position, for the base coefficient of variation
+ * @param {string} team NFL team, for the Vegas implied-total tilt
+ * @returns {{mu, sd, source, dispersion}|null} null when there is no number at all
+ */
+export function blendProjection(a, pos, team, state) {
+  const cv = BASE_CV[pos] ?? 0.55;
   const implied = state.espn && state.espn.impliedTotals;
 
   let mu = null;
@@ -182,11 +222,11 @@ export function pointDistribution(player, week, state) {
   // high-total games get nudged up, low-total down. Capped ±12% — the line
   // prices the game environment, not the player's share of it. Props are
   // already the market, so they're never re-adjusted.
-  if (source !== "vegas props" && implied && Number.isFinite(implied[player.team])) {
+  if (source !== "vegas props" && implied && Number.isFinite(implied[team])) {
     const vals = Object.values(implied).filter(Number.isFinite);
     if (vals.length >= 4) {
       const avg = vals.reduce((n, v) => n + v, 0) / vals.length;
-      const factor = Math.max(0.88, Math.min(1.12, implied[player.team] / avg));
+      const factor = Math.max(0.88, Math.min(1.12, implied[team] / avg));
       if (Math.abs(factor - 1) > 0.005) {
         mu *= factor;
         source = `${source} × vegas line`;
@@ -207,6 +247,15 @@ export function pointDistribution(player, week, state) {
     uncertainty = Math.max(uncertainty, 1 + Math.min(0.5, gap));
   }
   const sd = mu * cv * uncertainty;
+  return { mu, sd, source, dispersion: disp };
+}
+
+export function pointDistribution(player, week, state) {
+  if (!player) return null;
+  const blend = blendProjection(playerAnalytics(state, player.id, week), player.pos, player.team, state);
+  if (!blend) return null;
+  const { mu, sd, dispersion: disp } = blend;
+  let { source } = blend;
 
   // Injury risk and byes price in here, not as a penalty downstream.
   const bye = isOnByeWeek(player, week, state);

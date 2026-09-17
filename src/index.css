@@ -571,6 +571,91 @@ select option {
   line-height: 1;
 }
 
+/* ---- roster row game state (A4) -------------------------------------------
+   DESIGN.md's three-state table is approved for anywhere a player row renders,
+   not just the paired board. These deliberately reuse the board's values —
+   #63768f for a spent name, #ff5d5d for live, the same 3px track — so the two
+   screens read as one system rather than two dialects of the same idea. */
+
+.row-num {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* FINAL is a fact, not an estimate: it drops the accent gold that means
+   "projected" everywhere else in this app. */
+.row-proj.isfinal {
+  color: var(--text);
+}
+
+/* Live, directional — a player fading and a player going off must not look
+   the same. */
+.row-proj.down { color: #ff7a7a; }
+.row-proj.up { color: var(--positive); }
+
+.row-was {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
+.player-name.spent { color: #63768f; }
+
+.row-state-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.row-state {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 3px 6px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+.row-state.final {
+  background: rgba(255, 255, 255, 0.13);
+  color: #cfdaea;
+}
+
+.row-state.live {
+  background: #ff5d5d;
+  color: #1a0508;
+}
+
+.row-state.pre {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-dim);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.row-track {
+  flex: 1;
+  height: 3px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+
+.row-track i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.row-track i.on { background: linear-gradient(90deg, rgba(255, 93, 93, 0.45), #ff5d5d); }
+.row-track i.done { background: rgba(255, 255, 255, 0.2); }
+
 .ecr-badge {
   font-family: var(--font-mono);
   font-size: 11.5px;

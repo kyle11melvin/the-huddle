@@ -13,6 +13,7 @@
 import { useEffect } from "react";
 import PlayerCard from "../PlayerCard.jsx";
 import { teamOf } from "../../data/teams.js";
+import { fpProjFor, blendProjection } from "../../analytics.js";
 
 /**
  * @param {object} row a Gameday opponent row
@@ -27,20 +28,36 @@ export default function OpponentCard({ row, week, state, onClose }) {
 
   if (!row) return null;
 
-  // The opponent's numbers come from ESPN's projection, not from our blend, so
-  // there is no condMean/sd pair to draw a real range from. Derive the spread
-  // from the position's coefficient of variation — the same constant the
-  // simulator uses — rather than inventing one or drawing no range at all.
-  const mean = Number.isFinite(row.proj) ? row.proj : null;
-  const condMean = Number.isFinite(row.simProj) ? row.simProj : mean;
+  // Which of the two sentences at the bottom is true for THIS player. The old
+  // card told everyone "computed for your roster only" regardless, which is
+  // now wrong for anyone the weekly paste covers.
+  const fp = row.estimated ? null : fpProjFor(state, week, row.name);
+  const fpOnFile = !!fp;
+
+  // Priced through blendProjection — the SAME call oppDist makes for the
+  // simulation. The card used to build its own number straight off the row,
+  // which was fine while the opponent was raw ESPN on both sides. It stopped
+  // being fine the moment oppDist started blending: the note below would have
+  // claimed "blended with your pasted FantasyPros projection" under a gauge
+  // still showing ESPN's raw number. A card and the sim behind it disagreeing
+  // is the exact split this whole group of fixes exists to close.
+  const raw = Number.isFinite(row.simProj) ? row.simProj : Number.isFinite(row.proj) ? row.proj : null;
+  const blend =
+    raw == null || row.estimated
+      ? null
+      : blendProjection({ proj: raw, fpProj: fp ? fp.proj : null }, row.pos, row.team, state);
+  const condMean = blend ? Math.round(blend.mu * 10) / 10 : raw;
+  const playProb = row.playProb ?? 1;
   const dist =
-    mean == null
+    condMean == null
       ? null
       : {
-          mean,
+          mean: Math.round(condMean * playProb * 10) / 10,
           condMean,
-          sd: Math.round(condMean * (row.cv ?? 0.55) * 10) / 10,
-          playProb: row.playProb ?? 1,
+          sd: blend
+            ? Math.round(blend.sd * 10) / 10
+            : Math.round(condMean * (row.cv ?? 0.55) * 10) / 10,
+          playProb,
         };
 
   const team = teamOf(row.team);
@@ -63,10 +80,11 @@ export default function OpponentCard({ row, week, state, onClose }) {
               espnId: row.espnId || "",
             }}
             dist={dist}
-            // None of these exist for an opponent: props are priced for MY
-            // roster only, and the matchup/consensus inputs are keyed on my
-            // players. The card renders explicit no-data states rather than
-            // borrowing numbers that were never computed for him.
+            // Props are still MY roster only — those are priced per player
+            // from book lines we only fetch for my side. The expert projection
+            // is no longer in that bucket: the weekly paste is indexed by name
+            // and the opponent blends with it, so the note below says which of
+            // the two he actually got rather than one fixed sentence.
             propsEdge={null}
             matchup={null}
             consensus={null}
@@ -81,7 +99,9 @@ export default function OpponentCard({ row, week, state, onClose }) {
           <p className="panel-note" style={{ marginTop: 14 }}>
             {row.estimated
               ? "Opponent player — projection estimated from expert rank, not an ESPN projection."
-              : "Opponent player — ESPN projection. Props, matchup and consensus are computed for your roster only."}
+              : fpOnFile
+                ? "Opponent player — ESPN blended with your pasted FantasyPros projection, the same pricing your own roster gets. Vegas props stay your roster only."
+                : "Opponent player — ESPN projection. No expert projection was pasted for him this week, and Vegas props are priced for your roster only."}
           </p>
         </div>
       </div>

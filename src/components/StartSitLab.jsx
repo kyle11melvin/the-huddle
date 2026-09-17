@@ -8,7 +8,7 @@ import {
 } from "../analytics.js";
 import {
   lineupDistributions,
-  simulateMatchup,
+  simulateMatchupLive,
   simulateSwap,
   strategyAdvice,
   opponentDistributions,
@@ -82,32 +82,51 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
   // Asked of the code that builds the numbers, not inferred from state.espn
   // being present — see opponentSource() in simulate.js for why that inference
   // is wrong in exactly the case that matters.
-  const labProvenance = useMemo(() => {
-    const src = opponentSource(state, week, oppTeam);
-    const age = espnAgeMs(state);
-    if (src === "estimated") {
-      return "Opponent scores are estimated from expert ranks and are NOT injury-adjusted — a ruled-out starter still counts as healthy. Treat the number as directional and re-sync ESPN.";
-    }
-    if (src === "live" && age != null && age > staleAfterMs(state)) {
-      return `Both sides run on real ESPN projections, but the last sync was ${agoLabel(age)} ago — refresh before acting on a close call.`;
-    }
-    return "Both sides run on real ESPN projections; FantasyPros pastes add expert-rank uncertainty on top.";
-  }, [state, week, oppTeam]);
+  const oppSource = useMemo(() => opponentSource(state, week, oppTeam), [state, week, oppTeam]);
+  const espnAge = useMemo(() => espnAgeMs(state), [state]);
   // `mine` MUST be declared before anything that names it — including a
   // dependency array, which is evaluated at the useMemo call itself. This was
   // shipped with simActual above this line and threw
   // "Cannot access 'mine' before initialization" on first render, blanking
   // the Start/Sit tab.
   const mine = useMemo(() => lineupDistributions(state, state.lineup, week), [state, week]);
+  // simulateMatchupLive, not simulateMatchup: a player whose game has finished
+  // is a constant at what he actually scored, not a full-variance draw around
+  // a projection the game already disproved. Before this the Lab showed the
+  // opponent at 155.5 and Kyle at 43% when the real total was ~127 and he was
+  // the favourite — it called the matchup the wrong way round. Pre-kickoff
+  // every entry is `notStarted` and this is the pregame sim with extra steps.
   const sim = useMemo(
-    () => (mine.dists.length && oppDists.length ? simulateMatchup(mine.dists, oppDists) : null),
-    [mine, oppDists]
+    () => (mine.dists.length && oppDists.length ? simulateMatchupLive(state, mine.dists, oppDists) : null),
+    [state, mine, oppDists]
   );
   const simActual = useMemo(
-    () => (oppBoth && oppBoth.differs && mine.dists.length ? simulateMatchup(mine.dists, oppBoth.actual) : null),
-    [oppBoth, mine]
+    () => (oppBoth && oppBoth.differs && mine.dists.length ? simulateMatchupLive(state, mine.dists, oppBoth.actual) : null),
+    [state, oppBoth, mine]
   );
   const advice = sim ? strategyAdvice(sim.winProb) : null;
+  // Declared AFTER `sim`, deliberately. A const named above its declaration —
+  // including inside a dependency array — is the temporal-dead-zone crash that
+  // blanked this exact tab once already.
+  const anyDone = !!sim && (sim.myLeft < mine.dists.length || sim.oppLeft < oppDists.length);
+  // The provenance line is built HERE, below `sim`, because what it can
+  // honestly claim depends on whether any game is done. Appending a caveat to
+  // the pregame sentence was the first attempt and read as a contradiction in
+  // a single paragraph: "both sides run on real ESPN projections ... finished
+  // players are counted at what they actually scored".
+  const labProvenance = (() => {
+    if (oppSource === "estimated") {
+      return "Opponent scores are estimated from expert ranks and are NOT injury-adjusted — a ruled-out starter still counts as healthy. Treat the number as directional and re-sync ESPN.";
+    }
+    const left = sim ? sim.myLeft + sim.oppLeft : 0;
+    const basis = anyDone
+      ? `Finished players count at exactly what they scored; the ${left} player${left === 1 ? "" : "s"} still to play run on real ESPN projections, with FantasyPros pastes adding expert-rank uncertainty.`
+      : "Both sides run on real ESPN projections; FantasyPros pastes add expert-rank uncertainty on top.";
+    if (oppSource === "live" && espnAge != null && espnAge > staleAfterMs(state)) {
+      return `${basis} Last sync was ${agoLabel(espnAge)} ago — refresh before acting on a close call.`;
+    }
+    return basis;
+  })();
 
   const starters = new Set();
   for (const key of Object.keys(state.lineup)) for (const id of state.lineup[key]) if (id) starters.add(id);
@@ -295,16 +314,20 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
             <div className="sim-detail">
               <div className="sim-row">
                 <span>You</span>
-                <strong>{sim.myMean}</strong>
+                <strong>{sim.myProjFinal}</strong>
                 <span className="sim-range">
                   {sim.myP10}–{sim.myP90}
                 </span>
               </div>
               <div className="sim-row">
                 <span>{oppTeam}</span>
-                <strong>{sim.oppMean}</strong>
+                <strong>{sim.oppProjFinal}</strong>
+                {/* The label has to stop saying "ESPN proj" the moment any
+                    game is done: the number is then part banked fact and part
+                    projection, and calling the whole thing a projection is the
+                    same dishonesty as the old footer copy. */}
                 <span className={`sim-range ${state.espn ? "" : "est"}`}>
-                  {state.espn ? "ESPN proj" : "estimated"}
+                  {!state.espn ? "estimated" : anyDone ? "part final" : "ESPN proj"}
                 </span>
               </div>
             </div>
