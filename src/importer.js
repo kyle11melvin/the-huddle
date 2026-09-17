@@ -199,6 +199,27 @@ export function parseRankings(text, defaultPos = "") {
 
 /**
  * Build the league-wide ECR index consumed by analysis.leagueStrength.
+ *
+ * `existing` is LAYERED UNDER, not min-merged with, the rows being imported:
+ * the newest rank for a name wins outright. This used to keep the lowest rank
+ * ever seen, which reads as sensible and is correct within a single paste, but
+ * is wrong the moment a second week arrives — a WR who fell from 12 to 40 in
+ * Week 2 stayed indexed at 12 for the rest of the season, with no UI to clear
+ * it. That is not a cosmetic number: ecrIndex outranks ESPN's live autoRanks
+ * in analysis.liveRankInfo and prices the opponent sim through rankToPoints.
+ *
+ * The merge is where the fix belongs rather than the call site. FantasyPros
+ * publishes one page per position and the panel has a position selector for
+ * exactly that, so a week's import is several pastes in a row; building fresh
+ * from `rows` alone would make the RB paste erase the QB paste from two
+ * minutes earlier. Ranks that a paste doesn't mention are carried forward
+ * untouched — a name only changes when a newer paste names it.
+ *
+ * (Per-position ranks share one numeric space here, so "lowest wins" was also
+ * comparing a WR's 12 against an RB's 12 as though they were the same claim.)
+ *
+ * @param {Array<{rank:number,name:string}>} rows the paste being applied
+ * @param {Object} existing the index built by earlier pastes
  * @returns {Object} normalizedName -> rank
  */
 export function buildEcrIndex(rows, existing = {}) {
@@ -206,8 +227,7 @@ export function buildEcrIndex(rows, existing = {}) {
   for (const r of rows) {
     const key = normKey(r.name);
     if (!key) continue;
-    // keep the best (lowest) rank seen for a name
-    if (out[key] == null || r.rank < out[key]) out[key] = r.rank;
+    out[key] = r.rank; // newest paste wins, better or worse
   }
   return out;
 }

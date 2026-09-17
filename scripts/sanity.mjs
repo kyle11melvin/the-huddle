@@ -21,7 +21,7 @@ import {
 } from "../src/simulate.js";
 import { migrate, addCall, callCalibration, applyWin, revertWin, bestLineupFrom } from "../src/lineup.js";
 import { opponentLineups, opponentDistributions } from "../src/simulate.js";
-import { matchPlayer, parseRankings, planEcrUpdates, parseProjections } from "../src/importer.js";
+import { matchPlayer, parseRankings, planEcrUpdates, parseProjections, buildEcrIndex, normKey } from "../src/importer.js";
 import { projWeights } from "../src/calibration.js";
 import { formatCountdown, untilKick } from "../src/timeUntil.js";
 import { applyEspnSync } from "../src/espnSync.js";
@@ -1093,6 +1093,34 @@ check(
   "a full abbreviated ranking paste matches every colliding player",
   plan16.updates.length === 5 && plan16.ambiguous.length === 0 && plan16.unmatched.length === 0,
   `matched ${plan16.updates.length}/5, ambiguous ${plan16.ambiguous.length}, unmatched ${plan16.unmatched.length}`
+);
+
+// ---- 27b. a weekly ranking paste REPLACES last week's rank, never ratchets ----
+// buildEcrIndex used to keep the LOWEST rank it had ever seen for a name.
+// That is right within one week's paste and wrong across weeks: a WR who
+// falls from 12 to 40 stayed indexed at 12 forever, and no UI clears the
+// index. It is not a cosmetic number — ecrIndex outranks ESPN's live
+// autoRanks in liveRankInfo and drives the opponent sim through
+// rankToPoints, so a stale 12 is a number the app acts on.
+const hk = normKey("Tee Higgins");
+const wk1Index = buildEcrIndex(parseRankings("12. Tee Higgins WR - CIN").rows, {});
+const wk2Index = buildEcrIndex(parseRankings("40. Tee Higgins WR - CIN").rows, wk1Index);
+check("week 1's paste indexes the rank it was given", wk1Index[hk] === 12, `got ${wk1Index[hk]}`);
+check(
+  "week 2's paste REPLACES that rank even though it is worse",
+  wk2Index[hk] === 40,
+  `got ${wk2Index[hk]} — a ratcheting index keeps week 1's 12 forever`
+);
+// The other half of the contract, and the reason the fix is in the merge
+// rather than at the call site: FantasyPros publishes one page per position
+// and the panel has a position selector for exactly that, so the weekly
+// import is several pastes in a row. A paste must not wipe the players it
+// never mentions.
+const plusQb = buildEcrIndex(parseRankings("3. Trevor Lawrence QB - JAX").rows, wk2Index);
+check(
+  "a later paste leaves players it doesn't mention alone",
+  plusQb[normKey("Trevor Lawrence")] === 3 && plusQb[hk] === 40,
+  JSON.stringify(plusQb)
 );
 
 // ---- 28. expert projections: parse, blend, widen, label ----
