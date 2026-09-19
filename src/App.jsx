@@ -52,6 +52,7 @@ import {
   liveShareUrl,
 } from "./remoteStore.js";
 import {
+  isSeedRoster,
   SLOT_DEFS,
   MAX_ROSTER,
   POS_LIMITS,
@@ -2159,6 +2160,21 @@ export default function App({ initialTab } = {}) {
       </nav>
 
       <main className="content">
+        {/* Sample data must never pass for a real team. A browser with no
+            owner link and no sync falls back to the seed roster — real
+            players, frozen at preseason — and the app used to present it
+            exactly as it presents a live team, "YOU'RE SET" and all. It cost
+            an hour before anyone thought to doubt the roster itself. */}
+        {isSeedRoster(state) && (
+          <div className="sample-banner">
+            <b>This is sample data, not your team.</b>
+            <span>
+              This browser has no team link, so the app is showing the built-in preseason roster. Anything you
+              import here stays here. Tap <strong>⟳ ESPN</strong> to sync, or <strong>⇄ Data</strong> to reconnect
+              with your team code and write key.
+            </span>
+          </div>
+        )}
         {/* On Today the VERDICT is the alert. Planning-horizon banners (bye
             cliffs weeks out) are useful but must not push "am I OK right now"
             below the fold on a phone — measured, they cost 249px above it.

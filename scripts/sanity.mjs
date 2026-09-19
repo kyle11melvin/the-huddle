@@ -22,11 +22,12 @@ import {
   lineupDistributions,
   sumMeans,
 } from "../src/simulate.js";
-import { migrate, addCall, callCalibration, applyWin, revertWin, bestLineupFrom } from "../src/lineup.js";
+import { migrate, addCall, callCalibration, applyWin, revertWin, bestLineupFrom, isSeedRoster } from "../src/lineup.js";
 import { opponentLineups, opponentDistributions } from "../src/simulate.js";
 import { matchPlayer, parseRankings, planEcrUpdates, parseProjections, buildEcrIndex, normKey } from "../src/importer.js";
 import { projWeights } from "../src/calibration.js";
 import { formatCountdown, untilKick } from "../src/timeUntil.js";
+import { anyGameStarted } from "../src/headToHead.js";
 import { applyEspnSync } from "../src/espnSync.js";
 import { deriveSchedule } from "../api/schedule.js";
 import { gameStatesFrom } from "../api/espn-write.js";
@@ -772,6 +773,63 @@ check(
   "an empty sweep still counts as asked",
   propsSweptFor({ propsIndex: { 2: {} } }, "2") === true,
   "the request happened; the book just had nothing"
+);
+
+// ---- 12h. sample data must never pass for a real team ----
+// A browser profile with no token and no owner link falls back to the seed
+// roster — Kyle's real players, frozen at preseason — and the app presented it
+// exactly as it presents a live team, down to "YOU'RE SET" on the Today card.
+// It cost an hour before anyone thought to doubt the roster itself. The state
+// is perfectly detectable; nothing was asking.
+check(
+  "an untouched seed roster with no sync is identified as sample data",
+  isSeedRoster(migrate({})) === true,
+  "a fresh device is showing seeds, not a team"
+);
+check(
+  "a synced team is NOT sample data, even though it keeps the seed ids",
+  isSeedRoster({ ...migrate({}), espn: { teams: [], games: {}, fetchedAt: Date.now() } }) === false,
+  "applyEspnSync preserves ids, so ids alone cannot decide this"
+);
+check(
+  "a roster that has actually changed is NOT sample data",
+  (() => {
+    const s = migrate({});
+    const [firstId] = Object.keys(s.players);
+    const players = { ...s.players };
+    delete players[firstId];
+    return isSeedRoster({ ...s, players }) === false;
+  })(),
+  "one drop is enough to make it his team rather than the sample"
+);
+
+// ---- 12i. the hero flips once points are BANKED, not only while live ----
+// The hero already swaps to the current score with the projection beneath it —
+// but only while a game is `inProgress`. On a Saturday morning, after Thursday
+// night had been played, BennyBalls had 28 real points on the board and the
+// hero still showed the projection big with "28 scored" in small grey beneath
+// it. Points that are already banked are facts, and a fact outranks a forecast
+// whether or not a ball happens to be in the air right now.
+const rowWith = (status) => ({ name: "Someone", slot: "WR", l: { status } });
+check(
+  "a finished game counts as started — the score is banked and real",
+  anyGameStarted([rowWith("notStarted"), rowWith("final")]) === true,
+  "Thursday night is over; its points are facts"
+);
+check(
+  "a live game still counts as started",
+  anyGameStarted([rowWith("inProgress")]) === true
+);
+check(
+  "nothing kicked off yet is NOT started — pre-kickoff the score is noise",
+  anyGameStarted([rowWith("notStarted"), rowWith("notStarted")]) === false &&
+    anyGameStarted([]) === false,
+  "everyone is on zero and the projection is the story"
+);
+check(
+  "an empty slot cannot make a matchup look started",
+  anyGameStarted([{ name: null, l: { status: "final" } }]) === false,
+  "an unfilled roster spot has no game"
 );
 
 // ---- 13. bye weeks must reach the simulation (finding 10) ----
@@ -1585,6 +1643,56 @@ check(
   "the first value wins, so a duplicate never overwrites what already matched",
   dupProj.matched[0]?.proj === 17.6,
   `got ${dupProj.matched[0]?.proj}`
+);
+
+// ---- 27e. the HEADERLESS FantasyPros export ----
+// Kyle's actual Week 2 paste. FantasyPros exports comma-separated with NO
+// header row:
+//   rank, POS, name, team, opp, "N out of 5 stars", grade, proj, diff, start%
+// parseProjections handled a CSV WITH a header, or whitespace-separated text,
+// and this shape is neither — so it fell through to the free-form path, which
+// takes "the last number on the line" as the projection. On his real file that
+// is the denominator of the start% column: Trey McBride came through as 16
+// instead of 15.5, Cameron Dicker as 16 instead of 9.1, and every name arrived
+// as "1, ,Trey McBride,ARI, , ,A+,15.5,..." so nothing matched his roster.
+//
+// Silent and expensive: 169 rows reported as "indexed for opponent pricing",
+// all of them garbage, now feeding the opponent side of every matchup.
+const fpRoster = [
+  { id: "k1", name: "Cameron Dicker", team: "LAC", pos: "K", ecr: "" },
+  { id: "t1", name: "Brock Bowers", team: "LV", pos: "TE", ecr: "" },
+];
+const fpPaste = [
+  "1,TE,Trey McBride,ARI,vs. SEA,3 out of 5 stars,A+,15.5,+2.2,56% (9/16)",
+  "35,TE,Brock Bowers,LV,at LAC,4 out of 5 stars,F,5.5,-,-",
+  "2,K,Cameron Dicker,LAC,vs. LV,4 out of 5 stars,B+,9.1,+2.5,75% (12/16)",
+].join("\n");
+const fpParsed = parseProjections(fpPaste, fpRoster);
+const byName = (n) => fpParsed.rows.find((r) => r.name === n);
+check(
+  "a headerless FantasyPros row yields the PROJECTION, not the start% denominator",
+  byName("Trey McBride")?.proj === 15.5 && byName("Cameron Dicker")?.proj === 9.1,
+  JSON.stringify(fpParsed.rows.map((r) => [r.name, r.proj]))
+);
+check(
+  "the name is the player, not the whole line",
+  !!byName("Brock Bowers") && !!byName("Trey McBride"),
+  JSON.stringify(fpParsed.rows.map((r) => r.name))
+);
+check(
+  "team and position survive the comma layout",
+  byName("Trey McBride")?.team === "ARI" && byName("Trey McBride")?.pos === "TE",
+  JSON.stringify(fpParsed.rows.map((r) => [r.name, r.team, r.pos]))
+);
+check(
+  "and my own players finally match",
+  fpParsed.matched.length === 2,
+  `matched ${fpParsed.matched.length}/2: ${JSON.stringify(fpParsed.matched.map((m) => [m.player.name, m.proj]))}`
+);
+check(
+  "stars still come through from the same row",
+  byName("Cameron Dicker")?.stars === 4,
+  `got ${byName("Cameron Dicker")?.stars}`
 );
 
 // ---- 28. expert projections: parse, blend, widen, label ----

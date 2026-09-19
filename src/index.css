@@ -656,6 +656,30 @@ select option {
 .row-track i.on { background: linear-gradient(90deg, rgba(255, 93, 93, 0.45), #ff5d5d); }
 .row-track i.done { background: rgba(255, 255, 255, 0.2); }
 
+/* Sample-data banner. Loud on purpose: every other surface in the app is
+   happy to render seed players as though they were a live roster, and the
+   only honest fix is to say so before anything else is read. */
+.sample-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: var(--gold-soft);
+  border: 1px solid rgba(var(--gold-rgb), 0.4);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.sample-banner b {
+  font-size: 13.5px;
+  color: var(--gold);
+}
+
+.sample-banner strong { color: var(--text); }
+
 .ecr-badge {
   font-family: var(--font-mono);
   font-size: 11.5px;
