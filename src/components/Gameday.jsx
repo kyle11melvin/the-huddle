@@ -4,7 +4,7 @@ import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
 import { simulateLive, liveNarrative, liveProjection, rowGameState, opponentDist, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
 import { teamLogoUrl, headshotUrl, teamOf } from "../data/teams.js";
-import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, opponentOf, pairingEdge } from "../headToHead.js";
+import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, opponentOf, pairingEdge, anyGameStarted } from "../headToHead.js";
 import { SLOT_COLOR } from "../constants.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
 import { scheduleOpp } from "../scheduleSync.js";
@@ -440,8 +440,12 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
   // Does ANY of my starters' games have a ball in the air? The hero's
   // hierarchy flips on this: pre-kickoff the projection is the story and the
   // score is noise; once live the score is the story.
+  // Named for what it now means: any game STARTED, not any game live. A
+  // finished game's points are banked and real, so the hero leads with the
+  // score from Thursday night onward rather than only while a ball is in the
+  // air. See anyGameStarted().
   const anyLive = useMemo(
-    () => [...leftResolved, ...rightResolved].some((r) => r && r.l && r.l.status === "inProgress"),
+    () => anyGameStarted([...leftResolved, ...rightResolved]),
     [leftResolved, rightResolved]
   );
   const projMargin = sim ? Math.round((sim.myProjFinal - sim.oppProjFinal) * 10) / 10 : 0;

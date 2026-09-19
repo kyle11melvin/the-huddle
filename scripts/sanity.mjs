@@ -27,6 +27,7 @@ import { opponentLineups, opponentDistributions } from "../src/simulate.js";
 import { matchPlayer, parseRankings, planEcrUpdates, parseProjections, buildEcrIndex, normKey } from "../src/importer.js";
 import { projWeights } from "../src/calibration.js";
 import { formatCountdown, untilKick } from "../src/timeUntil.js";
+import { anyGameStarted } from "../src/headToHead.js";
 import { applyEspnSync } from "../src/espnSync.js";
 import { deriveSchedule } from "../api/schedule.js";
 import { gameStatesFrom } from "../api/espn-write.js";
@@ -800,6 +801,35 @@ check(
     return isSeedRoster({ ...s, players }) === false;
   })(),
   "one drop is enough to make it his team rather than the sample"
+);
+
+// ---- 12i. the hero flips once points are BANKED, not only while live ----
+// The hero already swaps to the current score with the projection beneath it —
+// but only while a game is `inProgress`. On a Saturday morning, after Thursday
+// night had been played, BennyBalls had 28 real points on the board and the
+// hero still showed the projection big with "28 scored" in small grey beneath
+// it. Points that are already banked are facts, and a fact outranks a forecast
+// whether or not a ball happens to be in the air right now.
+const rowWith = (status) => ({ name: "Someone", slot: "WR", l: { status } });
+check(
+  "a finished game counts as started — the score is banked and real",
+  anyGameStarted([rowWith("notStarted"), rowWith("final")]) === true,
+  "Thursday night is over; its points are facts"
+);
+check(
+  "a live game still counts as started",
+  anyGameStarted([rowWith("inProgress")]) === true
+);
+check(
+  "nothing kicked off yet is NOT started — pre-kickoff the score is noise",
+  anyGameStarted([rowWith("notStarted"), rowWith("notStarted")]) === false &&
+    anyGameStarted([]) === false,
+  "everyone is on zero and the projection is the story"
+);
+check(
+  "an empty slot cannot make a matchup look started",
+  anyGameStarted([{ name: null, l: { status: "final" } }]) === false,
+  "an unfilled roster spot has no game"
 );
 
 // ---- 13. bye weeks must reach the simulation (finding 10) ----

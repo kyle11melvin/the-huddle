@@ -86,6 +86,22 @@ export function shortName(name) {
 }
 
 /**
+ * Has any game in this matchup kicked off?
+ *
+ * Decides whether the hero leads with the SCORE or with the projection. The
+ * rule used to be `status === "inProgress"` — live right now — and that was
+ * wrong on a Saturday morning: Thursday night had been played, the opponent
+ * had 28 real points banked, and the hero still led with a forecast while the
+ * score sat underneath in small grey.
+ *
+ * FINAL counts as started. Points already on the board are facts, and a fact
+ * outranks a forecast whether or not a ball happens to be in the air.
+ */
+export function anyGameStarted(rows = []) {
+  return rows.some((r) => r && r.name && r.l && (r.l.status === "inProgress" || r.l.status === "final"));
+}
+
+/**
  * What firepower is left, by slot — not just how much.
  *
  * "yet to play (10)" hides the difference between a QB, three RBs and three
