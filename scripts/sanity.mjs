@@ -1645,6 +1645,56 @@ check(
   `got ${dupProj.matched[0]?.proj}`
 );
 
+// ---- 27e. the HEADERLESS FantasyPros export ----
+// Kyle's actual Week 2 paste. FantasyPros exports comma-separated with NO
+// header row:
+//   rank, POS, name, team, opp, "N out of 5 stars", grade, proj, diff, start%
+// parseProjections handled a CSV WITH a header, or whitespace-separated text,
+// and this shape is neither — so it fell through to the free-form path, which
+// takes "the last number on the line" as the projection. On his real file that
+// is the denominator of the start% column: Trey McBride came through as 16
+// instead of 15.5, Cameron Dicker as 16 instead of 9.1, and every name arrived
+// as "1, ,Trey McBride,ARI, , ,A+,15.5,..." so nothing matched his roster.
+//
+// Silent and expensive: 169 rows reported as "indexed for opponent pricing",
+// all of them garbage, now feeding the opponent side of every matchup.
+const fpRoster = [
+  { id: "k1", name: "Cameron Dicker", team: "LAC", pos: "K", ecr: "" },
+  { id: "t1", name: "Brock Bowers", team: "LV", pos: "TE", ecr: "" },
+];
+const fpPaste = [
+  "1,TE,Trey McBride,ARI,vs. SEA,3 out of 5 stars,A+,15.5,+2.2,56% (9/16)",
+  "35,TE,Brock Bowers,LV,at LAC,4 out of 5 stars,F,5.5,-,-",
+  "2,K,Cameron Dicker,LAC,vs. LV,4 out of 5 stars,B+,9.1,+2.5,75% (12/16)",
+].join("\n");
+const fpParsed = parseProjections(fpPaste, fpRoster);
+const byName = (n) => fpParsed.rows.find((r) => r.name === n);
+check(
+  "a headerless FantasyPros row yields the PROJECTION, not the start% denominator",
+  byName("Trey McBride")?.proj === 15.5 && byName("Cameron Dicker")?.proj === 9.1,
+  JSON.stringify(fpParsed.rows.map((r) => [r.name, r.proj]))
+);
+check(
+  "the name is the player, not the whole line",
+  !!byName("Brock Bowers") && !!byName("Trey McBride"),
+  JSON.stringify(fpParsed.rows.map((r) => r.name))
+);
+check(
+  "team and position survive the comma layout",
+  byName("Trey McBride")?.team === "ARI" && byName("Trey McBride")?.pos === "TE",
+  JSON.stringify(fpParsed.rows.map((r) => [r.name, r.team, r.pos]))
+);
+check(
+  "and my own players finally match",
+  fpParsed.matched.length === 2,
+  `matched ${fpParsed.matched.length}/2: ${JSON.stringify(fpParsed.matched.map((m) => [m.player.name, m.proj]))}`
+);
+check(
+  "stars still come through from the same row",
+  byName("Cameron Dicker")?.stars === 4,
+  `got ${byName("Cameron Dicker")?.stars}`
+);
+
 // ---- 28. expert projections: parse, blend, widen, label ----
 const projRoster = [
   { id: "x1", name: "Chase Brown", team: "CIN", pos: "RB", ecr: "" },

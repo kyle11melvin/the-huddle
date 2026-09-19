@@ -395,6 +395,40 @@ export function parseProjections(text, rosterPlayers = []) {
       team = col.team >= 0 ? canonTeam(f[col.team]) || "" : "";
       pos = col.pos >= 0 ? POS_TOKENS[(f[col.pos] || "").toUpperCase().replace(/\d+$/, "")] || "" : "";
       stars = col.stars >= 0 ? parseStars(f[col.stars]) : null;
+    } else if (splitCsvLine(line).length >= 5) {
+      // Headerless comma export. FantasyPros ships this shape with no header
+      // row at all:
+      //   rank, POS, name, team, opp, "N out of 5 stars", grade, proj, diff, start%
+      // It is neither of the two cases below, so it used to fall through to
+      // the free-form branch — which takes the LAST number on the line as the
+      // projection. Here that is the denominator of the start% column, so
+      // "15.5 ... 56% (9/16)" came through as 16, and the name arrived as the
+      // entire raw line. 169 rows imported, every one of them wrong.
+      //
+      // Read positionally instead of guessing: the POSITION token anchors the
+      // row, the name and team sit immediately after it, and the projection is
+      // the first bare number past the stars column — which steps over the
+      // letter grade ("A+") and stops before the signed diff ("+2.2") and the
+      // percentage.
+      const f = splitCsvLine(line).map((x) => String(x).trim());
+      const posIdx = f.findIndex((x) => POS_TOKENS[x.toUpperCase()]);
+      const starIdx = f.findIndex((x) => /out of\s*\d*\s*stars?/i.test(x));
+      const bare = /^-?\d+(\.\d+)?$/;
+      if (posIdx >= 0 && f[posIdx + 1]) {
+        pos = POS_TOKENS[f[posIdx].toUpperCase()] || "";
+        name = f[posIdx + 1];
+        team = canonTeam(f[posIdx + 2]) || "";
+        stars = starIdx >= 0 ? parseStars(f[starIdx]) : null;
+        const from = starIdx >= 0 ? starIdx + 1 : posIdx + 3;
+        for (let j = from; j < f.length; j++) {
+          if (bare.test(f[j])) {
+            proj = parseFloat(f[j]);
+            break;
+          }
+        }
+      }
+      // Anything this layout could not read falls through to the skip counter
+      // below rather than being guessed at.
     } else {
       // Free-form: "1 Ja'Marr Chase CIN @CLE 3 out of 5 stars 18.7"
       let rest = line.replace(/^\s*\d{1,3}\s*[.)\]]?\s+/, "");
