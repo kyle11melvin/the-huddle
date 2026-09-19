@@ -31,6 +31,16 @@ Commit messages carry most of the reasoning behind non-obvious decisions —
 - **Verify visually.** `node scripts/shots.mjs /tmp/out` renders components in
   real Chrome and writes PNGs; send them with SendUserFile. He reviews from his
   phone.
+- **Kyle is NOT a software engineer.** When he has to do something outside the
+  app — Vercel, Terminal, a browser console, an API dashboard — write it as
+  numbered steps, ONE action per step, in the order he performs them. Name the
+  exact button, tab or field to click. No jargon he has not used first ("env
+  var", "origin", "profile" have all cost real time). Put caveats AFTER the
+  steps, never woven between them, or they read as extra work. If a step can
+  fail, tell him what the success text looks like so he can check himself.
+- **Do not move on until the current thing works.** Several threads at once is
+  how a session turns into an hour of confusion. Finish, confirm, then raise
+  the next thing.
 
 ## A green `npm run verify` is not proof a UI change is correct
 
