@@ -21,7 +21,7 @@
 // ============================================================================
 
 import { SLOT_DEFS, findLocation, slotAccepts, bestLineupFrom } from "./lineup.js";
-import { pointDistribution, blendProjection, fpProjFor } from "./analytics.js";
+import { pointDistribution, blendProjection, fpProjFor, propsFor } from "./analytics.js";
 import { LEAGUE_ROSTERS } from "./data/leagueRosters.js";
 import { espnTeamRoster, liveEntryFor } from "./espnSync.js";
 import { scheduleOpp } from "./scheduleSync.js";
@@ -211,11 +211,14 @@ const oppKey = (e) =>
  * mentions him the blend degrades to exactly ESPN's number, so nobody is
  * quietly repriced.
  */
-const oppDist = (state, week, e) => {
+export const opponentDist = (state, week, e) => {
   const playProb = OPP_PLAY_PROB[e.injuryStatus] ?? 1;
   const fp = fpProjFor(state, week, e.name);
+  const book = propsFor(state, week, e.name);
+  // The SAME record shape pointDistribution builds for my own players, so the
+  // same ladder runs: props first, then the ESPN+FP blend, then ESPN alone.
   const blend = blendProjection(
-    { proj: e.proj, fpProj: fp ? fp.proj : null },
+    { proj: e.proj, fpProj: fp ? fp.proj : null, propsProj: book ? book.proj : null },
     e.pos,
     e.team,
     state
@@ -263,7 +266,7 @@ export function opponentLineups(state, week, oppTeamOverride) {
 
   const usable = live.filter((e) => e.slot !== "IR" && Number.isFinite(e.proj) && e.proj > 0);
   const actualStarters = usable.filter((e) => e.slot !== "BE");
-  const actual = actualStarters.map((e) => oppDist(state, week, e));
+  const actual = actualStarters.map((e) => opponentDist(state, week, e));
 
   // Pin every started player to the slot they're actually in — locked by
   // kickoff, not a choice their manager still has.
@@ -283,11 +286,11 @@ export function opponentLineups(state, week, oppTeamOverride) {
 
   const byId = new Map(usable.map((e) => [oppKey(e), e]));
   const candidates = usable.map((e) => {
-    const d = oppDist(state, week, e);
+    const d = opponentDist(state, week, e);
     return { id: d.id, pos: e.pos, score: d.mean };
   });
   const { starterIds } = bestLineupFrom(candidates, pinned);
-  const likely = [...starterIds].map((id) => oppDist(state, week, byId.get(id))).filter(Boolean);
+  const likely = [...starterIds].map((id) => opponentDist(state, week, byId.get(id))).filter(Boolean);
 
   const actualIds = new Set(actual.map((d) => d.id));
   const benched = actual.filter((d) => !starterIds.has(d.id));
@@ -321,7 +324,7 @@ export function opponentDistributions(state, week, oppTeamOverride, mode = "like
     const rank = state.ecrIndex ? state.ecrIndex[k] : null;
     if (rank == null) continue;
     // Rough points-from-rank curve, only used to give the simulation an
-    // opponent at all. NOT injury-priced — unlike oppDist() on the live path,
+    // opponent at all. NOT injury-priced — unlike opponentDist() on the live path,
     // nothing here knows a player is out, so a ruled-out starter is valued at
     // his healthy rank. `estimated` marks every entry so a consumer cannot
     // present these as real projections by accident.

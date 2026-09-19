@@ -33,6 +33,25 @@ export function fpProjFor(state, week, name) {
   return hit && Number.isFinite(hit.proj) ? hit : null;
 }
 
+/**
+ * A Vegas-priced projection, reachable BY NAME — the props twin of fpProjFor.
+ *
+ * /api/odds already sweeps the whole slate: it returns every player carrying a
+ * book line, not just mine. The client threw all but my roster away, so
+ * money-backed lines — the HIGHEST priority source there is — could price my
+ * side and never the opponent's. My WR ran on the book and the WR opposite him
+ * ran on ESPN, and the win probability was the gap between two different
+ * models.
+ *
+ * @returns {{proj:number, parts:string[]}|null}
+ */
+export function propsFor(state, week, name) {
+  const byWeek = state.propsIndex && state.propsIndex[week];
+  if (!byWeek) return null;
+  const hit = byWeek[normName(name)];
+  return hit && Number.isFinite(hit.proj) && hit.proj > 0 ? hit : null;
+}
+
 export function playerAnalytics(state, playerId, week) {
   return (state.analytics && state.analytics[playerId] && state.analytics[playerId][week]) || null;
 }

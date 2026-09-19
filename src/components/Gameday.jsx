@@ -2,9 +2,9 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
-import { simulateLive, liveNarrative, liveProjection, rowGameState, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
+import { simulateLive, liveNarrative, liveProjection, rowGameState, opponentDist, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
 import { teamLogoUrl, headshotUrl, teamOf } from "../data/teams.js";
-import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, kickoffLabel, opponentOf, pairingEdge } from "../headToHead.js";
+import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, opponentOf, pairingEdge } from "../headToHead.js";
 import { SLOT_COLOR } from "../constants.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
 import { scheduleOpp } from "../scheduleSync.js";
@@ -218,8 +218,14 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
     return r
       .filter((e) => e.slot !== "BE" && e.slot !== "IR")
       .map((e) => {
-        const playProb = PLAY_PROB[e.injuryStatus] ?? 1;
-        const proj = Number.isFinite(e.proj) && e.proj > 0 ? e.proj : null;
+        // opponentDist, NOT e.proj. This board built its own opponent numbers
+        // straight off ESPN's raw projection while mySide below ran the full
+        // ladder — props, then the ESPN+FP blend, then ESPN. A2 routed the
+        // SIMULATOR through the shared blend and missed this, so the one
+        // screen the matchup is actually read on still compared a blended,
+        // book-priced column against a raw ESPN one. Same function both
+        // sides now, which is the only way they cannot drift again.
+        const d = Number.isFinite(e.proj) && e.proj > 0 ? opponentDist(state, week, e) : null;
         return {
           slot: e.slot,
           name: e.name,
@@ -228,10 +234,13 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
           k: `${prefix}:${key(e.name)}`,
           // displayed number = EXPECTED points (injury-priced) so the column
           // still sums to the simulated header
-          proj: proj != null ? Math.round(proj * playProb * 10) / 10 : null,
-          simProj: proj, // if-he-plays projection, for the simulator
-          playProb,
-          cv: CV[e.pos] ?? 0.55,
+          proj: d ? d.mean : null,
+          simProj: d ? d.condMean : null, // if-he-plays projection, for the simulator
+          playProb: d ? d.playProb : PLAY_PROB[e.injuryStatus] ?? 1,
+          // Carry the blend's own spread rather than a position constant, so a
+          // contested opponent reads as the less certain bet he is.
+          cv: d && d.condMean > 0 ? d.sd / d.condMean : CV[e.pos] ?? 0.55,
+          source: d ? d.source : null,
         };
       });
   };
@@ -277,8 +286,11 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
       return live
         .filter((e) => e.slot !== "BE" && e.slot !== "IR")
         .map((e) => {
-          const playProb = PLAY_PROB[e.injuryStatus] ?? 1;
-          const proj = Number.isFinite(e.proj) && e.proj > 0 ? e.proj : null;
+          // THE column Kyle reads his own matchup on. It built its number off
+          // ESPN's raw projection while mySide ran props -> ESPN+FP blend ->
+          // ESPN, so the two halves of one matchup were priced by two
+          // different models. opponentDist is the same ladder, same function.
+          const d = Number.isFinite(e.proj) && e.proj > 0 ? opponentDist(state, week, e) : null;
           return {
             slot: e.slot,
             name: e.name,
@@ -291,10 +303,13 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
             bye: byeWeekFor(state.byes || {}, e.team),
             k: `opp:${key(e.name)}`,
             espnId: e.espnId || "",
-            proj: proj != null ? Math.round(proj * playProb * 10) / 10 : null,
-            simProj: proj,
-            playProb,
-            cv: CV[e.pos] ?? 0.55,
+            proj: d ? d.mean : null,
+            simProj: d ? d.condMean : null,
+            playProb: d ? d.playProb : PLAY_PROB[e.injuryStatus] ?? 1,
+            // The blend's own spread, not a position constant — a contested
+            // opponent is a less certain bet and the sim should know.
+            cv: d && d.condMean > 0 ? d.sd / d.condMean : CV[e.pos] ?? 0.55,
+            source: d ? d.source : null,
             estimated: false,
           };
         });
@@ -314,7 +329,11 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
         estimated: true,
       };
     });
-  }, [state, oppTeam, oppRoster]);
+    // `week` is in here because opponentDist prices per week — the pasted
+    // expert projections and the Vegas lines are both week-scoped. Leaving it
+    // out would keep last week's opponent pricing on screen after a week
+    // change, which is the quietest kind of wrong.
+  }, [state, oppTeam, oppRoster, week]);
 
   // Auto mode: the ESPN feed is the only truth — stale manual entries from
   // the old tap-to-edit days would otherwise mark players "live" forever.
@@ -449,10 +468,17 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
       return {
         tag: "STALE",
         warn: `Last ESPN sync was ${agoLabel(age)} ago. Scores and projections are frozen at that moment — tap ⟳ ESPN to refresh.`,
-        fine: "Both sides use real ESPN projections, from the last sync.",
+        fine: "Both sides run the same ladder — Vegas lines first, then ESPN blended with your pasted expert projections — from the last sync.",
       };
     }
-    return { tag: "", warn: "", fine: "Both sides use real ESPN projections." };
+    // "Both sides use real ESPN projections" was true when the opponent was
+    // raw ESPN and my side was not, which is to say it was never true. Both
+    // columns run one ladder now and the line says which.
+    return {
+      tag: "",
+      warn: "",
+      fine: "Both sides run the same ladder: Vegas lines first, then ESPN blended with your pasted expert projections, then ESPN alone.",
+    };
   }, [state, week, oppTeam]);
 
   const Row = ({ row, side }) => {

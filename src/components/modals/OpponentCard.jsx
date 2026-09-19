@@ -13,7 +13,7 @@
 import { useEffect } from "react";
 import PlayerCard from "../PlayerCard.jsx";
 import { teamOf } from "../../data/teams.js";
-import { fpProjFor, blendProjection } from "../../analytics.js";
+import { fpProjFor, propsFor, blendProjection } from "../../analytics.js";
 
 /**
  * @param {object} row a Gameday opponent row
@@ -32,6 +32,7 @@ export default function OpponentCard({ row, week, state, onClose }) {
   // card told everyone "computed for your roster only" regardless, which is
   // now wrong for anyone the weekly paste covers.
   const fp = row.estimated ? null : fpProjFor(state, week, row.name);
+  const book = row.estimated ? null : propsFor(state, week, row.name);
   const fpOnFile = !!fp;
 
   // Priced through blendProjection — the SAME call oppDist makes for the
@@ -45,7 +46,12 @@ export default function OpponentCard({ row, week, state, onClose }) {
   const blend =
     raw == null || row.estimated
       ? null
-      : blendProjection({ proj: raw, fpProj: fp ? fp.proj : null }, row.pos, row.team, state);
+      : blendProjection(
+          { proj: raw, fpProj: fp ? fp.proj : null, propsProj: book ? book.proj : null },
+          row.pos,
+          row.team,
+          state
+        );
   const condMean = blend ? Math.round(blend.mu * 10) / 10 : raw;
   const playProb = row.playProb ?? 1;
   const dist =
@@ -80,11 +86,10 @@ export default function OpponentCard({ row, week, state, onClose }) {
               espnId: row.espnId || "",
             }}
             dist={dist}
-            // Props are still MY roster only — those are priced per player
-            // from book lines we only fetch for my side. The expert projection
-            // is no longer in that bucket: the weekly paste is indexed by name
-            // and the opponent blends with it, so the note below says which of
-            // the two he actually got rather than one fixed sentence.
+            // The card still renders no props BREAKDOWN for an opponent — the
+            // parts list is built for my roster — but the opponent's number is
+            // now priced off the same book line when one exists, and the note
+            // below says which source he actually got.
             propsEdge={null}
             matchup={null}
             consensus={null}
@@ -99,9 +104,11 @@ export default function OpponentCard({ row, week, state, onClose }) {
           <p className="panel-note" style={{ marginTop: 14 }}>
             {row.estimated
               ? "Opponent player — projection estimated from expert rank, not an ESPN projection."
-              : fpOnFile
-                ? "Opponent player — ESPN blended with your pasted FantasyPros projection, the same pricing your own roster gets. Vegas props stay your roster only."
-                : "Opponent player — ESPN projection. No expert projection was pasted for him this week, and Vegas props are priced for your roster only."}
+              : book
+                ? "Opponent player — priced off the Vegas line, exactly as your own roster is. Money-backed lines outrank every expert projection on both sides of this matchup."
+                : fpOnFile
+                  ? "Opponent player — ESPN blended with your pasted FantasyPros projection, the same pricing your own roster gets. No book line for him this week."
+                  : "Opponent player — ESPN projection only. No Vegas line and no pasted expert projection for him this week."}
           </p>
         </div>
       </div>

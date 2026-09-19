@@ -16,6 +16,7 @@ import {
   simulateSwap,
   simulateMatchupLive,
   rowGameState,
+  opponentDist,
   simulateLive,
   liveNarrative,
   lineupDistributions,
@@ -694,6 +695,59 @@ check(
   matchupSideScore({ teamId: 9, totalPoints: 0 }, { id: 9, roster: [{ slot: "QB", actual: 0 }] }) === 0 &&
     matchupSideScore(null, null) === 0,
   "no roster and no score is still a number"
+);
+
+// ---- 12f. the MATCHUP BOARD prices the opponent the same way too ----
+// A2 routed oppDist through blendProjection and stopped there. oppDist feeds
+// the Start/Sit Lab and the simulator — NOT the Gameday board, which built its
+// own opponent rows straight off `e.proj`. So on the one screen Kyle actually
+// reads his matchup on, his side ran props -> ESPN+FP blend -> ... and the
+// opponent ran raw ESPN. Exactly the asymmetry A2 claimed to close, left open
+// on the surface that matters most.
+//
+// And the other half: props were never priced for the opponent at all, on ANY
+// surface. /api/odds already returns every player on the slate with a book
+// line — it is fetched and paid for — the client just filtered it to my
+// roster. So my side had money-backed lines as the top source and theirs
+// could not, however good the paste was.
+const a5State = {
+  ...swapState,
+  week: "1",
+  players: { mine: { id: "mine", name: "Mirror Guy", team: "KC", pos: "WR", ecr: "WR5", status: "" } },
+  lineup: { QB: [null], RB: [null, null], WR: ["mine", null, null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  bench: [null, null, null, null, null, null],
+  analytics: { mine: { 1: { proj: 10, projSource: "espn", fpProj: 20, propsProj: 17 } } },
+  matchups: { 1: { oppTeam: "Them" } },
+  fpProjIndex: { 1: { oppguy: { proj: 20, stars: null } } },
+  propsIndex: { 1: { oppguy: { proj: 17, parts: ["7.5 rec", "82.5 rec yds"] } } },
+  espn: {
+    myTeamId: 7, fetchedAt: Date.now(),
+    teams: [{ id: 9, name: "Them", mapped: "Them", roster: [
+      { name: "Opp Guy", team: "KC", pos: "WR", slot: "WR", proj: 10, actual: 0, injuryStatus: "ACTIVE" },
+      { name: "Bare Guy", team: "SF", pos: "RB", slot: "RB", proj: 9, actual: 0, injuryStatus: "ACTIVE" },
+    ] }],
+    games: { KC: { state: "pre", pctRemaining: 1 }, SF: { state: "pre", pctRemaining: 1 } },
+  },
+};
+const a5Mine = pointDistribution(a5State.players.mine, "1", a5State);
+const a5Opp = opponentDist(a5State, "1", a5State.espn.teams[0].roster[0]);
+check(
+  "a Vegas line prices an opponent exactly as it prices my own player",
+  a5Opp && a5Mine && Math.abs(a5Opp.condMean - a5Mine.condMean) < 0.06 && Math.abs(a5Opp.condMean - 17) < 0.06,
+  `opponent ${a5Opp && a5Opp.condMean} vs mine ${a5Mine && a5Mine.condMean}; the book says 17`
+);
+check(
+  "props outrank the expert blend on the opponent side too, and say so",
+  a5Opp && /props/i.test(a5Opp.source || ""),
+  `source "${a5Opp && a5Opp.source}"`
+);
+check(
+  "an opponent with no line and no paste is still exactly ESPN's number",
+  (() => {
+    const bare = opponentDist(a5State, "1", a5State.espn.teams[0].roster[1]);
+    return bare && Math.abs(bare.condMean - 9) < 0.06;
+  })(),
+  "nobody gets quietly repriced"
 );
 
 // ---- 13. bye weeks must reach the simulation (finding 10) ----
@@ -2054,6 +2108,40 @@ check(
 check(
   "nor does the pasted projection index — bulky, re-pasteable, same call as ecrIndex",
   packed.fpProjIndex === undefined
+);
+check(
+  "nor the slate-wide props index — refetched automatically, never worth a URL",
+  packed.propsIndex === undefined
+);
+check(
+  "the props index round-trips through migrate",
+  JSON.stringify(migrate({ propsIndex: { 1: { x: { proj: 9, parts: [] } } } }).propsIndex) ===
+    JSON.stringify({ 1: { x: { proj: 9, parts: [] } } }) &&
+    JSON.stringify(migrate({ propsIndex: "junk" }).propsIndex) === "{}",
+  JSON.stringify(migrate({ propsIndex: "junk" }).propsIndex)
+);
+
+// ---- 36b. no opponent row is built from raw ESPN ----
+// Twice now the ARITHMETIC was right and the WIRING was not. A2 routed
+// opponentDist through the shared blend and the board kept its own copy off
+// `e.proj`; the fix for that went into teamRows, which only runs when browsing
+// someone else's matchup, while Kyle's own matchup renders from oppSide. Both
+// times every assertion passed and only a screenshot showed the opponent
+// column still sitting on ESPN's raw number.
+//
+// So this checks the wiring, not the maths: every opponent row builder in
+// Gameday has to go through the one pricing function.
+const gdSrc = fsMod.readFileSync("src/components/Gameday.jsx", "utf8");
+const oppBuilders = (gdSrc.match(/opponentDist\(state, week, e\)/g) || []).length;
+check(
+  "both opponent row builders price through opponentDist, not e.proj",
+  oppBuilders === 2,
+  `found ${oppBuilders} call(s); oppSide (my own matchup) and teamRows (browsing another) both need one`
+);
+check(
+  "no opponent row still assigns ESPN's raw projection straight to simProj",
+  !/simProj:\s*proj,/.test(gdSrc),
+  "`simProj: proj` is the shape the raw-ESPN builders had"
 );
 
 // ---- 37. no orphaned classNames ----
