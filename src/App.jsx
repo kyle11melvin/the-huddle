@@ -1417,10 +1417,16 @@ export default function App({ initialTab } = {}) {
   // Vegas player props, fully automated: fetch once per session (server-side
   // cache protects API credits), match to my roster, auto-price as the
   // top-priority projection source. Manual paste survives as an override.
-  const oddsDone = useRef(false);
+  // Keyed on the WEEK, not a bare once-per-session flag. Props are stored per
+  // week, so changing the week pill emptied every card's Vegas tile and the
+  // flag then blocked the refetch that would fill it — for the rest of the
+  // session. Refetching is close to free: /api/odds serves an edge + Blob
+  // cache (3h on a game day, 12h off it), so a second week costs no credits.
+  const oddsWeek = useRef(null);
   useEffect(() => {
-    if (!loaded || viewingShared || oddsDone.current || !state.espn) return;
-    oddsDone.current = true;
+    if (!loaded || viewingShared || !state.espn) return;
+    if (oddsWeek.current === state.week) return;
+    oddsWeek.current = state.week;
     (async () => {
       try {
         const base = import.meta.env.DEV ? "https://the-huddle-hq.vercel.app" : "";
@@ -1489,7 +1495,7 @@ export default function App({ initialTab } = {}) {
         /* props are enhancement */
       }
     })();
-  }, [loaded, viewingShared, state.espn, flash]);
+  }, [loaded, viewingShared, state.espn, state.week, flash]);
 
   // NFL schedule: opponents by week + auto byes. Weekly staleness window —
   // the league schedule barely changes once posted.

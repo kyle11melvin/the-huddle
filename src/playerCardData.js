@@ -13,7 +13,7 @@
 // running into.
 // ============================================================================
 
-import { pointDistribution, playerAnalytics } from "./analytics.js";
+import { propsSweptFor, pointDistribution, playerAnalytics } from "./analytics.js";
 import { DEFAULT_PROJ_WEIGHTS } from "./analytics.js";
 
 /** Statuses meaning "may not take the field" — a season rank stops applying. */
@@ -138,6 +138,7 @@ export function playerCardData(state, player, week) {
       ? { mean: dist.mean, condMean: dist.condMean, sd: dist.sd, playProb: dist.playProb }
       : null,
     propsEdge: propsEdgeFrom(a, state.projWeights),
+    propsSwept: propsSweptFor(state, week),
     source: sourceOf(dist),
     matchup,
     consensus: player.ecr
