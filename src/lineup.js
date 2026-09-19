@@ -190,6 +190,10 @@ export function buildInitialState() {
     // the same reasons as ecrIndex — it is the paste, it is bulky, it is
     // re-pasteable, and it does not travel in a snapshot.
     fpProjIndex: {},
+    // week -> normalized name -> { proj, parts }. The props sweep for the
+    // WHOLE slate, same reason and same shape: money-backed lines are the top
+    // projection source and the opponent needs to reach them by name.
+    propsIndex: {},
     analytics: {}, // playerId -> week -> { proj, dvp, ou, expertRanks, ... }
     matchups: {}, // week -> { oppTeam, live: { rowKey -> {scored, status, pctRemaining} } }
     espn: null, // latest /api/espn snapshot (rosters, projections, pairings)
@@ -292,6 +296,7 @@ export function migrate(raw) {
       ecrIndex: raw.ecrIndex && typeof raw.ecrIndex === "object" ? raw.ecrIndex : {},
       ecrWeek: WEEKS.includes(raw.ecrWeek) ? raw.ecrWeek : null,
       fpProjIndex: raw.fpProjIndex && typeof raw.fpProjIndex === "object" ? raw.fpProjIndex : {},
+      propsIndex: raw.propsIndex && typeof raw.propsIndex === "object" ? raw.propsIndex : {},
       analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
       matchups: raw.matchups && typeof raw.matchups === "object" ? raw.matchups : {},
       espn: raw.espn && typeof raw.espn === "object" ? raw.espn : null,
@@ -372,6 +377,7 @@ export function migrate(raw) {
     ecrIndex: raw.ecrIndex && typeof raw.ecrIndex === "object" ? raw.ecrIndex : {},
     ecrWeek: WEEKS.includes(raw.ecrWeek) ? raw.ecrWeek : null,
     fpProjIndex: raw.fpProjIndex && typeof raw.fpProjIndex === "object" ? raw.fpProjIndex : {},
+    propsIndex: raw.propsIndex && typeof raw.propsIndex === "object" ? raw.propsIndex : {},
     analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
     matchups: raw.matchups && typeof raw.matchups === "object" ? raw.matchups : {},
     espn: raw.espn && typeof raw.espn === "object" ? raw.espn : null,

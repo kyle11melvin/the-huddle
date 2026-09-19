@@ -1461,7 +1461,28 @@ export default function App({ initialTab } = {}) {
             });
             n++;
           }
-          if (n) flash(`🎰 Vegas props auto-priced ${n} player${n === 1 ? "" : "s"}${d.remaining ? ` · ${d.remaining} API credits left` : ""}.`);
+          // EVERY player the sweep priced, indexed by name — not just mine.
+          // The sweep already covers the whole slate and is already paid for;
+          // throwing the rest away is what left the opponent unable to be
+          // priced on the book while my side was. Analytics cannot hold them:
+          // it is keyed by roster player id, which an opponent has not got.
+          const scoring = leagueScoring(s);
+          const forWeek = {};
+          let opp = 0;
+          for (const pl of d.players) {
+            const k = normName(pl.name);
+            if (!k) continue;
+            const computed = propsToPoints(pl.props, scoring);
+            if (!(computed.points > 0)) continue;
+            forWeek[k] = { proj: computed.points, parts: computed.parts };
+            opp++;
+          }
+          next = { ...next, propsIndex: { ...(next.propsIndex || {}), [s.week]: forWeek } };
+          if (n || opp) {
+            flash(
+              `🎰 Vegas props auto-priced ${n} of your player${n === 1 ? "" : "s"} · ${opp} across the slate for opponent pricing${d.remaining ? ` · ${d.remaining} API credits left` : ""}.`
+            );
+          }
           return next;
         });
       } catch {
