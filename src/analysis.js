@@ -11,7 +11,7 @@
 
 import { SLOT_DEFS, findLocation, slotAccepts, POSITIONS, bestLineupFrom } from "./lineup.js";
 import { LEAGUE_ROSTERS, MY_TEAM } from "./data/leagueRosters.js";
-import { pointDistribution, PLAY_PROB } from "./analytics.js";
+import { pointDistribution, PLAY_PROB, playerAnalytics } from "./analytics.js";
 import { normName } from "./espnSync.js";
 import { lineupDistributions, simulateMatchup, rankToPoints } from "./simulate.js";
 import { scheduleOpp } from "./scheduleSync.js";
@@ -530,6 +530,44 @@ export function suggestAdds(state, available, limit = 6) {
     .filter((p) => p.upgrade)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
+}
+
+/**
+ * The player a pickup at `pos` would realistically replace: your weakest
+ * PROJECTED player at that position.
+ *
+ * "Projected" is the whole fix. This read `playerAnalytics(...)?.proj ?? 0`,
+ * which recorded "no number for him this week" as "he will score zero". That
+ * one zero did two jobs and got both wrong: it made an unprojected player the
+ * weakest man on the roster, so he was nominated as the drop, and it valued
+ * his rest of season at nothing, so the newcomer's entire season total
+ * surfaced as points gained. The card read "+153 pts rest of season vs
+ * dropping Brock Bowers" — not a comparison at all, just the newcomer's own
+ * projection with nothing subtracted from it.
+ *
+ * A missing projection is UNKNOWN, not worthless, so he is skipped. So is a
+ * genuine zero: a man on his bye is not your worst player, he is your worst
+ * player this week, and the card is a season-long claim.
+ *
+ * Nobody projected at the position returns null, and the caller shows nothing.
+ * Saying nothing is the correct output when nothing is known.
+ *
+ * @returns {{p:object, proj:number, only:boolean}|null}
+ *   `only` marks him as the sole player you carry at the position, so the
+ *   caller can call it a swap. It is NOT a reason to suppress the suggestion:
+ *   the pickup fills the same slot he vacates, so the position is never left
+ *   empty — a one-for-one at K, D/ST or QB is an ordinary move.
+ */
+export function dropCandidate(state, week, pos) {
+  if (!pos) return null;
+  const atPos = Object.values(state.players || {}).filter((p) => p.pos === pos);
+  let worst = null;
+  for (const p of atPos) {
+    const proj = playerAnalytics(state, p.id, week)?.proj;
+    if (!Number.isFinite(proj) || proj <= 0) continue;
+    if (!worst || proj < worst.proj) worst = { p, proj };
+  }
+  return worst ? { ...worst, only: atPos.length === 1 } : null;
 }
 
 // -------------------------------------------------------- waiver availability ---
