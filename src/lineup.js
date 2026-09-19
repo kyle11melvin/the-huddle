@@ -128,6 +128,30 @@ export function emptyZones(benchSize = BENCH_SIZE, irSize = IR_SIZE) {
 
 // ------------------------------------------------------------ build/migrate ---
 
+/**
+ * Is this the untouched sample roster rather than a real team?
+ *
+ * A browser with no owner link and no token falls back to the seed roster —
+ * real players, frozen at preseason — and the app presented it exactly as it
+ * presents a live team, "YOU'RE SET" and all. It cost an hour before anyone
+ * thought to doubt the roster itself. The state was always detectable;
+ * nothing was asking.
+ *
+ * Both halves are needed. Ids alone cannot decide it, because applyEspnSync
+ * PRESERVES the seed ids for players it matches — a fully synced team still
+ * carries s0/b0. And names alone cannot either, for the same reason. A
+ * snapshot-imported team (iPhone: no link, but real ESPN data) is correctly
+ * excluded by the sync check.
+ */
+export function isSeedRoster(state) {
+  if (!state || !state.players) return false;
+  if (state.espn) return false; // a sync happened: this is a real team
+  const seedNames = new Set([...SEED_STARTERS, ...SEED_BENCH].map((p) => p.name));
+  const have = Object.values(state.players).map((p) => p.name);
+  if (have.length !== seedNames.size) return false;
+  return have.every((n) => seedNames.has(n));
+}
+
 export function buildInitialState() {
   const { lineup, bench, ir } = emptyZones();
   const players = {};

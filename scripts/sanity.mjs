@@ -22,7 +22,7 @@ import {
   lineupDistributions,
   sumMeans,
 } from "../src/simulate.js";
-import { migrate, addCall, callCalibration, applyWin, revertWin, bestLineupFrom } from "../src/lineup.js";
+import { migrate, addCall, callCalibration, applyWin, revertWin, bestLineupFrom, isSeedRoster } from "../src/lineup.js";
 import { opponentLineups, opponentDistributions } from "../src/simulate.js";
 import { matchPlayer, parseRankings, planEcrUpdates, parseProjections, buildEcrIndex, normKey } from "../src/importer.js";
 import { projWeights } from "../src/calibration.js";
@@ -772,6 +772,34 @@ check(
   "an empty sweep still counts as asked",
   propsSweptFor({ propsIndex: { 2: {} } }, "2") === true,
   "the request happened; the book just had nothing"
+);
+
+// ---- 12h. sample data must never pass for a real team ----
+// A browser profile with no token and no owner link falls back to the seed
+// roster — Kyle's real players, frozen at preseason — and the app presented it
+// exactly as it presents a live team, down to "YOU'RE SET" on the Today card.
+// It cost an hour before anyone thought to doubt the roster itself. The state
+// is perfectly detectable; nothing was asking.
+check(
+  "an untouched seed roster with no sync is identified as sample data",
+  isSeedRoster(migrate({})) === true,
+  "a fresh device is showing seeds, not a team"
+);
+check(
+  "a synced team is NOT sample data, even though it keeps the seed ids",
+  isSeedRoster({ ...migrate({}), espn: { teams: [], games: {}, fetchedAt: Date.now() } }) === false,
+  "applyEspnSync preserves ids, so ids alone cannot decide this"
+);
+check(
+  "a roster that has actually changed is NOT sample data",
+  (() => {
+    const s = migrate({});
+    const [firstId] = Object.keys(s.players);
+    const players = { ...s.players };
+    delete players[firstId];
+    return isSeedRoster({ ...s, players }) === false;
+  })(),
+  "one drop is enough to make it his team rather than the sample"
 );
 
 // ---- 13. bye weeks must reach the simulation (finding 10) ----
