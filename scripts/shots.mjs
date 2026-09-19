@@ -28,7 +28,13 @@ import React from "react";
 import { readFileSync as _rf } from "node:fs";
 import { renderToString } from "react-dom/server";
 
-const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+// Kyle's Mac by default, because that is where this is normally run. An
+// override exists because the script is also run from a Linux container where
+// the only Chrome is Playwright's, and a hardcoded Mac path made the
+// documented `node scripts/shots.mjs /tmp/out` unrunnable there — which meant
+// no screenshots, on a project whose first rule is to look at the render.
+const CHROME =
+  process.env.HUDDLE_CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const OUT_DIR = process.argv[2] || "/tmp/huddle-shots";
 const BUNDLE = "node_modules/.shots/bundle.mjs";
 const CSS = readFileSync(resolve("src/index.css"), "utf8");
@@ -213,7 +219,13 @@ const COMPONENTS = {
 };
 
 mkdirSync(OUT_DIR, { recursive: true });
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: "new" });
+// --no-sandbox only on the override path. Kyle's Mac run is untouched; the
+// container runs as root, where Chrome's sandbox refuses to start at all.
+const browser = await puppeteer.launch({
+  executablePath: CHROME,
+  headless: "new",
+  args: process.env.HUDDLE_CHROME ? ["--no-sandbox", "--disable-dev-shm-usage"] : [],
+});
 const page = await browser.newPage();
 // 375px is the iPhone SE / mini width and the narrowest real target. Phone-first
 // means checking the tightest case, not a comfortable one.

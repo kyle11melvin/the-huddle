@@ -114,13 +114,29 @@ so there was no way to be right. A reader must never have to infer ownership.
 Every narrative string is written in **second person about myTeam**, and is
 asserted — see the narrative-perspective checks in `scripts/sanity.mjs`.
 
-### 2. Gold is you. Slate is them. Always.
+### 2. Gold is you. Slate is them. Always — except the hero totals.
 
 `--gold` (`#e8b95a`) is myTeam. `rgba(255,255,255,0.055)` is the opponent.
 
-Green is banned from this role. It reads as "good" rather than "yours", so on a
+Green is banned from THIS role. It reads as "good" rather than "yours", so on a
 win bar it points at whoever happens to be favoured — which is the opponent
 about half the time, saying the opposite of what it appears to say.
+
+**Amended Sept 19, at Kyle's direction, for the two hero totals only.** They
+carry the OUTCOME instead: green for the side projected to win, red for the
+side projected to lose, brightening with certainty rather than margin. A coin
+flip leaves both sides muted, near enough to slate that 50/50 says nothing —
+because it has nothing to say yet.
+
+He asked for this twice, with the objection above put to him in full, so it is
+recorded as a decision rather than a drift. The trade is real and worth naming:
+when the opponent is favoured, THEIR number is the green one. What keeps that
+readable is rule 3 — `You 32%` / `Him 68%` sits directly under the numbers, and
+the win bar and the left-column anchor still use gold for myTeam. Colour is the
+fast channel here, never the only one.
+
+Everything else — the win bar, player rows, the league strip — is unchanged.
+Gold is still you, slate is still them.
 
 ### 3. No colour-only signals
 

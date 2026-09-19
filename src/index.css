@@ -3970,16 +3970,6 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
-.gd-narrative {
-  display: block;
-  margin-top: 13px;
-  padding-left: 11px;
-  border-left: 3px solid var(--gold);
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--text);
-}
-
 /* Shown when the numbers are not what a reader would assume — rank estimates
    standing in for projections, or a sync that stopped hours ago. Loud on
    purpose: the failure this exists for is plausible numbers with nothing

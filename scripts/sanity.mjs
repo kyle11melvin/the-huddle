@@ -27,7 +27,7 @@ import { opponentLineups, opponentDistributions } from "../src/simulate.js";
 import { matchPlayer, parseRankings, planEcrUpdates, parseProjections, buildEcrIndex, normKey } from "../src/importer.js";
 import { projWeights } from "../src/calibration.js";
 import { formatCountdown, untilKick } from "../src/timeUntil.js";
-import { anyGameStarted } from "../src/headToHead.js";
+import { anyGameStarted, outcomeTone, outcomeColor } from "../src/headToHead.js";
 import { applyEspnSync } from "../src/espnSync.js";
 import { deriveSchedule } from "../api/schedule.js";
 import { gameStatesFrom } from "../api/espn-write.js";
@@ -830,6 +830,65 @@ check(
   "an empty slot cannot make a matchup look started",
   anyGameStarted([{ name: null, l: { status: "final" } }]) === false,
   "an unfilled roster spot has no game"
+);
+
+// ---- 12j. the hero totals carry the outcome, at a temperature ----
+// Kyle's spec: projected winner green, projected loser red, and the INTENSITY
+// says how solid it is — bright green for a lock, pale for barely ahead.
+//
+// This deliberately unlocks DESIGN.md rule 2 ("gold is you, slate is them;
+// green is banned from this role"). That rule exists because green reads as
+// "good" and, on a win bar, pointed at whoever happened to be favoured. Kyle
+// asked for it twice knowing that, so the rule is amended rather than quietly
+// contradicted — and rule 3 still holds: "You 32% / Him 68%" sits under the
+// numbers, so the colour is never the only channel.
+check(
+  "a coin flip is neutral on BOTH sides — nobody is coloured as a winner",
+  outcomeTone(0.5, true)?.heat === 0 && outcomeTone(0.5, false)?.heat === 0,
+  JSON.stringify([outcomeTone(0.5, true), outcomeTone(0.5, false)])
+);
+check(
+  "the two sides always run at the same temperature, opposite signs",
+  (() => {
+    const mine = outcomeTone(0.82, true);
+    const theirs = outcomeTone(0.82, false);
+    return mine?.winning === true && theirs?.winning === false && Math.abs((mine?.heat ?? 0) - (theirs?.heat ?? 1)) < 1e-9;
+  })(),
+  JSON.stringify([outcomeTone(0.82, true), outcomeTone(0.82, false)])
+);
+check(
+  "heat rises with certainty, not with the lead",
+  (outcomeTone(0.55, true)?.heat ?? 1) < (outcomeTone(0.75, true)?.heat ?? 0) &&
+    (outcomeTone(0.75, true)?.heat ?? 1) < (outcomeTone(0.99, true)?.heat ?? 0),
+  JSON.stringify([0.55, 0.75, 0.99].map((p) => outcomeTone(p, true)?.heat ?? null))
+);
+check(
+  "a near-lock is a brighter green than a narrow lead",
+  (() => {
+    const barely = outcomeColor(0.55, true);
+    const lock = outcomeColor(0.99, true);
+    if (!barely || !lock) return false;
+    const lum = (hex) => parseInt(hex.slice(3, 5), 16); // green channel
+    return lum(lock) > lum(barely);
+  })(),
+  `${outcomeColor(0.55, true)} -> ${outcomeColor(0.99, true)}`
+);
+check(
+  "losing is red on whichever side is losing, mine included",
+  (() => {
+    const meLosing = outcomeColor(0.2, true);
+    const themLosing = outcomeColor(0.8, false);
+    if (!meLosing || !themLosing) return false;
+    const red = (hex) => parseInt(hex.slice(1, 3), 16);
+    const grn = (hex) => parseInt(hex.slice(3, 5), 16);
+    return red(meLosing) > grn(meLosing) && red(themLosing) > grn(themLosing);
+  })(),
+  `${outcomeColor(0.2, true)} / ${outcomeColor(0.8, false)}`
+);
+check(
+  "no win probability yet means no colour claim at all",
+  outcomeTone(null, true) === null && outcomeColor(undefined, true) === null,
+  "pre-sim there is nothing to say"
 );
 
 // ---- 13. bye weeks must reach the simulation (finding 10) ----

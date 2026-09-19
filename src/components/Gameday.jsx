@@ -2,9 +2,9 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
-import { simulateLive, liveNarrative, liveProjection, rowGameState, opponentDist, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
+import { simulateLive, liveProjection, rowGameState, opponentDist, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
 import { teamLogoUrl, headshotUrl, teamOf } from "../data/teams.js";
-import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, opponentOf, pairingEdge, anyGameStarted } from "../headToHead.js";
+import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, opponentOf, pairingEdge, anyGameStarted, outcomeColor } from "../headToHead.js";
 import { SLOT_COLOR } from "../constants.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
 import { scheduleOpp } from "../scheduleSync.js";
@@ -435,7 +435,6 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
     () => (myEntries.length && oppEntries.length ? simulateLive(myEntries, oppEntries) : null),
     [myEntries, oppEntries]
   );
-  const narrative = useMemo(() => liveNarrative(sim), [sim]);
 
   // Does ANY of my starters' games have a ball in the air? The hero's
   // hierarchy flips on this: pre-kickoff the projection is the story and the
@@ -449,6 +448,11 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
     [leftResolved, rightResolved]
   );
   const projMargin = sim ? Math.round((sim.myProjFinal - sim.oppProjFinal) * 10) / 10 : 0;
+  // Green when that side is projected to win, red when it is not, brightening
+  // with CERTAINTY rather than margin. Declared after `sim` — a const named
+  // above its declaration is the TDZ crash that blanked Start/Sit once.
+  const myTone = sim ? outcomeColor(sim.winProb, true) : null;
+  const oppTone = sim ? outcomeColor(sim.winProb, false) : null;
   const myDrift = sim && Number.isFinite(sim.myPregame) ? Math.round((sim.myProjFinal - sim.myPregame) * 10) / 10 : null;
   const oppDrift = sim && Number.isFinite(sim.oppPregame) ? Math.round((sim.oppProjFinal - sim.oppPregame) * 10) / 10 : null;
 
@@ -464,25 +468,19 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
       return {
         tag: "NOT SYNCED",
         warn:
-          "Opponent projections are estimated from expert ranks, and are not adjusted for injuries — a ruled-out starter is still valued as if healthy. Re-sync ESPN for real numbers.",
-        fine: "Your side uses real projections; the opponent's are rank estimates.",
+          "Opponent projections are estimated from expert ranks, and are not adjusted for injuries — a ruled-out starter is still valued as if healthy. Your side uses real projections; re-sync ESPN to get real ones on his.",
       };
     }
     if (src === "live" && age != null && age > staleAfterMs(state)) {
       return {
         tag: "STALE",
         warn: `Last ESPN sync was ${agoLabel(age)} ago. Scores and projections are frozen at that moment — tap ⟳ ESPN to refresh.`,
-        fine: "Both sides run the same ladder — Vegas lines first, then ESPN blended with your pasted expert projections — from the last sync.",
       };
     }
-    // "Both sides use real ESPN projections" was true when the opponent was
-    // raw ESPN and my side was not, which is to say it was never true. Both
-    // columns run one ladder now and the line says which.
-    return {
-      tag: "",
-      warn: "",
-      fine: "Both sides run the same ladder: Vegas lines first, then ESPN blended with your pasted expert projections, then ESPN alone.",
-    };
+    // Nothing to say. The ladder description that used to live here was
+    // removed with the rest of the standing copy: when the numbers ARE what a
+    // reader assumes, the page says nothing and lets them read.
+    return { tag: "", warn: "" };
   }, [state, week, oppTeam]);
 
   const Row = ({ row, side }) => {
@@ -603,7 +601,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               <div className="gd-team-rec">{leftSub}</div>
               {anyLive ? (
                 <>
-                  <div className="gd-total live">{sim.myNow}</div>
+                  <div className="gd-total live" style={myTone ? { color: myTone } : undefined}>{sim.myNow}</div>
                   <div className="gd-proj-final">
                     proj {sim.myProjFinal}
                     {myDrift != null && (
@@ -617,7 +615,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               ) : (
                 <>
                   {/* Pre-kickoff everyone is near zero and the score is noise. */}
-                  <div className="gd-total proj">{sim.myProjFinal}</div>
+                  <div className="gd-total proj" style={myTone ? { color: myTone } : undefined}>{sim.myProjFinal}</div>
                   <div className="gd-scored">{sim.myNow} scored</div>
                 </>
               )}
@@ -635,7 +633,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               <div className="gd-team-rec">{rightSub}</div>
               {anyLive ? (
                 <>
-                  <div className="gd-total live">{sim.oppNow}</div>
+                  <div className="gd-total live" style={oppTone ? { color: oppTone } : undefined}>{sim.oppNow}</div>
                   <div className="gd-proj-final">
                     proj {sim.oppProjFinal}
                     {oppDrift != null && (
@@ -648,7 +646,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                 </>
               ) : (
                 <>
-                  <div className="gd-total proj">{sim.oppProjFinal}</div>
+                  <div className="gd-total proj" style={oppTone ? { color: oppTone } : undefined}>{sim.oppProjFinal}</div>
                   <div className="gd-scored">{sim.oppNow} scored</div>
                 </>
               )}
@@ -680,17 +678,15 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
             </div>
           </div>
 
-          {viewingMine && narrative && <div className="gd-narrative">{narrative}</div>}
+          {/* The narrative line and the P10-P90 range are gone on Kyle's call:
+              both restated what the hero totals, the win bar and the yet-to-play
+              boxes already say, in more words. What survives is the warning —
+              the numbers being something OTHER than what a reader assumes is
+              the one thing this page still has to spell out. */}
           {viewingMine && oppProvenance.warn && (
             <div className="data-warn">
               <span className="data-warn-tag">{oppProvenance.tag}</span>
               <span>{oppProvenance.warn}</span>
-            </div>
-          )}
-          {viewingMine && (
-            <div className="sim-fine">
-              Your range if the week finished a thousand different ways: {sim.myP10}–{sim.myP90}.{" "}
-              {oppProvenance.fine}
             </div>
           )}
         </div>
