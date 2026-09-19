@@ -10,7 +10,7 @@ import fsMod from "node:fs";
 import { propsToPoints, SCORING, parseProps } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
 import { extractScoring, matchupSideScore } from "../api/espn.js";
-import { pointDistribution, floorCeiling, fpProjFor } from "../src/analytics.js";
+import { pointDistribution, floorCeiling, fpProjFor, propsSweptFor } from "../src/analytics.js";
 import {
   simulateMatchup,
   simulateSwap,
@@ -748,6 +748,30 @@ check(
     return bare && Math.abs(bare.condMean - 9) < 0.06;
   })(),
   "nobody gets quietly repriced"
+);
+
+// ---- 12g. a card must not claim the book has no line when nobody asked ----
+// "No book lines for this player this week" is an assertion about the MARKET.
+// It was printed whenever propsProj was missing, including when the sweep had
+// never run for that week at all — a different fact entirely, and the one that
+// is actually true most of the time a card looks empty. Same badge-honesty
+// failure as a card reading "no lines pasted" while holding a full set.
+//
+// propsIndex answers it: a sweep landed for that week, or it did not.
+const swept = { propsIndex: { 2: { someguy: { proj: 14, parts: [] } } } };
+check(
+  "a week with a completed sweep is distinguishable from one without",
+  propsSweptFor(swept, "2") === true &&
+    propsSweptFor(swept, "3") === false &&
+    propsSweptFor({}, "2") === false,
+  JSON.stringify([propsSweptFor(swept, "2"), propsSweptFor(swept, "3"), propsSweptFor({}, "2")])
+);
+// An empty sweep for the week is still a sweep — the market ran and priced
+// nobody, which is a real answer and not the same as never asking.
+check(
+  "an empty sweep still counts as asked",
+  propsSweptFor({ propsIndex: { 2: {} } }, "2") === true,
+  "the request happened; the book just had nothing"
 );
 
 // ---- 13. bye weeks must reach the simulation (finding 10) ----

@@ -52,6 +52,22 @@ export function propsFor(state, week, name) {
   return hit && Number.isFinite(hit.proj) && hit.proj > 0 ? hit : null;
 }
 
+/**
+ * Did the Vegas sweep actually run for this week?
+ *
+ * The card printed "No book lines for this player this week" whenever
+ * propsProj was missing — an assertion about the MARKET — when most of the
+ * time the truth was that nothing had been fetched for that week at all.
+ * Props are stored per week, so changing the week pill empties them until a
+ * refetch, and the card would confidently blame the bookmakers.
+ *
+ * An EMPTY sweep still counts as asked: the market ran and priced nobody,
+ * which is a real answer, and a different one from never asking.
+ */
+export function propsSweptFor(state, week) {
+  return !!(state && state.propsIndex && state.propsIndex[week]);
+}
+
 export function playerAnalytics(state, playerId, week) {
   return (state.analytics && state.analytics[playerId] && state.analytics[playerId][week]) || null;
 }

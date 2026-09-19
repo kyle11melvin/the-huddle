@@ -87,6 +87,10 @@ export default function PlayerCard({
   player,
   dist,
   propsEdge,
+  // Whether the Vegas sweep ran for this week at all. Without it the card
+  // cannot tell "the book has no line for him" from "nobody asked", and it
+  // printed the first while meaning the second.
+  propsSwept = true,
   source,
   matchup,
   consensus,
@@ -154,7 +158,9 @@ export default function PlayerCard({
             ? propsEdge.parts.length
               ? propsEdge.parts.join("  ·  ")
               : "Market lines priced in"
-            : "No book lines for this player this week"}
+            : propsSwept
+              ? "No book lines for this player this week"
+              : "Vegas lines haven't loaded for this week yet — sync ESPN to fetch them"}
         </div>
       </div>
 

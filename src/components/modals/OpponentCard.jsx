@@ -13,7 +13,7 @@
 import { useEffect } from "react";
 import PlayerCard from "../PlayerCard.jsx";
 import { teamOf } from "../../data/teams.js";
-import { fpProjFor, propsFor, blendProjection } from "../../analytics.js";
+import { fpProjFor, propsFor, propsSweptFor, blendProjection } from "../../analytics.js";
 
 /**
  * @param {object} row a Gameday opponent row
@@ -86,11 +86,18 @@ export default function OpponentCard({ row, week, state, onClose }) {
               espnId: row.espnId || "",
             }}
             dist={dist}
-            // The card still renders no props BREAKDOWN for an opponent — the
-            // parts list is built for my roster — but the opponent's number is
-            // now priced off the same book line when one exists, and the note
-            // below says which source he actually got.
-            propsEdge={null}
+            // The number IS the book's when a line exists, so the tile says
+            // so and shows the edge over ESPN. What it cannot show is the
+            // itemised legs: those are computed per player for my roster.
+            // Leaving it as a bare null printed "No book lines for this
+            // player this week" over a projection that came from exactly
+            // those lines.
+            propsEdge={
+              book && Number.isFinite(raw)
+                ? { delta: Math.round((book.proj - raw) * 10) / 10, parts: [], source: "odds-api" }
+                : null
+            }
+            propsSwept={propsSweptFor(state, week)}
             matchup={null}
             consensus={null}
             book={
