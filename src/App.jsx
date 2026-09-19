@@ -35,6 +35,7 @@ import {
   tradeAngles,
   classifyAvailability,
   suggestAdds,
+  dropCandidate,
   ecrRank,
 } from "./analysis.js";
 import { readShareFromUrl, clearShareFromUrl } from "./share.js";
@@ -97,8 +98,6 @@ import {
   nextOpponents,
   byeCliffs,
   rosterCompetition,
-  rosPoints,
-  rosWeeks,
 } from "./scheduleSync.js";
 import { buildAlerts } from "./alerts.js";
 import { watchIntel, sortWatchByIntel } from "./watchlist.js";
@@ -1090,19 +1089,10 @@ export default function App({ initialTab } = {}) {
     [state.players, state.byes]
   );
 
-  /** Weakest same-position player on my roster — the natural drop for a pickup. */
-  const dropCandidateFor = useCallback(
-    (pos) => {
-      let worst = null;
-      for (const p of Object.values(state.players)) {
-        if (p.pos !== pos) continue;
-        const proj = playerAnalytics(state, p.id, week)?.proj ?? 0;
-        if (!worst || proj < worst.proj) worst = { p, proj };
-      }
-      return worst;
-    },
-    [state, week]
-  );
+  /** Weakest same-position player on my roster — the natural drop for a pickup.
+   *  Lives in analysis.js now so it can be tested; see dropCandidate() for why
+   *  a missing projection must not count as zero. */
+  const dropCandidateFor = useCallback((pos) => dropCandidate(state, week, pos), [state, week]);
   const alerts = useMemo(
     () => buildAlerts(state),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2764,16 +2754,21 @@ export default function App({ initialTab } = {}) {
                             <span className="sug-sched">next: {upcoming.join(" · ")}</span>
                           )}
                           {(() => {
+                            // Per WEEK, not a season total. Multiplying one
+                            // week's projection by the games left turned a
+                            // ten-point edge into a 153-point headline that
+                            // read as a forecast; the weekly number is the
+                            // same information without the false precision,
+                            // and it is the one you decide on.
                             const drop = dropCandidateFor(p.pos);
-                            const addRos = rosPoints(state, p.team, p.proj);
-                            if (addRos == null || !drop || drop.p.name === p.name) return null;
-                            const dropRos = rosPoints(state, drop.p.team, drop.proj) ?? 0;
-                            const delta = addRos - dropRos;
-                            if (delta <= 0) return null;
+                            if (!drop || drop.p.name === p.name) return null;
+                            if (!Number.isFinite(p.proj) || p.proj <= 0) return null;
+                            const perWeek = Math.round((p.proj - drop.proj) * 10) / 10;
+                            if (perWeek <= 0) return null;
                             return (
                               <span className="sug-ros">
-                                ≈ <strong>+{delta} pts</strong> rest of season vs dropping {drop.p.name} (
-                                {rosWeeks(state, p.team)} games left · projection-based)
+                                ≈ <strong>+{perWeek} pts/week</strong> over {drop.p.name}, your{" "}
+                                {drop.only ? "only" : "weakest"} {p.pos}
                               </span>
                             );
                           })()}

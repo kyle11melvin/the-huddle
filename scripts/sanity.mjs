@@ -36,7 +36,7 @@ import { isAuthorized } from "../api/_auth.js";
 import { readFileSync } from "node:fs";
 import { captureCalibration, calibrationStats, calibrationSummary } from "../src/calibration.js";
 import { priceBid, demandFactor, weakestReplaceablePoints } from "../src/watchlist.js";
-import { liveRankInfo, RANK_SOURCE_LABEL, RANK_SOURCE_SHORT, positionNeedPoints, positionNeeds } from "../src/analysis.js";
+import { liveRankInfo, RANK_SOURCE_LABEL, RANK_SOURCE_SHORT, positionNeedPoints, positionNeeds, dropCandidate } from "../src/analysis.js";
 import { currentMatchupPeriod, weeklyProj } from "../api/espn.js";
 const weeklyProjBasis = (p, wk) => weeklyProj(p, wk).basis;
 
@@ -2333,6 +2333,76 @@ check(
   "no opponent row still assigns ESPN's raw projection straight to simProj",
   !/simProj:\s*proj,/.test(gdSrc),
   "`simProj: proj` is the shape the raw-ESPN builders had"
+);
+
+// ---- 36c. the drop candidate on Suggested Adds ----
+// Kyle, on the card reading "+153 pts rest of season vs dropping Brock Bowers":
+// "150 points if I what drop brock bowers that screen doesn't make any sense."
+// He was right, and the cause was one `?? 0`.
+//
+// The card asked what Bowers was projected for this week, got nothing back,
+// and wrote down 0.0. That single zero did two jobs and got both wrong: it
+// made him the WEAKEST player at the position, so he was nominated as the
+// drop, and it made his rest-of-season value ZERO, so the newcomer's entire
+// season total showed up as points gained. +153 was not a comparison. It was
+// the newcomer's own season projection with nothing subtracted.
+//
+// A missing projection is UNKNOWN, not worthless. So is a zero: a man on his
+// bye is not your worst player, he is your worst player this week.
+const dcState = (analytics) => ({
+  week: "3",
+  analytics,
+  players: {
+    te1: { id: "te1", name: "Brock Bowers", team: "LV", pos: "TE" },
+    te2: { id: "te2", name: "Spare TE", team: "NYJ", pos: "TE" },
+  },
+});
+const noProj = dropCandidate(dcState({ te2: { 3: { proj: 6.1 } } }), "3", "TE");
+check(
+  "a player with NO projection this week is not nominated as the drop",
+  noProj != null && noProj.p.name === "Spare TE",
+  `nominated ${noProj ? noProj.p.name : "nobody"} at ${noProj ? noProj.proj : "-"} — an unprojected Bowers used to win this at 0.0`
+);
+const onBye = dropCandidate(dcState({ te1: { 3: { proj: 0 } }, te2: { 3: { proj: 6.1 } } }), "3", "TE");
+check(
+  "a player projected zero (his bye) is not nominated either",
+  onBye != null && onBye.p.name === "Spare TE",
+  `nominated ${onBye ? onBye.p.name : "nobody"} — a bye is not a season-long verdict`
+);
+const noneKnown = dropCandidate(dcState({}), "3", "TE");
+check(
+  "nobody projected at the position means NO drop candidate, not a fake one",
+  noneKnown === null,
+  `got ${noneKnown ? noneKnown.p.name : "null"} — with nothing known the card must say nothing`
+);
+const lone = dropCandidate(
+  { week: "3", analytics: { te1: { 3: { proj: 9.4 } } }, players: { te1: { id: "te1", name: "Brock Bowers", team: "LV", pos: "TE" } } },
+  "3",
+  "TE"
+);
+check(
+  "your ONLY player at a position is flagged as such, so the card can say swap",
+  lone != null && lone.only === true,
+  `only=${lone ? lone.only : "(no candidate)"} — "drop your only TE" is what alarmed him`
+);
+check(
+  "with two at the position the weakest is NOT flagged as the only one",
+  noProj != null && noProj.only === false,
+  `only=${noProj ? noProj.only : "(no candidate)"}`
+);
+
+// The render must compare per WEEK. Multiplying one week's projection by the
+// games left is what turned a 10-point edge into a 153-point headline.
+const appSrc = fsMod.readFileSync("src/App.jsx", "utf8");
+check(
+  "the suggested-add line no longer extrapolates a season total",
+  !/sug-ros[\s\S]{0,400}rest of season/.test(appSrc),
+  "`rest of season` next to sug-ros is the flat weekly x games-left headline"
+);
+check(
+  "the suggested-add line no longer defaults a missing drop value to zero",
+  !/dropRos\s*=[\s\S]{0,80}\?\?\s*0/.test(appSrc),
+  "`?? 0` on the drop's value is how the newcomer's whole season became the delta"
 );
 
 // ---- 37. no orphaned classNames ----
