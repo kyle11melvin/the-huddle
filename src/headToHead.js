@@ -86,6 +86,56 @@ export function shortName(name) {
 }
 
 /**
+ * Which way a side is going, and how sure the sim is about it.
+ *
+ * `heat` is certainty, NOT margin: 0 at a coin flip, 1 at a near-lock. A team
+ * up by 40 with everyone finished and a team up by 3 with a Monday nighter
+ * left are different reads, and the points alone cannot tell them apart —
+ * the win probability can.
+ *
+ * Both sides always run at the same temperature with opposite signs, because
+ * they are two faces of one number.
+ *
+ * @param {number} winProb MY win probability, 0..1
+ * @param {boolean} mine which side is being coloured
+ * @returns {{winning:boolean, heat:number}|null} null before a sim exists
+ */
+export function outcomeTone(winProb, mine = true) {
+  if (!Number.isFinite(winProb)) return null;
+  const p = mine ? winProb : 1 - winProb;
+  const heat = Math.min(1, Math.max(0, Math.abs(p - 0.5) * 2));
+  return { winning: p >= 0.5, heat: Math.round(heat * 1000) / 1000 };
+}
+
+// Muted at a coin flip, vivid at a lock. The dim ends are deliberately close
+// to slate: 50/50 should not shout in either direction, because it has nothing
+// to say yet.
+const TONE_DIM_WIN = [138, 167, 155];
+const TONE_LIT_WIN = [46, 213, 132]; // --positive
+const TONE_DIM_LOSE = [161, 132, 140];
+const TONE_LIT_LOSE = [255, 92, 108]; // --negative
+
+const hex2 = (n) => Math.round(n).toString(16).padStart(2, "0");
+
+/**
+ * The hero total's colour: green when that side is projected to win, red when
+ * it is not, brightening with certainty.
+ *
+ * This is the one place green carries meaning other than "yours", which
+ * DESIGN.md rule 2 otherwise forbids — see the amendment there. Rule 3 still
+ * holds: "You 32% / Him 68%" sits under these numbers, so a reader who cannot
+ * separate the hues loses speed and never meaning.
+ */
+export function outcomeColor(winProb, mine = true) {
+  const t = outcomeTone(winProb, mine);
+  if (!t) return null;
+  const from = t.winning ? TONE_DIM_WIN : TONE_DIM_LOSE;
+  const to = t.winning ? TONE_LIT_WIN : TONE_LIT_LOSE;
+  const mix = from.map((c, i) => c + (to[i] - c) * t.heat);
+  return `#${mix.map(hex2).join("")}`;
+}
+
+/**
  * Has any game in this matchup kicked off?
  *
  * Decides whether the hero leads with the SCORE or with the projection. The

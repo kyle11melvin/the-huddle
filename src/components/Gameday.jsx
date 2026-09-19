@@ -4,7 +4,7 @@ import { SLOT_DEFS, weekLabel } from "../lineup.js";
 import { pointDistribution, playerAnalytics } from "../analytics.js";
 import { simulateLive, liveNarrative, liveProjection, rowGameState, opponentDist, opponentSource, espnAgeMs, staleAfterMs, agoLabel } from "../simulate.js";
 import { teamLogoUrl, headshotUrl, teamOf } from "../data/teams.js";
-import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, opponentOf, pairingEdge, anyGameStarted } from "../headToHead.js";
+import { pairBySlot, shortName, yetToPlay, yetToPlayLabel, seedFor, recordLabel, opponentOf, pairingEdge, anyGameStarted, outcomeColor } from "../headToHead.js";
 import { SLOT_COLOR } from "../constants.js";
 import { espnTeamRoster, liveEntryFor, anyGameLive } from "../espnSync.js";
 import { scheduleOpp } from "../scheduleSync.js";
@@ -449,6 +449,11 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
     [leftResolved, rightResolved]
   );
   const projMargin = sim ? Math.round((sim.myProjFinal - sim.oppProjFinal) * 10) / 10 : 0;
+  // Green when that side is projected to win, red when it is not, brightening
+  // with CERTAINTY rather than margin. Declared after `sim` — a const named
+  // above its declaration is the TDZ crash that blanked Start/Sit once.
+  const myTone = sim ? outcomeColor(sim.winProb, true) : null;
+  const oppTone = sim ? outcomeColor(sim.winProb, false) : null;
   const myDrift = sim && Number.isFinite(sim.myPregame) ? Math.round((sim.myProjFinal - sim.myPregame) * 10) / 10 : null;
   const oppDrift = sim && Number.isFinite(sim.oppPregame) ? Math.round((sim.oppProjFinal - sim.oppPregame) * 10) / 10 : null;
 
@@ -603,7 +608,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               <div className="gd-team-rec">{leftSub}</div>
               {anyLive ? (
                 <>
-                  <div className="gd-total live">{sim.myNow}</div>
+                  <div className="gd-total live" style={myTone ? { color: myTone } : undefined}>{sim.myNow}</div>
                   <div className="gd-proj-final">
                     proj {sim.myProjFinal}
                     {myDrift != null && (
@@ -617,7 +622,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               ) : (
                 <>
                   {/* Pre-kickoff everyone is near zero and the score is noise. */}
-                  <div className="gd-total proj">{sim.myProjFinal}</div>
+                  <div className="gd-total proj" style={myTone ? { color: myTone } : undefined}>{sim.myProjFinal}</div>
                   <div className="gd-scored">{sim.myNow} scored</div>
                 </>
               )}
@@ -635,7 +640,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               <div className="gd-team-rec">{rightSub}</div>
               {anyLive ? (
                 <>
-                  <div className="gd-total live">{sim.oppNow}</div>
+                  <div className="gd-total live" style={oppTone ? { color: oppTone } : undefined}>{sim.oppNow}</div>
                   <div className="gd-proj-final">
                     proj {sim.oppProjFinal}
                     {oppDrift != null && (
@@ -648,7 +653,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                 </>
               ) : (
                 <>
-                  <div className="gd-total proj">{sim.oppProjFinal}</div>
+                  <div className="gd-total proj" style={oppTone ? { color: oppTone } : undefined}>{sim.oppProjFinal}</div>
                   <div className="gd-scored">{sim.oppNow} scored</div>
                 </>
               )}
