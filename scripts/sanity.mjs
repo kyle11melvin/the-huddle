@@ -10,6 +10,7 @@ import fsMod from "node:fs";
 import { propsToPoints, SCORING, parseProps } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
 import { extractScoring, matchupSideScore } from "../api/espn.js";
+import { isGameday } from "../api/odds.js";
 import { pointDistribution, floorCeiling, fpProjFor, propsSweptFor } from "../src/analytics.js";
 import {
   simulateMatchup,
@@ -2403,6 +2404,49 @@ check(
   "the suggested-add line no longer defaults a missing drop value to zero",
   !/dropRos\s*=[\s\S]{0,80}\?\?\s*0/.test(appSrc),
   "`?? 0` on the drop's value is how the newcomer's whole season became the delta"
+);
+
+// ---- 36d. the Vegas props gameday window ----
+// Props are the top rung of the projection ladder, and how fresh they are is
+// decided by whether today is a game day: 3h inside the window, 12h outside.
+// That question was asked in UTC.
+//
+// An NFL night game kicks at 8:15pm Eastern, which is already TOMORROW in UTC.
+// Every UTC day window therefore sits four or five hours EARLY against the
+// schedule it is meant to track, and each one expires at the worst possible
+// moment: the "Thursday" window runs Wednesday 8pm ET to Thursday 8pm ET, so
+// the lines go stale exactly as Thursday Night Football kicks off, having been
+// kept fresh all Wednesday evening when nothing was being played. "Monday"
+// does the same to Monday Night Football. Sunday's day games are the only
+// ones the UTC reading gets right, and only by accident.
+//
+// (The same trap cost this session a wrong answer, when the container clock
+// said Sunday and it was Saturday night where Kyle was sitting.)
+//
+// The league schedules in Eastern time, so the question is asked in Eastern.
+const ET_CASES = [
+  ["Thursday Night Football, 8:15pm ET", "2026-09-17T20:15:00-04:00", true],
+  ["Thursday 11am ET, hours before TNF", "2026-09-17T11:00:00-04:00", true],
+  ["Sunday early window, 1:00pm ET", "2026-09-20T13:00:00-04:00", true],
+  ["Sunday Night Football, 8:20pm ET", "2026-09-20T20:20:00-04:00", true],
+  ["Monday Night Football, 8:15pm ET", "2026-09-21T20:15:00-04:00", true],
+  ["Wednesday 8:15pm ET — used to be \"Thursday\" in UTC", "2026-09-16T20:15:00-04:00", false],
+  ["Tuesday 8:15pm ET, the dead night", "2026-09-22T20:15:00-04:00", false],
+  ["Wednesday 1pm ET", "2026-09-23T13:00:00-04:00", false],
+];
+for (const [label, iso, want] of ET_CASES) {
+  const got = isGameday(new Date(iso));
+  check(
+    `gameday window: ${label} → ${want ? "3h" : "12h"} TTL`,
+    got === want,
+    `isGameday said ${got}; UTC day was ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date(iso).getUTCDay()]}`
+  );
+}
+// The two that matter most, stated as the defect rather than a day-of-week:
+check(
+  "a night game is never read as the NEXT day",
+  isGameday(new Date("2026-09-17T20:15:00-04:00")) && isGameday(new Date("2026-09-21T20:15:00-04:00")),
+  "TNF and MNF both kick after 00:00 UTC, which is how they fell out of the window"
 );
 
 // ---- 37. no orphaned classNames ----

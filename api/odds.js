@@ -82,6 +82,36 @@ const MARKET_KEY = {
 
 const norm = (s) => (s || "").toLowerCase().replace(/[^a-z]/g, "");
 
+/**
+ * Is there NFL football today? Decides the props TTL: 3h inside the window,
+ * 12h outside it.
+ *
+ * Asked in EASTERN, because that is the clock the league schedules against.
+ * This read `now.getUTCDay()`, which put every window four or five hours early
+ * against the games it tracks — a night game kicks at 8:15pm ET, which is
+ * already tomorrow in UTC. The "Thursday" window therefore ran from Wednesday
+ * evening to Thursday evening, keeping lines fresh through a Wednesday night
+ * with no football and dropping to the 12-hour TTL exactly as Thursday Night
+ * Football kicked off. Monday Night Football lost the same way. Sunday's day
+ * games were the only ones it got right, and only by accident.
+ */
+const ET_GAMEDAYS = new Set(["Sun", "Mon", "Thu"]);
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export function isGameday(now = new Date()) {
+  let day;
+  try {
+    day = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short" }).format(now);
+  } catch {
+    // A Node build without full ICU data would otherwise throw here and take
+    // the whole props route down with it. Fixed -5h shift instead: an hour off
+    // during daylight time, which only moves the boundary between 4am and 5am
+    // Eastern. Nothing is ever scheduled there.
+    day = DAY_NAMES[new Date(now.getTime() - 5 * 3600 * 1000).getUTCDay()];
+  }
+  return ET_GAMEDAYS.has(day);
+}
+
 export default async function handler(req, res) {
   applyCors(req, res, "GET,OPTIONS");
   if (req.method === "OPTIONS") return res.status(204).end();
@@ -101,7 +131,7 @@ export default async function handler(req, res) {
     // enough? This is what makes a cold edge cache free.
     const stored = await readStored();
     const nowMs = Date.now();
-    const gameday = [0, 1, 4].includes(new Date().getUTCDay()); // Sun, Mon, Thu
+    const gameday = isGameday();
     const ttl = gameday ? GAMEDAY_TTL_MS : IDLE_TTL_MS;
     if (stored && Number.isFinite(stored.fetchedAt) && nowMs - stored.fetchedAt < ttl) {
       res.setHeader("Cache-Control", "s-maxage=10800, stale-while-revalidate=86400");
