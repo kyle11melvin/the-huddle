@@ -10,6 +10,7 @@ import fsMod from "node:fs";
 import { propsToPoints, SCORING, parseProps } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
 import { extractScoring, matchupSideScore } from "../api/espn.js";
+import { isGameday } from "../api/odds.js";
 import { pointDistribution, floorCeiling, fpProjFor, propsSweptFor } from "../src/analytics.js";
 import {
   simulateMatchup,
@@ -2403,6 +2404,137 @@ check(
   "the suggested-add line no longer defaults a missing drop value to zero",
   !/dropRos\s*=[\s\S]{0,80}\?\?\s*0/.test(appSrc),
   "`?? 0` on the drop's value is how the newcomer's whole season became the delta"
+);
+
+// ---- 36d. the Vegas props gameday window ----
+// Props are the top rung of the projection ladder, and how fresh they are is
+// decided by whether today is a game day: 3h inside the window, 12h outside.
+// That question was asked in UTC.
+//
+// An NFL night game kicks at 8:15pm Eastern, which is already TOMORROW in UTC.
+// Every UTC day window therefore sits four or five hours EARLY against the
+// schedule it is meant to track, and each one expires at the worst possible
+// moment: the "Thursday" window runs Wednesday 8pm ET to Thursday 8pm ET, so
+// the lines go stale exactly as Thursday Night Football kicks off, having been
+// kept fresh all Wednesday evening when nothing was being played. "Monday"
+// does the same to Monday Night Football. Sunday's day games are the only
+// ones the UTC reading gets right, and only by accident.
+//
+// (The same trap cost this session a wrong answer, when the container clock
+// said Sunday and it was Saturday night where Kyle was sitting.)
+//
+// The league schedules in Eastern time, so the question is asked in Eastern.
+const ET_CASES = [
+  ["Thursday Night Football, 8:15pm ET", "2026-09-17T20:15:00-04:00", true],
+  ["Thursday 11am ET, hours before TNF", "2026-09-17T11:00:00-04:00", true],
+  ["Sunday early window, 1:00pm ET", "2026-09-20T13:00:00-04:00", true],
+  ["Sunday Night Football, 8:20pm ET", "2026-09-20T20:20:00-04:00", true],
+  ["Monday Night Football, 8:15pm ET", "2026-09-21T20:15:00-04:00", true],
+  ["Wednesday 8:15pm ET — used to be \"Thursday\" in UTC", "2026-09-16T20:15:00-04:00", false],
+  ["Tuesday 8:15pm ET, the dead night", "2026-09-22T20:15:00-04:00", false],
+  ["Wednesday 1pm ET", "2026-09-23T13:00:00-04:00", false],
+];
+for (const [label, iso, want] of ET_CASES) {
+  const got = isGameday(new Date(iso));
+  check(
+    `gameday window: ${label} → ${want ? "3h" : "12h"} TTL`,
+    got === want,
+    `isGameday said ${got}; UTC day was ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date(iso).getUTCDay()]}`
+  );
+}
+// The two that matter most, stated as the defect rather than a day-of-week:
+check(
+  "a night game is never read as the NEXT day",
+  isGameday(new Date("2026-09-17T20:15:00-04:00")) && isGameday(new Date("2026-09-21T20:15:00-04:00")),
+  "TNF and MNF both kick after 00:00 UTC, which is how they fell out of the window"
+);
+
+// ---- 36e. the optimizer must respect kickoff ----
+// Found while sizing, not reported: mid-slate the Today tab said
+//
+//   GAMES ARE ON
+//   One move worth making
+//   Start Quentin Johnston over Parker Washington - +6.6% win probability
+//
+// with an Apply button, when BOTH of those games were already Final. Neither
+// player could produce another point; Washington had gone off for 18.4 and
+// Johnston had busted at 3.1. suggestLineup() scores everyone off the PREGAME
+// distribution and never asks whether a game has started.
+//
+// The app already knows how to do this - for the other guy. bestLineupFrom()
+// takes `pinned` for exactly this ("ids already committed to a slot - their
+// game has kicked off"), opponentLineups() builds that map from espn.games
+// with the comment "kickoff, not a choice their manager still has", and
+// suggestLineup() passed nothing. The same asymmetry as the opponent pricing.
+//
+// Two rules, and they are ESPN's, not ours: a started player cannot be swapped
+// OUT, and a started player cannot be swapped IN.
+const LOCK_POS = { a: "QB", b: "QB" };
+const mkLockState = (games) => ({
+  v: 2,
+  week: "1",
+  players: {
+    a: { id: "a", name: "Locked Starter", team: "KC", pos: LOCK_POS.a, ecr: "QB30", status: "", espnId: "a" },
+    b: { id: "b", name: "Better Bench QB", team: "BUF", pos: LOCK_POS.b, ecr: "QB2", status: "", espnId: "b" },
+  },
+  lineup: { QB: ["a"], RB: [null, null], WR: [null, null, null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
+  bench: ["b", null, null, null, null, null],
+  ir: [null, null],
+  byes: {},
+  byesAuto: {},
+  byesManual: {},
+  // b is projected far higher, so pregame the swap is genuinely right.
+  analytics: { a: { 1: { proj: 6, projSource: "espn" } }, b: { 1: { proj: 22, projSource: "espn" } } },
+  espn: { games },
+  ecrIndex: {},
+  schedule: null,
+  matchups: {},
+});
+const pre = { KC: { state: "pre" }, BUF: { state: "pre" } };
+const swapPre = suggestLineup(mkLockState(pre), "1", null).find((m) => m.inId === "b" && m.outId === "a");
+check(
+  "before kickoff the optimizer still recommends the genuine upgrade",
+  !!swapPre,
+  swapPre ? `proposed "${swapPre.inName} over ${swapPre.outName}"` : "proposed nothing — the guard has over-reached"
+);
+const outLocked = suggestLineup(mkLockState({ KC: { state: "in" }, BUF: { state: "pre" } }), "1", null);
+check(
+  "a starter whose game has KICKED OFF is never swapped out",
+  !outLocked.some((m) => m.outId === "a"),
+  `proposed ${JSON.stringify(outLocked.map((m) => `${m.inName} over ${m.outName}`))} — his lineup spot is settled`
+);
+const outFinal = suggestLineup(mkLockState({ KC: { state: "post" }, BUF: { state: "pre" } }), "1", null);
+check(
+  "a starter whose game is FINAL is never swapped out either",
+  !outFinal.some((m) => m.outId === "a"),
+  `proposed ${JSON.stringify(outFinal.map((m) => `${m.inName} over ${m.outName}`))}`
+);
+const inLocked = suggestLineup(mkLockState({ KC: { state: "pre" }, BUF: { state: "post" } }), "1", null);
+check(
+  "a bench player whose game is over is never swapped IN",
+  !inLocked.some((m) => m.inId === "b"),
+  `proposed ${JSON.stringify(inLocked.map((m) => `${m.inName} over ${m.outName}`))} — he cannot score again`
+);
+const bothDone = suggestLineup(mkLockState({ KC: { state: "post" }, BUF: { state: "post" } }), "1", null);
+check(
+  "with both games Final the optimizer proposes nothing at all",
+  bothDone.length === 0,
+  `proposed ${bothDone.length} move(s): ${JSON.stringify(bothDone.map((m) => `${m.inName} over ${m.outName}`))}`
+);
+// No sync, no game data, no locks - the behaviour must be exactly as before.
+const noSync = suggestLineup({ ...mkLockState(pre), espn: null }, "1", null).find((m) => m.inId === "b");
+check(
+  "with ESPN unsynced nothing is treated as locked",
+  !!noSync,
+  "an absent espn.games must fall back to the old behaviour, not freeze the lineup"
+);
+// The rule is ESPN's own, and the opponent side already applies it. Wiring,
+// not arithmetic - the check that would have caught this in the first place.
+const analysisSrc = fsMod.readFileSync("src/analysis.js", "utf8");
+check(
+  "suggestLineup passes a pinned map to bestLineupFrom, as the opponent builder does",
+  /bestLineupFrom\(\s*[\s\S]{0,400}?,\s*pinned\s*\)/.test(analysisSrc),
+  "bestLineupFrom's second argument is the whole mechanism; calling it with one argument is the defect"
 );
 
 // ---- 37. no orphaned classNames ----

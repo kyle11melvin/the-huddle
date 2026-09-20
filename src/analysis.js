@@ -190,13 +190,48 @@ export function suggestLineup(state, week, oppDists = null) {
   for (const s of SLOT_DEFS) for (const id of state.lineup[s.key]) if (id) pool.push(id);
   for (const id of state.bench) if (id) pool.push(id);
 
+  // ---- kickoff ----
+  //
+  // ESPN locks each player when HIS game starts, so a move involving anyone
+  // who has kicked off is not a move you can make. This function used to
+  // ignore that entirely and score everyone off his pregame projection, which
+  // mid-slate produced "Start Quentin Johnston over Parker Washington, +6.6%
+  // win probability" — with an Apply button — while both games sat at Final,
+  // Washington having gone off for 18.4 and Johnston having busted at 3.1.
+  //
+  // The rule below is lifted from opponentLineups() in simulate.js, which has
+  // applied it to the OTHER manager all along ("kickoff, not a choice their
+  // manager still has"). It is the same asymmetry as the opponent pricing: the
+  // app was honest about the other guy's constraints and not about Kyle's.
+  //
+  // No espn.games (never synced) means nothing is known to have started, and
+  // the behaviour is exactly what it was.
+  const games = (state.espn && state.espn.games) || {};
+  const isLocked = (id) => {
+    const g = games[state.players[id]?.team];
+    return !!g && (g.state === "in" || g.state === "post");
+  };
+
+  // A started STARTER keeps his slot. Pinning him is what stops him being
+  // offered as the player to bench.
+  const pinned = {};
+  for (const s of SLOT_DEFS) {
+    (state.lineup[s.key] || []).forEach((id, i) => {
+      if (id && isLocked(id)) pinned[`${s.key}:${i}`] = id;
+    });
+  }
+
   // Same primitive the opponent side uses — one optimizer, two lineups.
   const { bySlot: best } = bestLineupFrom(
     pool.map((id) => ({
       id,
       pos: state.players[id]?.pos,
-      score: scorePlayer(state.players[id], week, byes, state),
-    }))
+      // A started BENCH player cannot be swapped in — he cannot score again.
+      // -Infinity is this function's existing "cannot start" convention, and
+      // a pinned starter is already placed, so it never strands him.
+      score: isLocked(id) ? -Infinity : scorePlayer(state.players[id], week, byes, state),
+    })),
+    pinned
   );
 
   // Fantasy scoring only cares WHICH players start, not which RB sits in RB1
@@ -262,9 +297,13 @@ export function suggestLineup(state, week, oppDists = null) {
   const before = simulateMatchup(baseDists, oppDists, 12345, SCAN_RUNS);
   if (!before) return moves;
 
+  // The win-probability scan below is a SEPARATE path — it builds its own
+  // swaps rather than going through bestLineupFrom — so the kickoff rule has
+  // to be applied again here, on both sides of every candidate swap. This is
+  // the path that produced the Final-vs-Final recommendation.
   const benchIds = state.bench.filter(Boolean).filter((id) => {
     const p = state.players[id];
-    return p && !isUnusable(p, week, byes) && pointDistribution(p, week, state);
+    return p && !isLocked(id) && !isUnusable(p, week, byes) && pointDistribution(p, week, state);
   });
   const claimedSlots = new Set(mandatoryMoves.map((m) => `${m.slotKey}:${m.index}`));
   const claimedIns = new Set(mandatoryMoves.map((m) => m.inId));
@@ -275,6 +314,7 @@ export function suggestLineup(state, week, oppDists = null) {
       if (claimedSlots.has(`${s.key}:${i}`)) continue;
       const outId = state.lineup[s.key][i];
       if (!outId) continue;
+      if (isLocked(outId)) continue; // his game has started; the slot is settled
       const outP = state.players[outId];
       if (!outP || isUnusable(outP, week, byes)) continue;
       const outDist = pointDistribution(outP, week, state);
