@@ -2381,6 +2381,14 @@ export default function App({ initialTab } = {}) {
                 <>
                   <strong>{ledger.graded} graded</strong> of {ledger.tracked} captured across{" "}
                   {ledger.weeks.length} week{ledger.weeks.length === 1 ? "" : "s"} — too few to judge the model yet.
+                  {ledger.league > 0 && (
+                    <>
+                      {" "}
+                      {ledger.mine} of those are your own players, graded against the full projection; the other{" "}
+                      {ledger.league} are the rest of the league, captured for the source comparisons below only
+                      (no distribution of ours runs for them).
+                    </>
+                  )}
                 </>
               )}
             </div>

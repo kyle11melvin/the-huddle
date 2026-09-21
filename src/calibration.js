@@ -40,6 +40,8 @@
 import {
   pointDistribution,
   playerAnalytics,
+  fpProjFor,
+  propsFor,
   DEFAULT_PROJ_WEIGHTS,
 } from "./analytics.js";
 import { normName } from "./espnSync.js";
@@ -171,6 +173,83 @@ export function captureCalibration(state, week) {
     }
   }
 
+  // ---- the rest of the league ----
+  //
+  // My roster is sixteen rows a week. A season of that is ~250, and only the
+  // rows where every source projected the same player count toward the source
+  // comparisons — so the ledger could spend the whole season never crossing its
+  // own thresholds while the answer sat in the snapshot it already had.
+  //
+  // Every league team's roster comes down in the same sync, with ESPN's
+  // projection and the actual on each entry, and both other sources are
+  // reachable BY NAME: /api/odds sweeps the whole slate, and the pasted
+  // FantasyPros index is keyed the same way. No extra call, no extra credit.
+  //
+  // What these rows DO NOT have is a distribution of our own — pointDistribution
+  // needs a roster player. So they carry `sources` and `actual` and no `proj`,
+  // which is exactly what the source comparisons read and exactly what
+  // calibrationSummary's `Number.isFinite(r.proj)` guard keeps out of the
+  // bias/band statistics, where a row with no sd would count as a miss and
+  // quietly wreck the number.
+  //
+  // Starters only. Benches would roughly double the storage for the noisiest
+  // rows on the board — backups who take a knee — and ~100 starters a week
+  // already clears both thresholds in week one.
+  const mine = new Set(Object.values(state.players || {}).map((p) => String(p.espnId)));
+  for (const t of (state.espn && state.espn.teams) || []) {
+    for (const e of t.roster || []) {
+      if (!e.espnId || mine.has(String(e.espnId))) continue;
+      if (!e.slot || e.slot === "BE" || e.slot === "IR") continue;
+      // Namespaced: an ESPN id must never land on one of my own player ids.
+      const key = `x${e.espnId}`;
+      const existing = forWeek[key];
+      const gs = gameStateFor(state, e.team);
+      const started = gs === "in" || gs === "post";
+
+      if (!existing || !existing.locked) {
+        // The same freeze rule, for the same reason — capturing ten times as
+        // many rows after kickoff would be ten times the hindsight.
+        if (started) {
+          if (existing) {
+            forWeek[key] = { ...existing, locked: true, lockedAt: existing.lockedAt || Date.now() };
+            captured++;
+          } else {
+            missed++;
+          }
+        } else {
+          const fp = fpProjFor(state, wk, e.name);
+          const pr = propsFor(state, wk, e.name);
+          forWeek[key] = {
+            ...(existing || {}),
+            name: e.name,
+            pos: e.pos,
+            team: e.team,
+            // Not my roster, so no distribution of ours — see above.
+            scope: "league",
+            sources: {
+              espn: Number.isFinite(e.proj) ? e.proj : null,
+              espnBasis: e.projBasis || null,
+              fp: fp ? fp.proj : null,
+              props: pr ? pr.proj : null,
+            },
+            // ESPN's raw designation, stored as-is and never rendered: this is
+            // the string whose first letter became an "A" badge on every
+            // healthy player once already.
+            injury: e.injuryStatus || "",
+            locked: false,
+            lockedAt: null,
+          };
+          captured++;
+        }
+      }
+
+      if (gs === "post" && forWeek[key] && forWeek[key].actual == null && Number.isFinite(e.actual)) {
+        forWeek[key] = { ...forWeek[key], actual: e.actual, gradedAt: Date.now() };
+        graded++;
+      }
+    }
+  }
+
   return { calibration: { ...prev, [wk]: forWeek }, captured, graded, missed };
 }
 
@@ -238,17 +317,24 @@ export function calibrationStats(state) {
   const cal = state.calibration || {};
   let tracked = 0;
   let gradedRows = 0;
+  // Split out, because the two are not the same evidence. My rows carry a full
+  // distribution and grade the whole model; league rows carry the raw sources
+  // and grade only those. Reporting one number would let ~100 league rows a
+  // week read as though the model itself had been checked a hundred times.
+  let mine = 0;
+  let league = 0;
   const weeks = [];
   for (const [wk, rows] of Object.entries(cal)) {
     const vals = Object.values(rows || {});
     const g = vals.filter((r) => Number.isFinite(r.actual)).length;
     tracked += vals.length;
     gradedRows += g;
+    for (const r of vals) (r.scope === "league" ? league++ : mine++);
     if (vals.length)
       weeks.push({ week: Number(wk), tracked: vals.length, graded: g });
   }
   weeks.sort((a, b) => a.week - b.week);
-  return { tracked, graded: gradedRows, weeks };
+  return { tracked, graded: gradedRows, mine, league, weeks };
 }
 
 /**

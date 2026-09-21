@@ -1358,6 +1358,101 @@ check(
   }).n === 0
 );
 
+// ---- 23d. the ledger records the whole league, not just my sixteen ----
+// Sixteen rows a week never crosses the thresholds the source comparisons need.
+// Every league roster arrives in the same sync with a projection and an actual,
+// and both other sources are reachable by name.
+const leagueState = (gameState, actual) => ({
+  week: "1",
+  players: { c1: calPlayer },
+  analytics: { c1: { 1: { proj: 11, projSource: "espn" } } },
+  byes: {},
+  calibration: {},
+  // normName strips everything but letters: "Star Back" -> "starback"
+  propsIndex: { 1: { starback: { proj: 19.5 } } },
+  fpProjIndex: { 1: { starback: { proj: 17 } } },
+  espn: {
+    myTeamId: 7,
+    games: { KC: { state: gameState }, SF: { state: gameState } },
+    teams: [
+      { id: 7, roster: [{ espnId: "7001", name: "Ledger Guy", pos: "WR", team: "KC", slot: "WR", proj: 11, actual }] },
+      {
+        id: 9,
+        roster: [
+          { espnId: "9001", name: "Star Back", pos: "RB", team: "SF", slot: "RB", proj: 18, actual, injuryStatus: "ACTIVE" },
+          { espnId: "9002", name: "Bench Guy", pos: "RB", team: "SF", slot: "BE", proj: 4, actual },
+          // my own player, sitting on their bench list by espnId collision test
+          { espnId: "7001", name: "Ledger Guy", pos: "WR", team: "KC", slot: "WR", proj: 11, actual },
+        ],
+      },
+    ],
+  },
+});
+
+const lg1 = captureCalibration(leagueState("pre", null), "1");
+const lgRow = lg1.calibration["1"].x9001;
+check(
+  "a league starter is captured with all three sources",
+  lgRow && lgRow.scope === "league" && lgRow.sources.espn === 18 && lgRow.sources.fp === 17 && lgRow.sources.props === 19.5,
+  JSON.stringify(lgRow)
+);
+check(
+  "a league row carries no proj of its own — we do not run a distribution for him",
+  lgRow && lgRow.proj === undefined,
+  JSON.stringify({ proj: lgRow && lgRow.proj })
+);
+check("a league bench player is not captured", lg1.calibration["1"].x9002 === undefined);
+check(
+  "my own player is never double-recorded under an espn key",
+  lg1.calibration["1"].x7001 === undefined && lg1.calibration["1"].c1 !== undefined,
+  JSON.stringify(Object.keys(lg1.calibration["1"]))
+);
+
+// graded from the entry's own actual, which is right there in the snapshot
+const lg2 = captureCalibration({ ...leagueState("post", 21.3), calibration: lg1.calibration }, "1");
+check(
+  "a league row grades against its own actual",
+  lg2.calibration["1"].x9001.actual === 21.3 && lg2.calibration["1"].x9001.locked === true,
+  JSON.stringify(lg2.calibration["1"].x9001)
+);
+
+// the freeze applies at ten times the scale, for ten times the reason
+const lgLate = captureCalibration(leagueState("in", null), "1");
+check(
+  "a league player whose game already started is not captured either",
+  lgLate.calibration["1"].x9001 === undefined && lgLate.missed >= 1,
+  JSON.stringify({ row: lgLate.calibration["1"].x9001, missed: lgLate.missed })
+);
+
+// LOAD-BEARING: league rows have no sd, so a band check would count every one
+// of them as a miss. calibrationSummary's finite-proj guard is what keeps them
+// out, and nothing else does.
+const mixed = { calibration: { 1: {} } };
+for (let i = 0; i < 60; i++) {
+  mixed.calibration[1][`x${i}`] = { scope: "league", sources: { espn: 10, fp: 10, props: 10 }, actual: 10 };
+}
+for (let i = 0; i < 45; i++) {
+  mixed.calibration[1][`m${i}`] = { proj: 10, condMean: 10, sd: 5, actual: 11 };
+}
+const mixedVerdict = calibrationSummary(mixed);
+check(
+  "league rows stay out of the model verdict — no proj, no sd, no vote",
+  mixedVerdict.n === 45,
+  JSON.stringify(mixedVerdict)
+);
+const mixedStats = calibrationStats(mixed);
+check(
+  "coverage reports mine and league-wide separately",
+  mixedStats.mine === 45 && mixedStats.league === 60 && mixedStats.tracked === 105,
+  JSON.stringify(mixedStats)
+);
+// ...and they DO feed the source comparisons, which is the entire point.
+check(
+  "league rows count toward the props comparison",
+  sourceAccuracy(mixed).n === 60 && sourceAccuracy(mixed).basis === "measured",
+  JSON.stringify(sourceAccuracy(mixed))
+);
+
 // preseason / non-numeric weeks aren't gradeable
 check(
   "a non-numeric week captures nothing",
