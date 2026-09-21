@@ -1,19 +1,42 @@
-# Status — handoff as of 2026-09-10 (late)
+# Status — state of play
 
-Written for whoever picks this up next. Current state, what's deployed, what
-isn't, and what to do in what order. `docs/DESIGN.md` holds the locked visual
-direction; this file holds the state of play.
+**Most of the detail below was written 2026-09-10 and has been overtaken.** The
+current handoff is `docs/HANDOFF-TOMORROW.md` (Sept 21) — read that first, then
+`docs/QUEUE.md`, and treat anything in this file dated older as history rather
+than status. The sections that were plainly wrong are corrected in place and
+marked.
 
-## Branch state
+## Branch state — as of Sept 21
 
 | branch | state |
 | --- | --- |
-| `main` | deployed. **Everything is shipped — nothing is stranded on a branch.** |
+| `main` | deployed, at `85e96d2`. **Everything is shipped — nothing is stranded on a branch.** |
 
 Working tree clean, `main` and `origin/main` in sync.
 
-**Read `docs/QUEUE.md` first** — it is the live list of what is and isn't done.
-`docs/SUNDAY.md` is the validation plan for the Week 1 slate.
+**Two sessions have been shipping to `main` in parallel.** `main` moved
+mid-session more than once and one merge was not clean. Fetch before assuming
+your branch point is current.
+
+## Shipped Sept 21
+
+- **A player row leads with the fact.** Live rows lead with points banked, final
+  rows with points scored, each with a projection beneath and the direction on
+  that projection. Shared through `rowGameState()`, so the paired board and the
+  roster list both carry it. Two locked `DESIGN.md` decisions were reversed, with
+  the reasoning recorded.
+- **The calibration ledger's three gaps** — the freeze now needs a pregame
+  number to freeze (this one was a correctness bug), props are graded rather
+  than merely stored, and the whole league is recorded instead of my sixteen.
+- **The screenshot harness runs off the Mac**, plus two shots that never
+  existed: the roster list and the calibration ledger panel.
+
+Full reasoning, and the three things to watch, in `docs/HANDOFF-TOMORROW.md`.
+
+---
+
+**Everything below this line is from 2026-09-10.** Kept for the reasoning, not
+as a statement of current state.
 
 ## Working agreement
 
@@ -68,15 +91,16 @@ restore byte-identical state from backup. Kyle now holds the key in a password
 manager. **It is still single-copy in one browser's localStorage plus that
 manager — no backup contains it, and the server stores only its SHA-256.**
 
-## On the branch, awaiting review
+## ~~On the branch, awaiting review~~ — ALL SHIPPED since
 
 - `src/gaugeGeometry.js` — pure geometry, 11 sanity assertions
 - `src/components/ProjectionGauge.jsx` — the speedometer
 - `src/components/PlayerCard.jsx` — gauge + evidence tiles + news
 - `scripts/shots.mjs` + `scripts/shots-entry.jsx` — the screenshot harness
 
-**Not wired into the app.** Tapping a player still shows the old `PlayerModal`;
-none of this renders anywhere a user can reach.
+All four are on `main` and reachable: `PlayerCard` renders in the modal and in
+`OpponentCard`, and the harness is the documented way to check a UI change. The
+"not wired into the app" note below it was true on Sept 10 and is not now.
 
 ### Two things screenshots caught that no assertion could
 
@@ -88,11 +112,9 @@ Worth internalising before trusting a green `npm run verify`:
    a card holding a full set of Vegas lines rendered "No lines pasted for this
    week". Rendered fine, passed, silently wrong.
 
-## Next, in order
+## Next, in order  — *(step 1 is done; 2 and 3 still stand)*
 
-1. **Wire `PlayerCard` into `PlayerModal`.** This is the step that makes any of
-   it visible. Needs real values plumbed for the four inputs — most will be
-   absent, which the card already handles explicitly.
+1. ~~**Wire `PlayerCard` into `PlayerModal`.**~~ Done and deployed.
 2. **The helmet icon.** `public/apple-touch-icon.png` and `public/icons/*.png`
    per `docs/ICONS.md`. The asset is authored outside the repo; **never
    approximate it**. Until it lands, iOS falls back to a screenshot of the page

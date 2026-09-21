@@ -37,11 +37,12 @@ width — "Trevor…" / "Matth…" — because the name column is about half a s
 Fixed with `shortName()`: `T. Lawrence`. Defenses keep the team name, since the
 first pass turned `Lions D/ST` into `L. D/ST`.
 
-**Still open, from your spec:**
-- under each name: position, team, bye, kickoff time and opponent, injury tag inline
-- game-progress track with team logo at the outer end
-- status line below: Not yet started / live clock / Final
-- bench as a collapsed section, or nowhere
+**Those four are now SHIPPED and deployed** (detail line, progress track, status
+line, starters-only). What replaced them, Sept 21: the number treatment on each
+row — see `DESIGN.md` and `docs/HANDOFF-TOMORROW.md`. A live row leads with
+points banked and a final row leads with points scored, each with a projection
+beneath. That reversed two locked decisions; both reversals are written down
+with the reasoning, so don't revert them by reflex.
 
 ### 4. The three missing feeds
 
@@ -53,10 +54,14 @@ Note: props are further along than `DESIGN.md` implies. `api/odds.js` is wired
 and `propsProj` / `propsParts` / `propsSource: "odds-api"` are real on the live
 roster. The gap is matchup and consensus.
 
-### 5. Verification rule into DESIGN.md
+### 5. Verification rule — LANDED, in CLAUDE.md not DESIGN.md
 
-As a standing rule, not a status note: **a green `npm run verify` is not proof a
-UI change is correct.** Two bugs today passed every assertion and were caught
+It lives in `CLAUDE.md` now, as a standing rule with the list of bugs that
+passed every assertion — which is the file every session reads first, so it is
+arguably the better home. `DESIGN.md` still does not carry it; close this item
+or move it, but don't write it twice.
+
+The rule: **a green `npm run verify` is not proof a UI change is correct.** Two bugs today passed every assertion and were caught
 only by screenshots — a needle that sliced through the hero number at most
 values, and a card that rendered "no lines pasted" while holding a full set of
 Vegas lines.
@@ -66,6 +71,29 @@ Vegas lines.
 Draft it from `docs/ICONS.md` and show a render; faster than hunting a file that
 may not exist. Until icons land, **don't add the app to a home screen** — iOS
 captures the icon at add time and only a remove-and-re-add picks up a new one.
+
+## Calibration ledger — three gaps closed Sept 21, one left
+
+Shipped and deployed. Detail in `docs/HANDOFF-TOMORROW.md`; `src/calibration.js`
+carries the reasoning inline.
+
+- **The freeze now needs a pregame number to freeze.** Was a correctness bug: a
+  week whose first sync landed after kickoff recorded a post-kickoff projection
+  as though it were pregame.
+- **Props are graded, not just stored** — `sourceAccuracy()`. They are not a
+  blend weight; they REPLACE the expert blend when a line exists, so what gets
+  measured is that precedence. Reported, never applied.
+- **The whole league is recorded**, not my sixteen. ~90 rows a week instead of
+  16, no extra API call.
+
+**Still open — the reason the ledger exists.** `BASE_CV`, `PLAY_PROB` and
+`TEAM_LOAD` are still hand-picked constants that every number in the app
+inherits. `sd` and `playProb` are being captured, so the data will be there.
+Offseason work by design — but it is the finish line, and nothing else in this
+file replaces it.
+
+**Watch:** the ledger is now the largest thing in the team document (247 bytes a
+league row, ~390 KB a season at 10 teams) and it re-serialises on every save.
 
 ## Game-script projections
 
@@ -170,6 +198,13 @@ against the approved gauge reference.
 
 Kyle's review of the shipped board. An approved reference is coming; build
 against that, not against this list. Captured so nothing is lost.
+
+**Update, Sept 21.** A reference did arrive, but only for one piece of this: two
+screenshots, the board next to ESPN's matchup tab, for the NUMBER TREATMENT on a
+row. That is built and deployed. **Everything below is untouched by it** — the
+anchor problem, the pinned own-matchup, the duplicated header. Those still need
+the approved reference this section is waiting on; the ESPN screenshots do not
+settle them.
 
 **The anchor problem is the root, and everything else falls out of it.**
 Kyle read the live board and concluded he was the OPPONENT. He isn't —
