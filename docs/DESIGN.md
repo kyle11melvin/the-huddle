@@ -142,7 +142,7 @@ otherwise looked identical.
 | | number | name / meta | chip | track | row |
 | --- | --- | --- | --- | --- | --- |
 | **FINAL** | **ONE** number, white, solid — what he actually scored | recede to muted slate `#63768F` | solid `FINAL` | full, muted grey | — |
-| **LIVE** | decayed projection large, pregame struck through beneath | normal | red, quarter + clock (`Q3 6:14`) | partly filled, red | red edge |
+| **LIVE** | **banked points** large and white, **projected finish** beneath | normal | red, quarter + clock (`Q3 6:14`) | partly filled, red | red edge |
 | **PRE** | projection alone, grey | normal | kickoff time | empty | — |
 
 **Never show two numbers except while live.** A projection is dead once the
@@ -150,11 +150,24 @@ game ends — it is a fact now, not an estimate, and showing both invites a
 comparison that no longer means anything. Pre-kickoff there is one number and
 it is an estimate. Two numbers means *this is moving*.
 
+**While live, the fact leads and the estimate sits under it** (Kyle, Sept 21,
+against ESPN's matchup tab as the reference). The board used to lead with the
+decayed projection and strike the pregame figure beneath it, so the one number
+that was not an estimate — what he has actually scored — was the one number not
+on the screen. The pregame figure is gone from the row: it is the least useful
+of the three once a game is running, and the direction of the projection
+already says which way he is going.
+
+The slot edge in the centre column still weighs *projected finish*, not banked
+points, so it does not hand a slot to whoever kicked off first.
+
 **Rows where BOTH sides are final sink** — dimmer background, dimmer slot
 badge. Ten rows then collapse into "here's what's left" without reading a word.
 
 **Live projections read DIRECTIONALLY:** below pregame is red, above is green.
-A player fading and a player going off must not look the same.
+A player fading and a player going off must not look the same. The direction
+belongs to the projection beneath, never to the banked points above it — those
+are a fact and carry no direction.
 
 **Every state carries a WORD** — `Final`, a clock, a kickoff time. Never colour
 alone: it has to survive a glance in sunlight, and colour alone also fails a

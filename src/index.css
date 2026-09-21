@@ -3499,9 +3499,10 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   text-align: left;
 }
 
-/* The pregame figure, struck through, shown ONLY while live. At final there is
-   one number and it is a fact; pre-kickoff there is one number and it is an
-   estimate. Two numbers only ever means "this is moving". */
+/* The projected finish, under the points already banked, shown ONLY while live.
+   Not struck through: it is a live estimate, not a superseded one. At final
+   there is one number and it is a fact; pre-kickoff there is one number and it
+   is an estimate. Two numbers only ever means "this is moving". */
 .h2h-pr small {
   display: block;
   margin-top: 2px;
@@ -3509,20 +3510,22 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   font-size: 8.5px;
   font-weight: 400;
   color: var(--text-dim);
-  text-decoration: line-through;
 }
 
-/* Directional. A player fading and a player going off must not look the same. */
-.h2h-pr.down {
+/* Directional, on the projection — a player fading and a player going off must
+   not look the same. The headline above it is banked points, which are a fact
+   and carry no direction. */
+.h2h-pr small.down {
   color: #ff5d5d;
 }
 
-.h2h-pr.up {
+.h2h-pr small.up {
   color: var(--positive);
 }
 
-/* Final: white and solid. It happened. */
-.h2h-pr.isfinal {
+/* Final and live: white and solid. Both headlines are points on the board. */
+.h2h-pr.isfinal,
+.h2h-pr.islive {
   color: #ffffff;
 }
 

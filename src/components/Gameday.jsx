@@ -834,13 +834,18 @@ function sideData(row, week, state) {
   // FINAL shows ONE number: what he actually scored. A projection is dead once
   // the game ends — it is a fact now, not an estimate, and showing both invites
   // a comparison that no longer means anything.
-  // LIVE shows the decayed projection with the pregame figure struck beneath.
-  // PRE shows the projection alone.
-  const value = isFinal ? scored : live;
-  const was = isLive && Number.isFinite(row.proj) && live != null && Math.abs(row.proj - live) >= 0.1 ? row.proj : null;
+  // LIVE leads with what he has BANKED, the projected finish beneath it. That is
+  // the number you are watching the game for; the board used to show only the
+  // decayed projection, so the one fact on the screen was the one thing missing.
+  // PRE shows the projection alone — repeating it underneath would say nothing.
+  const value = isFinal || isLive ? scored : live;
+  const sub = isLive ? live : null;
 
-  // Directional: a player fading and a player going off must not look the same.
-  const dir = was == null ? "" : live > row.proj ? "up" : "down";
+  // Directional, and now on the PROJECTION rather than on the headline: a player
+  // fading and a player going off must not look the same, but points already
+  // banked are a fact and carry no direction.
+  const dir =
+    isLive && sub != null && Number.isFinite(row.proj) && Math.abs(row.proj - sub) >= 0.1 ? (sub > row.proj ? "up" : "down") : "";
 
   // Every state carries a WORD, never colour alone — it has to survive a glance
   // in sunlight, and colour alone fails that and fails colour-blind readers.
@@ -852,12 +857,15 @@ function sideData(row, week, state) {
     isFinal,
     isLive,
     value,
-    was,
+    sub,
     dir,
     chip,
-    // What he is worth RIGHT NOW — the same number the row displays: banked
-    // points once final, the live projection while football remains.
-    worth: value,
+    // What he is worth RIGHT NOW: banked points once final, the live projection
+    // while football remains. No longer the same number the row displays — a
+    // live row leads with banked points, but the slot edge still has to weigh
+    // what each side will FINISH with, or it would call a slot for whoever
+    // happened to kick off first.
+    worth: isFinal ? scored : live,
     prog: isFinal ? 1 : isLive ? 1 - (l.pctRemaining ?? 1) : 0,
     when,
     opp,
@@ -887,10 +895,11 @@ const Face = ({ row }) => {
 
 const Proj = ({ d, right }) => {
   if (!d) return <span className="h2h-pr" />;
+  const state = d.isFinal ? "isfinal" : d.isLive ? "islive" : "";
   return (
-    <span className={`h2h-pr ${d.isFinal ? "isfinal" : d.dir} ${right ? "r" : ""}`}>
+    <span className={`h2h-pr ${state} ${right ? "r" : ""}`}>
       {d.value != null ? d.value.toFixed(1) : "–"}
-      {d.was != null && <small>{d.was.toFixed(1)}</small>}
+      {d.sub != null && <small className={d.dir}>{d.sub.toFixed(1)}</small>}
     </span>
   );
 };
