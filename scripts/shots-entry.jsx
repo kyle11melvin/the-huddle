@@ -10,3 +10,6 @@ export { default as LeagueBrowser } from "../src/components/LeagueBrowser.jsx";
 export { default as DataPanel } from "../src/components/DataPanel.jsx";
 export { PlayerModal } from "../src/components/modals/index.jsx";
 export { default as OpponentCard } from "../src/components/modals/OpponentCard.jsx";
+// The same realistic fixture the smoke test renders against, for machines that
+// do not hold Kyle's exported team document.
+export { makeState } from "./smoke-entry.jsx";
