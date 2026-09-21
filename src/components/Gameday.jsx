@@ -851,7 +851,7 @@ function sideData(row, week, state) {
     { mean: row.proj, condMean: row.simProj ?? row.proj, playProb: row.playProb ?? 1 },
     l
   );
-  const { status, isFinal, isLive, value, was, dir, chip, when } = g;
+  const { status, isFinal, isLive, value, sub, dir, chip, when, worth } = g;
   const game = (state.espn && state.espn.games && row.team && state.espn.games[row.team]) || null;
   const opp = opponentOf((row.weeks && row.weeks[week] && row.weeks[week].opp) || scheduleOpp(state, row.team, week));
 
@@ -861,12 +861,12 @@ function sideData(row, week, state) {
     isFinal,
     isLive,
     value,
-    was,
+    sub,
     dir,
     chip,
-    // What he is worth RIGHT NOW — the same number the row displays: banked
-    // points once final, the live projection while football remains.
-    worth: value,
+    // Banked points once final, the projected finish while football remains —
+    // see rowGameState. Deliberately NOT the number the row now displays.
+    worth,
     prog: g.prog,
     when,
     opp,
@@ -896,10 +896,11 @@ const Face = ({ row }) => {
 
 const Proj = ({ d, right }) => {
   if (!d) return <span className="h2h-pr" />;
+  const state = d.isFinal ? "isfinal" : d.isLive ? "islive" : "";
   return (
-    <span className={`h2h-pr ${d.isFinal ? "isfinal" : d.dir} ${right ? "r" : ""}`}>
+    <span className={`h2h-pr ${state} ${right ? "r" : ""}`}>
       {d.value != null ? d.value.toFixed(1) : "–"}
-      {d.was != null && <small>{d.was.toFixed(1)}</small>}
+      {d.sub != null && <small className={d.dir}>{d.sub.toFixed(1)}</small>}
     </span>
   );
 };

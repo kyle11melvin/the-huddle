@@ -630,7 +630,10 @@ check(
   gsSoon.isFinal === false && gsSoon.value === 14,
   JSON.stringify({ chip: gsSoon.chip, value: gsSoon.value })
 );
-// A live player carries BOTH numbers and a direction; nobody else does.
+// A live player carries BOTH numbers and a direction; nobody else does. The
+// headline is what he has BANKED and the projected finish sits under it —
+// ESPN's treatment (Kyle, Sept 21). The number he is WORTH to a comparison is
+// still the projected finish, which is no longer the number on display.
 const a4Live = {
   ...a4State,
   espn: {
@@ -642,16 +645,33 @@ const a4Live = {
 };
 const gsLive = rowGameState(a4Live, a4Live.players.soon, "1", pointDistribution(a4Live.players.soon, "1", a4Live));
 check(
-  "a live player shows the decayed number, the pregame one to strike, and a direction",
-  gsLive.isLive === true && gsLive.chip === "Q3 6:14" && gsLive.was === 14 && gsLive.dir === "down" && gsLive.value === 12.5,
-  JSON.stringify({ chip: gsLive.chip, value: gsLive.value, was: gsLive.was, dir: gsLive.dir })
+  "a live player leads with points banked, the projected finish beneath, with a direction",
+  gsLive.isLive === true && gsLive.chip === "Q3 6:14" && gsLive.value === 9 && gsLive.sub === 12.5 && gsLive.dir === "down",
+  JSON.stringify({ chip: gsLive.chip, value: gsLive.value, sub: gsLive.sub, dir: gsLive.dir })
 );
 
-// Never two numbers except while live: a final has no `was` to strike out.
+// The displayed number and the comparable number have come apart, on purpose:
+// a slot comparison that weighed banked points would hand the slot to whoever
+// kicked off first.
 check(
-  "a finished player carries no struck-through pregame number",
-  gsDone.was == null,
-  `was ${gsDone.was}`
+  "a live player is WORTH his projected finish, not the points on his headline",
+  gsLive.worth === 12.5 && gsLive.value === 9,
+  JSON.stringify({ worth: gsLive.worth, value: gsLive.value })
+);
+
+// Never two numbers except while live: a final has nothing beneath it.
+check(
+  "a finished player carries no second number",
+  gsDone.sub == null,
+  `sub ${gsDone.sub}`
+);
+
+// ...and neither does one who has not kicked off: the projection IS his
+// headline, so repeating it underneath would say nothing.
+check(
+  "a player who has not kicked off carries no second number",
+  gsSoon.sub == null,
+  `sub ${gsSoon.sub}`
 );
 
 // ---- 12e. the league scoreboard mid-week ----

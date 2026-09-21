@@ -165,21 +165,22 @@ export default function RosterRow({
           {shown != null && (
             <span className="row-num">
               <span
-                className={`row-proj ${g ? (g.isFinal ? "isfinal" : g.dir) : ""}`}
+                className={`row-proj ${g ? (g.isFinal || g.isLive ? "isfinal" : "") : ""}`}
                 title={
                   g && g.isFinal
                     ? "Final — what he actually scored"
                     : g && g.isLive
-                      ? "Live: points banked plus the rest of his projection"
+                      ? "Live: points he has banked so far"
                       : "Projected points this week (props > ESPN, Vegas-tilted)"
                 }
               >
                 {shown}
               </span>
-              {/* Two numbers ONLY while live. A projection is dead once the
-                  game ends, and showing both invites a comparison that no
-                  longer means anything. */}
-              {g && g.was != null && <span className="row-was">{g.was}</span>}
+              {/* Two numbers ONLY while live: what he has banked, with the
+                  projected finish under it. A projection is dead once the game
+                  ends, and showing both invites a comparison that no longer
+                  means anything. */}
+              {g && g.sub != null && <span className={`row-sub ${g.dir}`}>{g.sub}</span>}
             </span>
           )}
           <span className="ecr-badge">{player.ecr || "—"}</span>

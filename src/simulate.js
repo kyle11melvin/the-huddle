@@ -654,11 +654,12 @@ export function liveProjection({ pregame, ifPlays, scored, pctRemaining, status,
  * roster screen went on showing a projection for a player whose game had
  * finished hours earlier.
  *
- *   FINAL  one number: what he actually scored. No struck-through pregame —
+ *   FINAL  one number: what he actually scored. No pregame figure beneath —
  *          a projection is dead once the game ends, and showing both invites
  *          a comparison that no longer means anything.
- *   LIVE   the decayed projection, with the pregame figure to strike beneath
- *          it, plus a direction so fading and going off do not look alike.
+ *   LIVE   what he has BANKED, with the projected finish beneath it, plus a
+ *          direction on that projection so fading and going off do not look
+ *          alike. The banked number carries no direction: it is a fact.
  *   PRE    the projection alone.
  *
  * Every state carries a WORD as well as a colour, because colour alone fails
@@ -688,9 +689,14 @@ export function rowGameState(state, player, week, dist, liveEntry) {
     playProb: dist && Number.isFinite(dist.playProb) ? dist.playProb : 1,
   });
 
-  const value = isFinal ? scored : live;
-  const was = isLive && pregame != null && live != null && Math.abs(pregame - live) >= 0.1 ? pregame : null;
-  const dir = was == null ? "" : live > pregame ? "up" : "down";
+  // Live leads with the fact and puts the estimate under it (Kyle, Sept 21,
+  // against ESPN's matchup tab). The row used to lead with the decayed
+  // projection and strike the pregame figure beneath, so the one number that
+  // was not an estimate — what he has actually scored — was the one number not
+  // on the screen you only look at while the games are on.
+  const value = isFinal || isLive ? scored : live;
+  const sub = isLive ? live : null;
+  const dir = sub != null && pregame != null && Math.abs(pregame - sub) >= 0.1 ? (sub > pregame ? "up" : "down") : "";
 
   const game = (state.espn && state.espn.games && player && player.team && state.espn.games[player.team]) || null;
   const when = game && game.startTime ? kickoffLabel(game.startTime) : "";
@@ -700,8 +706,13 @@ export function rowGameState(state, player, week, dist, liveEntry) {
     isFinal,
     isLive,
     value,
-    was,
+    sub,
     dir,
+    // What he is WORTH right now, which is no longer what the row displays:
+    // banked points once final, the projected finish while football remains.
+    // A comparison between two players has to weigh where they will finish, or
+    // it hands the slot to whoever happened to kick off first.
+    worth: isFinal ? scored : live,
     chip: isFinal ? "FINAL" : isLive ? l.detail || "LIVE" : when || "PRE",
     prog: isFinal ? 1 : isLive ? 1 - (l.pctRemaining ?? 1) : 0,
     when,

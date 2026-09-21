@@ -21,7 +21,7 @@
 
 import { build } from "esbuild";
 import puppeteer from "puppeteer-core";
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import React from "react";
@@ -37,6 +37,8 @@ const CHROME =
   process.env.HUDDLE_CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const OUT_DIR = process.argv[2] || "/tmp/huddle-shots";
 const BUNDLE = "node_modules/.shots/bundle.mjs";
+const TEAM_DOC = process.env.TEAM_DOC || "/tmp/ka.json";
+const TEAM_DOC_PRE = process.env.TEAM_DOC_PRE || "/tmp/now.json";
 const CSS = readFileSync(resolve("src/index.css"), "utf8");
 
 // Real numbers off the live roster, chosen to stress the geometry rather than
@@ -86,13 +88,45 @@ const CASES = [
   { file: "gauge-bowers.png", component: "gauge", props: { mean: 3.7, condMean: 14.9, sd: 8.9, playProb: 0.25 } },
 ];
 
+mkdirSync("node_modules/.shots", { recursive: true });
+await build({
+  entryPoints: ["scripts/shots-entry.jsx"],
+  bundle: true,
+  format: "esm",
+  platform: "neutral",
+  mainFields: ["module", "main"],
+  conditions: ["import", "module", "default"],
+  outfile: BUNDLE,
+  jsx: "automatic",
+  loader: { ".css": "empty" },
+  external: ["react", "react-dom", "react-dom/server"],
+  logLevel: "error",
+});
+const M = await import(`${pathToFileURL(resolve(BUNDLE)).href}?t=${Date.now()}`);
+
 // ---- Gameday, with a live slate ----
 // Kyle's REAL team document, with game state injected: tonight's games have
 // not kicked off yet (00:35Z), so there is no genuinely live slate to shoot.
 // Rosters, players and projections are real; the clock and the points scored
 // are set here so the decay is visible.
+// The smoke fixture carries an espn snapshot with EMPTY team rosters, and a
+// player's live points are read from that roster (espnSync.liveEntryFor). Left
+// as-is every live row shoots 0.0 banked, which makes a screenshot of the live
+// treatment show precisely nothing. Mirror the app's own roster into it.
+function withEspnRoster(st) {
+  for (const t of st.espn.teams) {
+    if (t.roster && t.roster.length) continue;
+    t.roster = Object.values(st.players || {}).map((p) => ({ name: p.name, actual: 0 }));
+  }
+  return st;
+}
+
 function liveState() {
-  const st = JSON.parse(_rf("/tmp/ka.json", "utf8")).state;
+  // Kyle's real team document when it is on the machine; the smoke fixture
+  // otherwise. Same players either way — the fixture is built from the same
+  // seed roster — so a machine without the export still renders a true board
+  // rather than nothing at all.
+  const st = existsSync(TEAM_DOC) ? JSON.parse(_rf(TEAM_DOC, "utf8")).state : withEspnRoster(M.makeState());
   const SLATE = {
     JAX: { pct: 0.55, detail: "Q2 07:21" },   // mid-game
     ATL: { pct: 0.12, detail: "Q4 04:50" },   // nearly done, big day banked
@@ -119,6 +153,20 @@ function liveState() {
       if (SCORED[e.name] != null) e.actual = SCORED[e.name];
     }
   }
+  return st;
+}
+
+// Nothing has kicked off: every game back to "pre", nothing scored. The
+// board-pre shot is about the state BEFORE football, so a fixture carrying a
+// live clock would be showing the wrong screen.
+function preState() {
+  const st = M.makeState();
+  for (const g of Object.values((st.espn && st.espn.games) || {})) {
+    g.state = "pre";
+    g.pctRemaining = 1;
+    g.detail = "";
+  }
+  for (const t of st.espn.teams) for (const e of t.roster || []) e.actual = 0;
   return st;
 }
 
@@ -155,8 +203,26 @@ CASES.push({
   component: "today",
   palette: "current",
   props: (() => {
-    const st = JSON.parse(_rf("/tmp/now.json", "utf8")).state;
+    const st = existsSync(TEAM_DOC_PRE) ? JSON.parse(_rf(TEAM_DOC_PRE, "utf8")).state : preState();
     return { state: st, week: "1", onApplyMove: () => {}, onSetLive: () => {}, onSetOpponent: () => {}, onRefresh: () => {}, onOpenRow: () => {} };
+  })(),
+});
+
+// The roster list carries the same three-state treatment as the paired board
+// (rowGameState is shared), and nothing here used to shoot it — so the most-used
+// screen in the app was the one screen never looked at.
+CASES.push({
+  file: "roster-rows.png",
+  component: "rosterrow",
+  palette: "current",
+  props: (() => {
+    const st = liveState();
+    const rows = Object.values(st.players).filter((p) => ["JAX", "ATL", "CIN", "LV"].includes(p.team)).slice(0, 5);
+    return {
+      state: st,
+      rows,
+      week: "1",
+    };
   })(),
 });
 
@@ -191,25 +257,36 @@ CASES.push({
   props: { state: liveState(), week: "1", onSetLive: () => {}, onSetOpponent: () => {}, onRefresh: () => {} },
 });
 
-mkdirSync("node_modules/.shots", { recursive: true });
-await build({
-  entryPoints: ["scripts/shots-entry.jsx"],
-  bundle: true,
-  format: "esm",
-  platform: "neutral",
-  mainFields: ["module", "main"],
-  conditions: ["import", "module", "default"],
-  outfile: BUNDLE,
-  jsx: "automatic",
-  loader: { ".css": "empty" },
-  external: ["react", "react-dom", "react-dom/server"],
-  logLevel: "error",
-});
-const M = await import(`${pathToFileURL(resolve(BUNDLE)).href}?t=${Date.now()}`);
 const COMPONENTS = {
   gauge: M.ProjectionGauge,
   card: M.PlayerCard,
   gameday: M.Gameday,
+  // The real RosterRow, one per player, fed the same rowGameState the app feeds it.
+  rosterrow: ({ state, rows, week }) =>
+    React.createElement(
+      "div",
+      { className: "roster-list" },
+      rows.map((p, i) =>
+        React.createElement(M.RosterRow, {
+          key: p.id,
+          dest: { kind: "slot", slot: p.pos },
+          player: p,
+          week,
+          byes: {},
+          oppFor: () => "",
+          projFor: () => M.pointDistribution(p, week, state).mean,
+          liveFor: (pl) => M.rowGameState(state, pl, week, M.pointDistribution(pl, week, state)),
+          index: i,
+          legalKeys: new Set(),
+          onOpen: () => {},
+          onBadge: () => {},
+          onDragStart: () => {},
+          onDragEnd: () => {},
+          onDrop: () => {},
+          coarse: false,
+        })
+      )
+    ),
   oppcard: M.OpponentCard,
   today: M.Today,
   lab: M.StartSitLab,
