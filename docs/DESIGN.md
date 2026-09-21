@@ -157,14 +157,25 @@ otherwise looked identical.
 
 | | number | name / meta | chip | track | row |
 | --- | --- | --- | --- | --- | --- |
-| **FINAL** | **ONE** number, white, solid — what he actually scored | recede to muted slate `#63768F` | solid `FINAL` | full, muted grey | — |
+| **FINAL** | what he actually scored, white and solid, **pregame projection** beneath with a direction | recede to muted slate `#63768F` | solid `FINAL` | full, muted grey | — |
 | **LIVE** | **banked points** large and white, **projected finish** beneath | normal | red, quarter + clock (`Q3 6:14`) | partly filled, red | red edge |
 | **PRE** | projection alone, grey | normal | kickoff time | empty | — |
 
-**Never show two numbers except while live.** A projection is dead once the
-game ends — it is a fact now, not an estimate, and showing both invites a
-comparison that no longer means anything. Pre-kickoff there is one number and
-it is an estimate. Two numbers means *this is moving*.
+**One number before kickoff, two after it.** Pre-kickoff there is one number
+and it is an estimate — repeating it underneath would say nothing. Once a game
+starts, the fact leads and a projection sits beneath it.
+
+*This reverses an earlier call* (Kyle, Sept 21). The rule used to be "never two
+numbers except while live", on the reasoning that a projection is dead once the
+game ends and showing both invites a meaningless comparison. It is the opposite:
+"projected 11.5, got 5" is the entire grade on a finished player, and the old
+rule threw that away every Sunday night. The comparison a final invites is the
+one worth inviting.
+
+Which projection sits underneath differs by state, and has to: while live it is
+the projected finish, at final it is the **pregame** figure. At final the live
+projection has already collapsed to the actual, so printing it would print the
+headline twice.
 
 **While live, the fact leads and the estimate sits under it** (Kyle, Sept 21,
 against ESPN's matchup tab as the reference). The board used to lead with the
@@ -180,10 +191,12 @@ points, so it does not hand a slot to whoever kicked off first.
 **Rows where BOTH sides are final sink** — dimmer background, dimmer slot
 badge. Ten rows then collapse into "here's what's left" without reading a word.
 
-**Live projections read DIRECTIONALLY:** below pregame is red, above is green.
-A player fading and a player going off must not look the same. The direction
-belongs to the projection beneath, never to the banked points above it — those
-are a fact and carry no direction.
+**The second number reads DIRECTIONALLY:** below pregame is red, above is
+green. A player fading and a player going off must not look the same. The
+direction belongs to the number beneath, never to the points above it — those
+are a fact and carry no direction. It answers one question in both states —
+better or worse than we thought — though the number carrying it differs: live
+it is the estimate against pregame, at final the actual against pregame.
 
 **Every state carries a WORD** — `Final`, a clock, a kickoff time. Never colour
 alone: it has to survive a glance in sunlight, and colour alone also fails a

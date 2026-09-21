@@ -659,11 +659,12 @@ check(
   JSON.stringify({ worth: gsLive.worth, value: gsLive.value })
 );
 
-// Never two numbers except while live: a final has nothing beneath it.
+// A final carries the PREGAME figure beneath, not the live projection — that
+// one has collapsed to the actual and would print the headline twice.
 check(
-  "a finished player carries no second number",
-  gsDone.sub == null,
-  `sub ${gsDone.sub}`
+  "a finished player carries his pregame projection beneath, and a direction",
+  gsDone.sub === 22.2 && gsDone.value === 3 && gsDone.dir === "down",
+  JSON.stringify({ value: gsDone.value, sub: gsDone.sub, dir: gsDone.dir })
 );
 
 // ...and neither does one who has not kicked off: the projection IS his

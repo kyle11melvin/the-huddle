@@ -654,9 +654,10 @@ export function liveProjection({ pregame, ifPlays, scored, pctRemaining, status,
  * roster screen went on showing a projection for a player whose game had
  * finished hours earlier.
  *
- *   FINAL  one number: what he actually scored. No pregame figure beneath —
- *          a projection is dead once the game ends, and showing both invites
- *          a comparison that no longer means anything.
+ *   FINAL  what he actually scored, with the PREGAME projection beneath it and
+ *          a direction on it: did he beat what we said he would? That number
+ *          is the whole grade on a finished player, and hiding it threw the
+ *          week away (Kyle, Sept 21 — this reverses the earlier call).
  *   LIVE   what he has BANKED, with the projected finish beneath it, plus a
  *          direction on that projection so fading and going off do not look
  *          alike. The banked number carries no direction: it is a fact.
@@ -689,14 +690,27 @@ export function rowGameState(state, player, week, dist, liveEntry) {
     playProb: dist && Number.isFinite(dist.playProb) ? dist.playProb : 1,
   });
 
-  // Live leads with the fact and puts the estimate under it (Kyle, Sept 21,
-  // against ESPN's matchup tab). The row used to lead with the decayed
+  // Live and final both lead with the fact and put a projection under it (Kyle,
+  // Sept 21, against ESPN's matchup tab). The row used to lead with the decayed
   // projection and strike the pregame figure beneath, so the one number that
   // was not an estimate — what he has actually scored — was the one number not
   // on the screen you only look at while the games are on.
   const value = isFinal || isLive ? scored : live;
-  const sub = isLive ? live : null;
-  const dir = sub != null && pregame != null && Math.abs(pregame - sub) >= 0.1 ? (sub > pregame ? "up" : "down") : "";
+  // WHICH projection differs by state, and it has to: at final the live
+  // projection has collapsed to the actual, so printing it would print the
+  // headline twice. The pregame figure is the one that still says something —
+  // "projected 11.5, got 5" is the read on a finished player.
+  const sub = isFinal ? pregame : isLive ? live : null;
+  // One question in both states — better or worse than we thought — carried by
+  // a different number in each: live it is the estimate against pregame, at
+  // final the actual against pregame.
+  const judged = isFinal ? scored : sub;
+  const dir =
+    sub != null && pregame != null && judged != null && Math.abs(pregame - judged) >= 0.1
+      ? judged > pregame
+        ? "up"
+        : "down"
+      : "";
 
   const game = (state.espn && state.espn.games && player && player.team && state.espn.games[player.team]) || null;
   const when = game && game.startTime ? kickoffLabel(game.startTime) : "";
