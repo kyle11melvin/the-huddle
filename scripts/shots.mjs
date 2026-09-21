@@ -19,6 +19,39 @@
 // while the needle sliced straight through the hero number.
 // ============================================================================
 
+// A minimal browser surface, installed BEFORE the bundle imports — the same
+// one smoke.mjs uses, because App and its hooks reach for these at module
+// scope. Only needed by the whole-app shots; the component shots never touch it.
+const __store = new Map();
+globalThis.window = globalThis;
+globalThis.localStorage = {
+  getItem: (k) => (__store.has(k) ? __store.get(k) : null),
+  setItem: (k, v) => __store.set(k, String(v)),
+  removeItem: (k) => __store.delete(k),
+};
+globalThis.matchMedia = (q) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
+globalThis.document = {
+  visibilityState: "visible",
+  addEventListener() {},
+  removeEventListener() {},
+  documentElement: { scrollHeight: 2000, scrollWidth: 400 },
+  body: { style: {} },
+  getElementById: () => null,
+  querySelector: () => null,
+};
+globalThis.addEventListener = () => {};
+globalThis.removeEventListener = () => {};
+globalThis.requestAnimationFrame = () => 0;
+globalThis.cancelAnimationFrame = () => {};
+globalThis.scrollTo = () => {};
+globalThis.location = { search: "", href: "https://the-huddle-hq.vercel.app/" };
+Object.defineProperty(globalThis, "navigator", {
+  value: { maxTouchPoints: 0, clipboard: { writeText: async () => {} }, userAgent: "shots" },
+  configurable: true,
+  writable: true,
+});
+globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({}), headers: { get: () => null } });
+
 import { build } from "esbuild";
 import puppeteer from "puppeteer-core";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -156,6 +189,26 @@ function liveState() {
   return st;
 }
 
+// The ledger panel, in the state it will actually be in for months: capturing,
+// not yet judging. That "too thin to say" text is what Kyle sees until the row
+// count crosses the thresholds, so it is the copy worth looking at — the
+// measured branches are pinned by assertions in scripts/sanity.mjs instead.
+function gradedState() {
+  const st = withEspnRoster(M.makeState());
+  const rows = {};
+  Object.values(st.players).forEach((p, i) => {
+    for (let k = 0; k < 4; k++) {
+      rows[`${p.id}-${k}`] = {
+        name: p.name, pos: p.pos, team: p.team,
+        proj: 12, condMean: 12, sd: 6, playProb: 1, locked: true,
+        actual: 12 + (i % 3) - 1,
+        sources: { espn: 15, fp: 15, props: 13 },
+      };
+    }
+  });
+  return { ...st, calibration: { 1: rows, 2: rows }, projWeights: { espn: 0.5, fp: 0.5, basis: "assumed" } };
+}
+
 // Nothing has kicked off: every game back to "pre", nothing scored. The
 // board-pre shot is about the state BEFORE football, so a fixture carrying a
 // live clock would be showing the wrong screen.
@@ -211,6 +264,16 @@ CASES.push({
 // The roster list carries the same three-state treatment as the paired board
 // (rowGameState is shared), and nothing here used to shoot it — so the most-used
 // screen in the app was the one screen never looked at.
+// The calibration ledger lives on the "log" tab, inside App rather than in a
+// component of its own, and nothing shot it — so the panel that reports whether
+// the model is any good was itself never looked at.
+CASES.push({
+  file: "screen-ledger.png",
+  component: "app",
+  palette: "current",
+  props: { state: gradedState(), tab: "log" },
+});
+
 CASES.push({
   file: "roster-rows.png",
   component: "rosterrow",
@@ -261,6 +324,10 @@ const COMPONENTS = {
   gauge: M.ProjectionGauge,
   card: M.PlayerCard,
   gameday: M.Gameday,
+  app: ({ state, tab }) => {
+    globalThis.localStorage.setItem("huddle-data", JSON.stringify({ ...state, week: "1" }));
+    return React.createElement(M.App, { initialTab: tab });
+  },
   // The real RosterRow, one per player, fed the same rowGameState the app feeds it.
   rosterrow: ({ state, rows, week }) =>
     React.createElement(

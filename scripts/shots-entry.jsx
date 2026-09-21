@@ -15,7 +15,7 @@ export { PlayerModal } from "../src/components/modals/index.jsx";
 export { default as OpponentCard } from "../src/components/modals/OpponentCard.jsx";
 // The same realistic fixture the smoke test renders against, for machines that
 // do not hold Kyle's exported team document.
-export { makeState } from "./smoke-entry.jsx";
+export { makeState, App } from "./smoke-entry.jsx";
 // The shared three-state view-model, so a shot renders the real thing.
 export { rowGameState } from "../src/simulate.js";
 export { pointDistribution } from "../src/analytics.js";

@@ -35,7 +35,7 @@ import { gameStatesFrom } from "../api/espn-write.js";
 import { storage, probeStorage, STORAGE_MESSAGE } from "../src/storage.js";
 import { isAuthorized } from "../api/_auth.js";
 import { readFileSync } from "node:fs";
-import { captureCalibration, calibrationStats, calibrationSummary } from "../src/calibration.js";
+import { captureCalibration, calibrationStats, calibrationSummary, sourceAccuracy } from "../src/calibration.js";
 import { priceBid, demandFactor, weakestReplaceablePoints } from "../src/watchlist.js";
 import { liveRankInfo, RANK_SOURCE_LABEL, RANK_SOURCE_SHORT, positionNeedPoints, positionNeeds, dropCandidate } from "../src/analysis.js";
 import { currentMatchupPeriod, weeklyProj } from "../api/espn.js";
@@ -1277,6 +1277,86 @@ let r5 = captureCalibration(s5, "1");
 const row = r5.calibration["1"].c1;
 check("final records the actual", row.actual === 22.4 && r5.graded === 1, JSON.stringify(row));
 check("the graded pair is the frozen projection, not the late one", row.proj === 14 && row.actual === 22.4);
+
+// ---- 23b. the freeze needs a pregame number to freeze ----
+// Locking used to mean "recompute at the first sync on or after kickoff and
+// stamp it locked". Both of these are that hole: the number it stamps was
+// computed with the game already in progress.
+
+// (a) a sync that lands AT kickoff must lock what was captured before it, not
+//     re-read the projection — which by then may already reflect the game.
+let sLock = { ...calState(3, "in", null), calibration: r2.calibration };
+let rLock = captureCalibration(sLock, "1");
+check(
+  "locking freezes the pregame number, it does not recompute at kickoff",
+  rLock.calibration["1"].c1.proj === 14,
+  `got ${rLock.calibration["1"].c1.proj} — the number was re-read after kickoff`
+);
+
+// (b) nobody opened the app until Sunday afternoon: there is no pregame number
+//     for this player at all, so there is nothing honest to grade.
+let sLate = calState(9, "in", null);
+let rLate = captureCalibration(sLate, "1");
+check(
+  "a first sync after kickoff records no projection",
+  rLate.calibration["1"].c1 === undefined && rLate.missed === 1 && rLate.captured === 0,
+  JSON.stringify({ row: rLate.calibration["1"].c1, missed: rLate.missed, captured: rLate.captured })
+);
+
+// ...and the actual must not be recorded either: an actual with no projection
+// to grade it against is not a data point, it is a number with no question.
+let sLateFinal = { ...calState(9, "post", 18.2), calibration: rLate.calibration };
+let rLateFinal = captureCalibration(sLateFinal, "1");
+check(
+  "an ungraded-because-late player records no actual either",
+  rLateFinal.calibration["1"].c1 === undefined && rLateFinal.graded === 0,
+  JSON.stringify({ row: rLateFinal.calibration["1"].c1, graded: rLateFinal.graded })
+);
+
+// ---- 23c. props are GRADED, not just stored ----
+// analytics.js lets props REPLACE the expert blend outright. sources.props has
+// been stored since week 1 and nothing read it back, so the strongest
+// assumption in the projection path was the one never checked.
+const accRows = (n, propsErr, blendErr) => {
+  const rows = {};
+  for (let i = 0; i < n; i++) {
+    rows[`p${i}`] = {
+      actual: 10,
+      sources: { espn: 10 + blendErr, fp: 10 + blendErr, props: 10 + propsErr },
+      proj: 10,
+    };
+  }
+  return { calibration: { 1: rows }, projWeights: { espn: 0.5, fp: 0.5, basis: "assumed" } };
+};
+check(
+  "thin data reports coverage, never a verdict",
+  sourceAccuracy(accRows(5, 1, 4)).basis === "thin" && sourceAccuracy(accRows(5, 1, 4)).n === 5,
+  JSON.stringify(sourceAccuracy(accRows(5, 1, 4)))
+);
+const accProps = sourceAccuracy(accRows(25, 1, 4));
+check(
+  "props ahead of the blend is measured and named",
+  accProps.basis === "measured" && accProps.props === 1 && accProps.blend === 4 && accProps.lead === "props",
+  JSON.stringify(accProps)
+);
+const accBlend = sourceAccuracy(accRows(25, 5, 2));
+check(
+  "the blend ahead of props is reported too — the precedence can be wrong",
+  accBlend.lead === "blend" && accBlend.props === 5 && accBlend.blend === 2,
+  JSON.stringify(accBlend)
+);
+check(
+  "a tenth of a point apart is a tie, not a finding",
+  sourceAccuracy(accRows(25, 2, 2.05)).lead === "tie",
+  JSON.stringify(sourceAccuracy(accRows(25, 2, 2.05)))
+);
+// A row missing any one source cannot be compared, so it is not counted.
+check(
+  "rows without all three sources are excluded from the comparison",
+  sourceAccuracy({
+    calibration: { 1: { a: { actual: 10, sources: { espn: 9, fp: 9 } } } },
+  }).n === 0
+);
 
 // preseason / non-numeric weeks aren't gradeable
 check(

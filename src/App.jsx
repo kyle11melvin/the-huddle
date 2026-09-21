@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } f
 import { storage, HUDDLE_KEY, probeStorage, STORAGE_MESSAGE } from "./storage.js";
 import { beginDragAutoScroll, stopDragAutoScroll } from "./dragScroll.js";
 import { useCoarsePointer } from "./useCoarsePointer.js";
-import { captureCalibration, calibrationStats, calibrationSummary, projWeights } from "./calibration.js";
+import { captureCalibration, calibrationStats, calibrationSummary, projWeights, sourceAccuracy } from "./calibration.js";
 import { teamOf, headshotUrl, teamLogoUrl } from "./data/teams.js";
 import { searchFreeAgents, FREE_AGENTS } from "./data/freeAgents.js";
 import {
@@ -981,6 +981,7 @@ export default function App({ initialTab } = {}) {
   // Blend weights: the equal-weight prior until the ledger has enough graded
   // both-source rows to replace it with something measured.
   const weights = useMemo(() => projWeights(state), [state.calibration]);
+  const srcAcc = useMemo(() => sourceAccuracy(state), [state.calibration, state.projWeights]);
 
   /** Ownership from the live ESPN snapshot when we have one, else the static transcription. */
   // Keyed on state.espn, not state: ownership only changes when a sync lands.
@@ -2380,6 +2381,33 @@ export default function App({ initialTab } = {}) {
                 <>
                   <strong>{ledger.graded} graded</strong> of {ledger.tracked} captured across{" "}
                   {ledger.weeks.length} week{ledger.weeks.length === 1 ? "" : "s"} — too few to judge the model yet.
+                </>
+              )}
+            </div>
+            <div className="hint-card subtle">
+              <strong>Vegas props vs the experts:</strong>{" "}
+              {srcAcc.basis === "measured" ? (
+                <>
+                  On {srcAcc.n} graded results where all three sources projected the same player, average miss was{" "}
+                  <strong>props {srcAcc.props}</strong> vs <strong>blend {srcAcc.blend}</strong> (ESPN {srcAcc.espn},
+                  FP {srcAcc.fp}).{" "}
+                  {srcAcc.lead === "tie" ? (
+                    <>Too close to call — props lead the projection on the assumption they are better, and so far that is neither confirmed nor contradicted.</>
+                  ) : srcAcc.lead === "props" ? (
+                    <>Props are ahead, so the rule that lets them override the experts is earning its place.</>
+                  ) : (
+                    <>
+                      The blend is ahead. Props currently OVERRIDE it whenever a line exists, which this says is
+                      costing accuracy — worth changing, but a model change is a decision, not a refit.
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  Props replace the ESPN/FantasyPros blend outright whenever a line exists — the strongest assumption
+                  in the projection path, and until now the only stored source never read back. After{" "}
+                  {srcAcc.needed} graded results where all three projected the same player ({srcAcc.n} so far), this
+                  reports whether that precedence is earning its place. Reported only: flipping it is your call.
                 </>
               )}
             </div>

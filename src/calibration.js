@@ -37,7 +37,11 @@
 // Two systems, two different judges, on purpose.
 // ============================================================================
 
-import { pointDistribution, playerAnalytics, DEFAULT_PROJ_WEIGHTS } from "./analytics.js";
+import {
+  pointDistribution,
+  playerAnalytics,
+  DEFAULT_PROJ_WEIGHTS,
+} from "./analytics.js";
 import { normName } from "./espnSync.js";
 
 /** Kickoff state for a player's NFL team: 'pre' | 'in' | 'post' | null. */
@@ -69,7 +73,12 @@ export function captureCalibration(state, week) {
   const wk = String(week);
   // "PRE" and other non-numeric weeks aren't gradeable.
   if (!Number.isFinite(Number(wk))) {
-    return { calibration: state.calibration || {}, captured: 0, graded: 0 };
+    return {
+      calibration: state.calibration || {},
+      captured: 0,
+      graded: 0,
+      missed: 0,
+    };
   }
 
   const prev = state.calibration || {};
@@ -77,6 +86,10 @@ export function captureCalibration(state, week) {
   const entries = myEntries(state);
   let captured = 0;
   let graded = 0;
+  // Players whose game had already started before any projection was captured
+  // for them this week — ungradeable, and worth counting so a thin week is
+  // visibly thin rather than quietly short.
+  let missed = 0;
 
   for (const p of Object.values(state.players || {})) {
     const existing = forWeek[p.id];
@@ -85,34 +98,62 @@ export function captureCalibration(state, week) {
 
     // ---- projection side ----
     if (!existing || !existing.locked) {
-      const dist = pointDistribution(p, wk, state);
-      if (dist) {
-        const a = playerAnalytics(state, p.id, wk) || {};
-        forWeek[p.id] = {
-          ...(existing || {}),
-          name: p.name,
-          pos: p.pos,
-          team: p.team,
-          proj: dist.mean,
-          condMean: dist.condMean,
-          sd: dist.sd,
-          playProb: dist.playProb,
-          source: dist.source,
-          // EACH source recorded separately against the one actual. This is
-          // what lets the weighting stop being an assumption in December.
-          sources: {
-            espn: Number.isFinite(a.proj) ? a.proj : null,
-            espnBasis: a.projBasis || null,
-            fp: Number.isFinite(a.fpProj) ? a.fpProj : null,
-            props: Number.isFinite(a.propsProj) ? a.propsProj : null,
-          },
-          stars: Number.isFinite(a.matchupStars) ? a.matchupStars : null,
-          status: p.status || "",
-          // Frozen the moment the ball is kicked — see the header note.
-          locked: started,
-          lockedAt: started ? Date.now() : null,
-        };
-        captured++;
+      // The freeze only means anything if a PREGAME number was taken.
+      //
+      // Locking used to happen by recomputing the projection on the first sync
+      // at or after kickoff and stamping locked:true on the result. That works
+      // only when an earlier sync already ran: if nobody opened the app until
+      // Sunday afternoon, the first capture of the week was a post-kickoff
+      // projection wearing a pregame label, and the model got graded against a
+      // number it had revised with the game in front of it. Exactly the
+      // hindsight this ledger exists to rule out.
+      if (started) {
+        if (existing) {
+          // Lock what we already had, AS IT STANDS. Never recompute here.
+          forWeek[p.id] = {
+            ...existing,
+            locked: true,
+            lockedAt: existing.lockedAt || Date.now(),
+          };
+          captured++;
+        } else {
+          // No pregame number was ever taken, so there is nothing honest to
+          // grade. Record nothing and count it, rather than inventing a row.
+          // The result side below finds no row for him and records no actual,
+          // which is the correct outcome: an actual with no projection to
+          // grade it against is not a data point.
+          missed++;
+        }
+      } else {
+        const dist = pointDistribution(p, wk, state);
+        if (dist) {
+          const a = playerAnalytics(state, p.id, wk) || {};
+          forWeek[p.id] = {
+            ...(existing || {}),
+            name: p.name,
+            pos: p.pos,
+            team: p.team,
+            proj: dist.mean,
+            condMean: dist.condMean,
+            sd: dist.sd,
+            playProb: dist.playProb,
+            source: dist.source,
+            // EACH source recorded separately against the one actual. This is
+            // what lets the weighting stop being an assumption in December.
+            sources: {
+              espn: Number.isFinite(a.proj) ? a.proj : null,
+              espnBasis: a.projBasis || null,
+              fp: Number.isFinite(a.fpProj) ? a.fpProj : null,
+              props: Number.isFinite(a.propsProj) ? a.propsProj : null,
+            },
+            stars: Number.isFinite(a.matchupStars) ? a.matchupStars : null,
+            status: p.status || "",
+            // Still open: this branch only runs before kickoff now.
+            locked: false,
+            lockedAt: null,
+          };
+          captured++;
+        }
       }
     }
 
@@ -120,13 +161,71 @@ export function captureCalibration(state, week) {
     if (gs === "post" && forWeek[p.id] && forWeek[p.id].actual == null) {
       const e = entries.get(String(p.espnId)) || entries.get(normName(p.name));
       if (e && Number.isFinite(e.actual)) {
-        forWeek[p.id] = { ...forWeek[p.id], actual: e.actual, gradedAt: Date.now() };
+        forWeek[p.id] = {
+          ...forWeek[p.id],
+          actual: e.actual,
+          gradedAt: Date.now(),
+        };
         graded++;
       }
     }
   }
 
-  return { calibration: { ...prev, [wk]: forWeek }, captured, graded };
+  return { calibration: { ...prev, [wk]: forWeek }, captured, graded, missed };
+}
+
+/**
+ * Is the props-first precedence earning its place?
+ *
+ * analytics.js does not BLEND props with the expert sources — when a props
+ * number exists it REPLACES the ESPN/FantasyPros blend outright, on the stated
+ * reasoning that "money-backed lines still outrank opinion". That is the one
+ * assumption in the projection path that the ledger was recording the data for
+ * and never actually checked: `sources.props` has been stored since week 1 and
+ * nothing ever read it back.
+ *
+ * So this is a PAIRED comparison, only on rows where all three sources existed
+ * and the game has been graded. Comparing props' error on the games it covers
+ * against the blend's error on a different set of games would measure which
+ * games are easier to project, not which source is better.
+ *
+ * Reported, never applied: flipping the precedence is a model change and
+ * Kyle's call. One caveat to read it with — the blend weights were fit on a
+ * superset of these same rows, so the blend is mildly flattered here.
+ */
+export function sourceAccuracy(state, minRows = 20) {
+  const w = state.projWeights || DEFAULT_PROJ_WEIGHTS;
+  const rows = [];
+  for (const wkRows of Object.values(state.calibration || {})) {
+    for (const r of Object.values(wkRows || {})) {
+      const src = r.sources || {};
+      if (!Number.isFinite(r.actual)) continue;
+      if (!Number.isFinite(src.props) || !Number.isFinite(src.espn) || !Number.isFinite(src.fp)) continue;
+      rows.push({
+        actual: r.actual,
+        props: src.props,
+        blend: src.espn * w.espn + src.fp * w.fp,
+        espn: src.espn,
+        fp: src.fp,
+      });
+    }
+  }
+  if (rows.length < minRows) return { n: rows.length, needed: minRows, basis: "thin" };
+
+  const mae = (pick) =>
+    Math.round((rows.reduce((sum, r) => sum + Math.abs(r.actual - pick(r)), 0) / rows.length) * 100) / 100;
+  const props = mae((r) => r.props);
+  const blend = mae((r) => r.blend);
+  return {
+    n: rows.length,
+    basis: "measured",
+    props,
+    blend,
+    espn: mae((r) => r.espn),
+    fp: mae((r) => r.fp),
+    // A tenth of a point apart is not a finding, it is noise wearing a verdict.
+    lead: Math.abs(props - blend) < 0.1 ? "tie" : props < blend ? "props" : "blend",
+  };
 }
 
 /**
@@ -145,7 +244,8 @@ export function calibrationStats(state) {
     const g = vals.filter((r) => Number.isFinite(r.actual)).length;
     tracked += vals.length;
     gradedRows += g;
-    if (vals.length) weeks.push({ week: Number(wk), tracked: vals.length, graded: g });
+    if (vals.length)
+      weeks.push({ week: Number(wk), tracked: vals.length, graded: g });
   }
   weeks.sort((a, b) => a.week - b.week);
   return { tracked, graded: gradedRows, weeks };
@@ -168,16 +268,29 @@ export function projWeights(state, minRows = 60) {
   for (const wkRows of Object.values(state.calibration || {})) {
     for (const r of Object.values(wkRows || {})) {
       const s = r.sources || {};
-      if (Number.isFinite(r.actual) && Number.isFinite(s.espn) && Number.isFinite(s.fp)) {
+      if (
+        Number.isFinite(r.actual) &&
+        Number.isFinite(s.espn) &&
+        Number.isFinite(s.fp)
+      ) {
         pairs.push({ actual: r.actual, espn: s.espn, fp: s.fp });
       }
     }
   }
-  if (pairs.length < minRows) return { ...DEFAULT_PROJ_WEIGHTS, n: pairs.length, needed: minRows };
+  if (pairs.length < minRows)
+    return { ...DEFAULT_PROJ_WEIGHTS, n: pairs.length, needed: minRows };
 
-  const mae = (pick) => pairs.reduce((sum, p) => sum + Math.abs(p.actual - pick(p)), 0) / pairs.length;
-  const eErr = Math.max(0.01, mae((p) => p.espn));
-  const fErr = Math.max(0.01, mae((p) => p.fp));
+  const mae = (pick) =>
+    pairs.reduce((sum, p) => sum + Math.abs(p.actual - pick(p)), 0) /
+    pairs.length;
+  const eErr = Math.max(
+    0.01,
+    mae((p) => p.espn),
+  );
+  const fErr = Math.max(
+    0.01,
+    mae((p) => p.fp),
+  );
   const eInv = 1 / eErr;
   const fInv = 1 / fErr;
   const total = eInv + fInv;
