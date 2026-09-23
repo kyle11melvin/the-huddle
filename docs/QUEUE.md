@@ -103,30 +103,38 @@ Design critique (22/40) plus the deterministic detector. See
 **Shipped:** league strip side, hero margin pill, NOT LOADED opponent state,
 gauge caption halo, the 5-item bottom tab bar, compact header off Today.
 
-**Open, roughly in priority order:**
+**Also shipped Sept 23 (later that day):** the fix button names ESPN
+("Start Q. Johnston on ESPN"); no EMPTY/EVEN before an opponent exists; board
+names at 13px; Book tile "ATL ~21 pts"; Lab Starters/Bench groups; injury
+letters as badges; a one-line key for the edge chip.
 
-- **Apply writes to ESPN in one tap, no undo.** Relabel to name the player and
-  ESPN ("Start Q. Johnston on ESPN") is UI-only. An undo would go through
-  `src/espnWrite.js` — **ask Kyle first**.
-- **Preseason / no opponent: the board still shows EMPTY and EVEN** on the
-  right. The NOT LOADED fix only fires when the opponent is KNOWN but his
-  roster is missing; with no opponent at all `missingName` is empty.
-- **Board rows print the kickoff time twice** (meta line and chip), and names
-  still truncate at phone width (`T. LAWRE…`). Ten rows run ~2,000px.
-- **Unexplained shorthand:** `imp 21`, `EVEN`, the one-letter injury badge
-  (`D`, and `O` next to a `0.0`), the gold crescents on Start/Sit Lab chips.
-- **Small, dim text:** ~33 rules at 9px or under, several in `--text-dim`
-  (~3.8:1). DESIGN.md locks low-contrast micro-labels AND names sunlight
-  legibility — a real tension to put to Kyle, not to resolve silently.
+**Open:**
+
+- **Undo for the ESPN write** — needs `src/espnWrite.js`; ask Kyle first.
+- **Small, dim text:** `--text-dim` #64708a is 3.5:1 on cards. Proposed
+  #808ca6 (~5.1:1), one token, 111 uses — rendered before/after but PARKED,
+  not committed. Kyle's call (DESIGN.md locks low-contrast labels but also
+  names sunlight legibility).
 - **Minor:** write-key dots overflow the Data modal; the opponent card's close
-  button overlaps a long name; Bowers' FLOOR 6.0 tile has no "if he plays";
-  `00` count badges read as decoration; the opponent card says Vegas lines
-  "haven't loaded — sync ESPN" when there is never a line for opponents;
-  League tab says "your full roster is right below" above an empty screen
-  (may be the harness — check on a device).
-- **Detector findings not acted on:** 14 one-side stripes (several carry
-  meaning — call colour, good/bad), gradient text on the hero title and FAAB
-  amount, two `transition: width` bars. Style calls for Kyle.
+  button overlaps a long name; `00` count badges; League tab copy above an
+  empty screen (check on a device).
+- **Detector style findings not acted on:** remaining side stripes, gradient
+  text on the hero title and FAAB amount, two `transition: width` bars.
+
+## Vegas props — partial lines (Sept 23, shipped)
+
+Midweek the books post anytime-TD lines before yardage; a TD-only RB priced at
+3.6 (Cam Skattebo) and REPLACED his projection. `propsCoverPosition` now
+requires every scoring market for the position (RB rush yds + rec + rec yds +
+TD; WR/TE rec + rec yds + TD; QB pass yds + pass TDs — QB rushing counts but
+isn't required). Applied everywhere a props total is read. Kyle's rule.
+
+## FantasyPros API (Sept 23, shipped)
+
+Projections and ranks load automatically — see the status banner in
+`docs/handoff-fantasypros-api.md`. Next steps there: news (4), canonical ids
+(5), player-points for the ledger (6). Open question for Kyle: show FP's
+start/sit grade (in the API) where the matchup stars (not in the API) went.
 
 ## Game-script projections
 

@@ -1,5 +1,18 @@
 # Handoff — FantasyPros API
 
+> **STATUS Sept 23 — Steps 1–2 SHIPPED and live (merge `3717114`).** Premium key
+> in Vercel as `FANTASYPROS_API_KEY` (updated Sept 23; the Sept 11 value was the
+> stale pre-upgrade key). `api/fantasypros.js` serves one position × one kind
+> (`rank`|`proj`) per call; `src/fantasyprosSync.js` scores projected stat lines
+> with LEAGUE scoring (Kyle's call) and fills the same fields the CSV paste did.
+> A paste still wins its week and is the only source of matchup stars (not in
+> the API). Kyle confirmed the "FantasyPros: … projections and … ranks" toast on
+> his phone. Steps 4–6 (news, canonical ids, player-points) are NOT started.
+>
+> The cloud workspace's own "FantasyPros API" credential never worked (proxy
+> header), so test from Kyle's terminal or via the deployed `/api/fantasypros`.
+> Plan limit is 1 req/s, 500/day — the client paces and the CDN caches 3h.
+
 For a Claude Code session on the MacBook. Repo `kyle11melvin/the-huddle`.
 
 Read `docs/STATUS.md`, `docs/QUEUE.md`, and `CLAUDE.md` first. Add this work to the queue doc as you go.

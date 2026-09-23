@@ -54,6 +54,15 @@ More → Waivers → bottom of Waivers). Throwaway scripts for that lived in
 `scripts/.*-tmp.mjs` and were deleted — note that eslint lints them, so a
 leftover one fails `verify` (it happened once, on an uncommitted file).
 
+## Later the same day
+
+After the six above, all merged and live: the ESPN-naming fix button, the
+shorthand fixes (Book tile, Lab groups, injury badges, edge key), the
+partial-Vegas-lines fix (Skattebo 3.6 → ESPN's ~12.5; Kyle confirmed), and
+the **FantasyPros API** replacing the weekly CSV (Kyle confirmed the toast).
+QUEUE.md has the details and what's still open. A text-contrast change is
+parked uncommitted — nothing is stranded in git.
+
 ## Still to watch from Sept 21
 
 The calibration ledger's first big sync, its first graded week on a phone, and
