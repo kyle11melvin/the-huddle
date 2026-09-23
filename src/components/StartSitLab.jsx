@@ -5,6 +5,7 @@ import {
   consensusLabel,
   pointDistribution,
   floorCeiling,
+  propsProjection,
 } from "../analytics.js";
 import {
   lineupDistributions,
@@ -21,7 +22,6 @@ import {
 import { LEAGUE_ROSTERS, MY_TEAM } from "../data/leagueRosters.js";
 import { findLocation } from "../lineup.js";
 import { weekLabel } from "../lineup.js";
-import { propsCoverPosition } from "../props.js";
 
 const pct = (n) => `${Math.round(n * 100)}%`;
 
@@ -51,10 +51,12 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
   /** Market-vs-model agreement: when Vegas props and ESPN's projection both
    *  exist, their gap IS the uncertainty signal — no expert pastes needed. */
   const sourceAgreement = (a, pos) => {
-    if (!a || !Number.isFinite(a.propsProj) || !Number.isFinite(a.proj) || a.proj <= 0) return null;
-    // Partial lines (TD-only midweek) are not a market view of his game.
-    if (!propsCoverPosition(a.props, pos)) return null;
-    const gap = Math.abs(a.propsProj - a.proj) / ((a.propsProj + a.proj) / 2);
+    if (!a || !Number.isFinite(a.proj) || a.proj <= 0) return null;
+    // Partial lines (TD-only midweek) are not a market view of his game;
+    // propsProjection returns null for them, and folds in a QB's INTs.
+    const vegas = propsProjection(a, pos, state);
+    if (!vegas) return null;
+    const gap = Math.abs(vegas.pts - a.proj) / ((vegas.pts + a.proj) / 2);
     if (gap < 0.1) return { text: "Vegas & ESPN agree", tone: "good", gap };
     if (gap < 0.25) return { text: "Vegas & ESPN differ a bit", tone: "mid", gap };
     return { text: "market disagrees with ESPN", tone: "bad", gap };
@@ -204,7 +206,7 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
                 <div className="lab-stat">
                   <span>
                     Projection
-                    {dist && dist.source === "vegas props" && <span className="src-tag vegas">VEGAS</span>}
+                    {dist && dist.source && dist.source.startsWith("vegas props") && <span className="src-tag vegas">VEGAS</span>}
                   </span>
                   <strong>{dist ? dist.mean : "—"}</strong>
                 </div>

@@ -59,6 +59,11 @@ export function scoreFpStats(stats, pos, scoring) {
   return Math.round(pts * 10) / 10;
 }
 
+// Projected interceptions for a QB. The odds sweep carries no INT line, so
+// the Vegas number takes these instead (analytics.propsProjection).
+const qbInts = (r) =>
+  r.pos === "QB" && r.stats && Number.isFinite(r.stats.pass_ints) ? { ints: r.stats.pass_ints } : {};
+
 /**
  * Fold one week's FantasyPros data into state.
  *
@@ -82,9 +87,13 @@ export function applyFantasyPros(state, week, data, scoring) {
     if (!Number.isFinite(pts)) continue;
     const k = normName(r.name);
     if (!k) continue;
-    // A pasted row carries no `src`; leave it alone.
-    if (existing[k] && existing[k].src !== "api") continue;
-    forWeek[k] = { proj: pts, stars: existing[k] ? existing[k].stars ?? null : null, src: "api" };
+    // A pasted row carries no `src`; leave its projection alone — but add a
+    // QB's INTs, which the CSV has no column for.
+    if (existing[k] && existing[k].src !== "api") {
+      if (qbInts(r).ints != null) forWeek[k] = { ...existing[k], ...qbInts(r) };
+      continue;
+    }
+    forWeek[k] = { proj: pts, stars: existing[k] ? existing[k].stars ?? null : null, src: "api", ...qbInts(r) };
     projected++;
   }
   next = { ...next, fpProjIndex: { ...(next.fpProjIndex || {}), [week]: forWeek } };
@@ -95,6 +104,10 @@ export function applyFantasyPros(state, week, data, scoring) {
     const { match } = matchPlayer(r.name, roster, { team: canonTeam(r.team) || r.team, pos: r.pos });
     if (!match) continue;
     const a = playerAnalytics(next, match.id, week);
+    const ints = qbInts(r).ints;
+    // Written even under a paste: the CSV has no INT column, and the Vegas
+    // number needs this whether or not the projection came from a paste.
+    if (Number.isFinite(ints)) next = setPlayerAnalytics(next, match.id, week, { fpInts: ints });
     if (a && a.fpSource === "fantasypros") continue; // pasted this week — paste wins
     next = setPlayerAnalytics(next, match.id, week, { fpProj: pts, fpSource: "fantasypros-api" });
   }

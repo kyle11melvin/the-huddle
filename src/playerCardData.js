@@ -13,7 +13,7 @@
 // running into.
 // ============================================================================
 
-import { propsSweptFor, pointDistribution, playerAnalytics } from "./analytics.js";
+import { propsSweptFor, pointDistribution, playerAnalytics, propsProjection } from "./analytics.js";
 import { DEFAULT_PROJ_WEIGHTS } from "./analytics.js";
 import { propsCoverPosition } from "./props.js";
 
@@ -72,7 +72,7 @@ const MATCHUP_WORD = { 1: "BRUTAL", 2: "TOUGH", 3: "NEUTRAL", 4: "GOOD", 5: "SMA
  * blend is what the projection WOULD have been. A props number that merely
  * agrees with consensus is not an edge, and should read near zero.
  */
-function propsEdgeFrom(a, weights, pos) {
+function propsEdgeFrom(a, weights, pos, state) {
   if (!a || !Number.isFinite(a.propsProj) || a.propsProj <= 0) return null;
   // Lines are posted but not his core yardage market (TD-only midweek). The
   // projection ignores them — say so and show what IS posted, rather than an
@@ -91,9 +91,12 @@ function propsEdgeFrom(a, weights, pos) {
   else if (espn != null) baseline = espn;
   if (baseline == null) return null;
 
+  const vegas = propsProjection(a, pos, state);
   const parts = Array.isArray(a.propsParts) ? a.propsParts.map(([label]) => label) : [];
+  // Say where a QB's INT correction came from — it is not a Vegas line.
+  if (vegas && vegas.intAdj) parts.push(`${vegas.fpInts} INT (FantasyPros)`);
   return {
-    delta: Math.round((a.propsProj - baseline) * 10) / 10,
+    delta: Math.round(((vegas ? vegas.pts : a.propsProj) - baseline) * 10) / 10,
     parts,
     source: a.propsSource || null,
   };
@@ -145,7 +148,7 @@ export function playerCardData(state, player, week) {
     dist: dist
       ? { mean: dist.mean, condMean: dist.condMean, sd: dist.sd, playProb: dist.playProb }
       : null,
-    propsEdge: propsEdgeFrom(a, state.projWeights, player.pos),
+    propsEdge: propsEdgeFrom(a, state.projWeights, player.pos, state),
     propsSwept: propsSweptFor(state, week),
     source: sourceOf(dist),
     matchup,
