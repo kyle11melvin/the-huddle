@@ -190,10 +190,8 @@ select option {
   letter-spacing: 1.5px;
   line-height: 0.95;
   text-transform: uppercase;
-  background: linear-gradient(180deg, #ffffff 30%, #b9c8e8 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  /* Solid, not a white-to-blue fade (Kyle, Sept 23). */
+  color: #ffffff;
   text-shadow: 0 20px 60px rgba(79, 127, 255, 0.25);
 }
 
@@ -908,10 +906,8 @@ select option {
   font-weight: 700;
   letter-spacing: 1px;
   line-height: 1;
-  background: linear-gradient(135deg, var(--gold-hi), var(--gold));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  /* Solid gold, not a gold fade (Kyle, Sept 23). */
+  color: var(--gold-hi);
 }
 
 .faab-spent-label {
