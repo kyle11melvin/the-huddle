@@ -122,6 +122,7 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
   const owner = whoRosters(player.name);
   const cardData = playerCardData(state, player, week);
   const wkA = playerAnalytics(state, playerId, week);
+  const schedOpp = scheduleOpp(state, player.team, week);
   const news = (fpNews && fpNews[normName(player.name)]) || [];
 
   const startEdit = () => {
@@ -272,11 +273,16 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
           <div className="week-editor">
             <label className="field">
               <span className="field-label">Opponent</span>
+              {/* Shows the NFL schedule's opponent until something is typed —
+                  the box used to show only typed text, and ESPN sync never
+                  types any, so it sat empty on every synced player (Bowers,
+                  Sept 23) while the board and header knew the opponent. */}
               <input
-                value={wd.opp}
+                value={wd.opp || schedOpp}
                 placeholder="e.g. CLE or @PIT"
                 onChange={(e) => onWeek(playerId, { opp: e.target.value })}
               />
+              {!wd.opp && schedOpp && <span className="form-hint">from the NFL schedule — type to override</span>}
             </label>
             <div className="field">
               <span className="field-label">Matchup grade</span>
