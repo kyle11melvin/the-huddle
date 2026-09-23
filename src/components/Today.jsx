@@ -23,6 +23,7 @@ import { effectiveStatus, suggestLineup } from "../analysis.js";
 import { opponentDistributions, opponentLineups } from "../simulate.js";
 import { anyGameLive } from "../espnSync.js";
 import { formatCountdown } from "../timeUntil.js";
+import { shortName } from "../headToHead.js";
 
 const STATUS_COPY = {
   O: "is OUT",
@@ -166,8 +167,12 @@ export default function Today({ state, week, onApplyMove, onSetLive, onSetOppone
               ) : null}
               <span className="today-action-why"> — {topMove.reason}</span>
             </div>
+            {/* Says what the tap DOES. With ESPN connected this writes to his
+                real lineup in one tap (App doMove → espnWrite), and "Apply"
+                read like it changed the app's plan, not his league. */}
             <button className="btn-primary today-apply" onClick={() => onApplyMove(topMove)}>
-              Apply
+              Start {shortName(topMove.inName)}
+              {state.espn ? " on ESPN" : ""}
             </button>
           </div>
         )}
