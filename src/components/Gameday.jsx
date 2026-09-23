@@ -622,11 +622,17 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               )}
             </div>
 
+            {/* Coloured by the same certainty rule as the hero totals, not by
+                sign: a −0.3 on a 52% coin flip was the loudest red on the card,
+                reading "losing" under a total that said otherwise. Labelled,
+                because an unlabelled signed number between two scores gets
+                read as the score gap. */}
             <div className="gd-vs">
-              <span className={`gd-margin ${projMargin >= 0 ? "up" : "down"}`}>
+              <span className="gd-margin" style={myTone ? { color: myTone } : undefined}>
                 {projMargin >= 0 ? "+" : "−"}
                 {Math.abs(projMargin).toFixed(1)}
               </span>
+              <span className="gd-margin-k">proj margin</span>
             </div>
 
             <div className="gd-team right">
@@ -670,11 +676,11 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               something when you can see who still holds a QB. */}
           <div className="gd-ytp">
             <div className="gd-ytp-box">
-              <b>{leftYtp.count} players</b>
+              <b>{leftYtp.count} yet to play</b>
               <span>{yetToPlayLabel(leftYtp) || "none left"}</span>
             </div>
             <div className="gd-ytp-box r">
-              <b>{rightYtp.count} players</b>
+              <b>{rightYtp.count} yet to play</b>
               <span>{yetToPlayLabel(rightYtp) || "none left"}</span>
             </div>
           </div>

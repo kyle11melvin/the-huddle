@@ -3364,14 +3364,26 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   border-radius: 7px;
 }
 
-.gd-margin.up {
-  color: var(--positive);
-  background: rgba(46, 213, 132, 0.12);
+/* Colour comes inline from outcomeColor() — the hero totals' certainty rule —
+   so the pill itself stays neutral. A red/green tint by SIGN is what made a
+   −0.3 coin flip the loudest thing on the card. */
+.gd-margin {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.gd-margin.down {
-  color: #ff5d5d;
-  background: rgba(255, 93, 93, 0.12);
+.gd-margin-k {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--text-muted);
+  /* Wraps to PROJ / MARGIN: one line was wider than the pill and widened the
+     centre column, which truncated BROCK HARD to BROCK HA…. */
+  width: min-content;
 }
 
 /* A gold left edge marks which side of this card is yours. */
