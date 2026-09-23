@@ -4377,6 +4377,12 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 3.4px;
+  /* Same knockout halo as .gg-hero: the needle sweeps the middle of the dial
+     by design, and without it the caption was the one text it still sliced. */
+  paint-order: stroke;
+  stroke: var(--g-card-mid);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
 .gg-ifplays {
