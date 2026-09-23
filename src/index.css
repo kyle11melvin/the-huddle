@@ -1188,12 +1188,14 @@ select option {
   color: var(--text-muted);
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--gold);
   border-radius: 12px;
   padding: 14px 16px;
 }
 
-.modal-scout.none { border-left-color: var(--border-hi); color: var(--text-dim); font-style: italic; }
+/* No gold stripe: it was decoration, and the note now sits under dated
+   FantasyPros items that carry none — a stripe on the OLDEST text read as
+   the most important thing in the block. */
+.modal-scout.none { color: var(--text-dim); font-style: italic; }
 
 .status-editor { display: flex; gap: 6px; flex-wrap: wrap; }
 
@@ -2023,8 +2025,9 @@ select option {
   z-index: 200;
   max-width: calc(100vw - 32px);
   background: var(--surface-hi);
+  /* Plain border. The 3px --accent stripe was decorative, and --accent is
+     not a brand colour here — gold is the only accent (DESIGN.md). */
   border: 1px solid var(--border-hi);
-  border-left: 3px solid var(--accent);
   border-radius: 12px;
   padding: 13px 18px;
   font-size: 13px;
