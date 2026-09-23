@@ -108,18 +108,17 @@ gauge caption halo, the 5-item bottom tab bar, compact header off Today.
 names at 13px; Book tile "ATL ~21 pts"; Lab Starters/Bench groups; injury
 letters as badges; a one-line key for the edge chip.
 
+**Also shipped Sept 23, evening:** the `--text-dim` floor (#808ca6, ~5.1:1 —
+recorded in DESIGN.md); the Data modal's Reveal / Copy key back on screen;
+opponent-card names wrap clear of the ✕; the modal shows FantasyPros'
+start/sit grade when no stars are set; card opponents from the schedule.
+
 **Open:**
 
-- **Undo for the ESPN write** — needs `src/espnWrite.js`; ask Kyle first.
-- **Small, dim text:** `--text-dim` #64708a is 3.5:1 on cards. Proposed
-  #808ca6 (~5.1:1), one token, 111 uses — rendered before/after but PARKED,
-  not committed. Kyle's call (DESIGN.md locks low-contrast labels but also
-  names sunlight legibility).
-- **Minor:** write-key dots overflow the Data modal; the opponent card's close
-  button overlaps a long name; `00` count badges; League tab copy above an
-  empty screen (check on a device).
+- **Undo for the ESPN write** — needs `src/espnWrite.js`. Kyle: hold off.
 - **Detector style findings not acted on:** remaining side stripes, gradient
   text on the hero title and FAAB amount, two `transition: width` bars.
+- League tab copy above an empty screen (check on a device).
 
 ## Vegas props — partial lines (Sept 23, shipped)
 
@@ -128,13 +127,17 @@ Midweek the books post anytime-TD lines before yardage; a TD-only RB priced at
 requires every scoring market for the position (RB rush yds + rec + rec yds +
 TD; WR/TE rec + rec yds + TD; QB pass yds + pass TDs — QB rushing counts but
 isn't required). Applied everywhere a props total is read. Kyle's rule.
+Books price no INT (not requested), fumble or 2-pt line, so
+`propsProjection` folds in FantasyPros' projected QB INTs and everyone's
+fumbles lost / 2-pt, scored with the league's own values (`leagueScoring`
+now carries `fumble` and `twoPt`; 0 when a synced league doesn't score them).
 
 ## FantasyPros API (Sept 23, shipped)
 
 Projections and ranks load automatically — see the status banner in
 `docs/handoff-fantasypros-api.md`. Next steps there: news (4), canonical ids
-(5), player-points for the ledger (6). Open question for Kyle: show FP's
-start/sit grade (in the API) where the matchup stars (not in the API) went.
+(5), player-points for the ledger (6). Next up: news (Step 4) and
+player-points for the ledger (Step 6).
 
 ## Game-script projections
 
