@@ -146,6 +146,8 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
                 {player.pos}
               </span>
               <TeamChip abbr={player.team} />
+              {/* Who he plays this week — schedule-derived unless typed in. */}
+              {cardData && cardData.player.opp && <span className="pc-opp">{cardData.player.opp}</span>}
               <StatusPill status={shownStatus} />
             </div>
           </div>
