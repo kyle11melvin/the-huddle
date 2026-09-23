@@ -4369,6 +4369,11 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07) inset;
 }
 
+.fp-grade {
+  color: var(--gold-hi);
+  font-weight: 800;
+}
+
 .modal-sub .pc-opp {
   font-size: 13px;
   padding: 3px 8px;

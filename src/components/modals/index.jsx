@@ -119,6 +119,7 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
   const byeWk = byeWeekFor(byes, player.team);
   const owner = whoRosters(player.name);
   const cardData = playerCardData(state, player, week);
+  const wkA = playerAnalytics(state, playerId, week);
 
   const startEdit = () => {
     setForm({ name: player.name, team: player.team, pos: player.pos, ecr: player.ecr || "", espnId: player.espnId || "" });
@@ -236,7 +237,26 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
           ) : (
             <div className="detail-strip">
               <span>
-                Matchup {wd.matchup ? <Stars n={wd.matchup} /> : <em>not set</em>}
+                {/* Hand-set stars, then stars from a CSV paste (this line
+                    ignored those), then FantasyPros' start/sit grade — the
+                    API has no matchup stars, so it stands in. */}
+                {wd.matchup ? (
+                  <>
+                    Matchup <Stars n={wd.matchup} />
+                  </>
+                ) : Number.isFinite(wkA && wkA.matchupStars) ? (
+                  <>
+                    Matchup <Stars n={wkA.matchupStars} />
+                  </>
+                ) : wkA && wkA.fpGrade ? (
+                  <>
+                    FantasyPros start/sit <b className="fp-grade">{wkA.fpGrade}</b>
+                  </>
+                ) : (
+                  <>
+                    Matchup <em>not set</em>
+                  </>
+                )}
               </span>
               {owner && owner !== MY_TEAM && <span className="owner-tag">rostered by {owner}</span>}
               <button className="link-btn" onClick={startEdit}>
