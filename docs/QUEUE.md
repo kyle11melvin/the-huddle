@@ -115,7 +115,7 @@ start/sit grade when no stars are set; card opponents from the schedule.
 
 **Open:**
 
-- **Undo for the ESPN write** — needs `src/espnWrite.js`. Kyle: hold off.
+- ~~Undo for the ESPN write~~ — **declined by Kyle, Sept 23. Don't raise it again.** The button already names the player and ESPN, and a success/failure toast confirms the write.
 - **Detector findings — resolved Sept 23:** two decorative stripes removed
   (seed note, toast), gradient text made solid (wordmark, FAAB amount). The
   other 11 stripes carry meaning and stay; `transition: width` left on
