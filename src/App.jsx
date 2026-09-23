@@ -22,6 +22,7 @@ import StartSitLab from "./components/StartSitLab.jsx";
 import { setPlayerAnalytics, playerAnalytics, pointDistribution } from "./analytics.js";
 import { rowGameState, opponentDistributions } from "./simulate.js";
 import { propsToPoints, leagueScoring } from "./props.js";
+import { applyFantasyPros, FP_POSITIONS } from "./fantasyprosSync.js";
 import { writeLineupMove } from "./espnWrite.js";
 import {
   effectiveStatus,
@@ -1407,6 +1408,59 @@ export default function App({ initialTab } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
+  // FantasyPros projections and ranks, automatically — the weekly CSV paste
+  // is now a fallback, not a chore (docs/handoff-fantasypros-api.md). Walks
+  // /api/fantasypros one position and kind at a time: the plan allows one
+  // request a second, so a pause follows every answer that actually reached
+  // FantasyPros; edge-cached answers (x-vercel-cache HIT/STALE) cost nothing
+  // and don't wait. Once per week per session, like the odds fetch below.
+  const fpWeek = useRef(null);
+  useEffect(() => {
+    if (!loaded || viewingShared) return;
+    const wk = Number(state.week);
+    if (!Number.isInteger(wk) || wk < 1 || wk > 18) return;
+    if (fpWeek.current === state.week) return;
+    fpWeek.current = state.week;
+    const week = state.week;
+    (async () => {
+      const base = import.meta.env.DEV ? "https://the-huddle-hq.vercel.app" : "";
+      const data = { rank: [], proj: [] };
+      let failed = 0;
+      outer: for (const kind of ["proj", "rank"]) {
+        for (const pos of FP_POSITIONS) {
+          let cached = false;
+          try {
+            const r = await fetch(`${base}/api/fantasypros?kind=${kind}&pos=${pos}&week=${wk}`, {
+              signal: AbortSignal.timeout(15000),
+            });
+            cached = /HIT|STALE/i.test(r.headers.get("x-vercel-cache") || "");
+            const d = await r.json().catch(() => null);
+            // Key not in Vercel yet: say nothing, the paste still works.
+            if (d && d.configured === false) return;
+            if (!r.ok || !d || !d.ok) failed++;
+            else data[kind].push(...d.rows);
+          } catch {
+            failed++;
+          }
+          if (!aliveRef.current) return;
+          if (failed >= 4) break outer; // clearly down — don't spend the day's budget finding out
+          if (!cached) await new Promise((res) => setTimeout(res, 1100));
+        }
+      }
+      if (!aliveRef.current) return;
+      if (!data.proj.length && !data.rank.length) {
+        flash("FantasyPros didn't answer — expert projections are from your last paste, if any.");
+        return;
+      }
+      setState((s) => (s.week !== week ? s : applyFantasyPros(s, week, data, leagueScoring(s)).state));
+      flash(
+        `FantasyPros: ${data.proj.length} projections and ${data.rank.length} ranks for week ${wk}` +
+          (failed ? ` (${failed} request${failed === 1 ? "" : "s"} failed)` : "") +
+          "."
+      );
+    })();
+  }, [loaded, viewingShared, state.week, flash]);
+
   // Vegas player props, fully automated: fetch once per session (server-side
   // cache protects API credits), match to my roster, auto-price as the
   // top-priority projection source. Manual paste survives as an override.
@@ -1552,7 +1606,7 @@ export default function App({ initialTab } = {}) {
         // Stamp the week this paste landed in. The index accumulates across
         // pastes and has no clear button, so the stamp is the only way to see
         // that the replace actually happened.
-        return { ...s, players, ecrIndex, ecrWeek: s.week };
+        return { ...s, players, ecrIndex, ecrWeek: s.week, ecrSource: "paste" };
       });
       flash(`Updated ${updates.length} ECR value${updates.length === 1 ? "" : "s"}.`);
     },

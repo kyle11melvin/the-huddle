@@ -7,6 +7,8 @@
 //   5. ESPN sync seats every player it can and REPORTS the ones it can't
 //   6. one failed week fetch must not fabricate a league-wide bye
 import fsMod from "node:fs";
+import { scoreFpStats, applyFantasyPros } from "../src/fantasyprosSync.js";
+import { trimRankings, trimProjections } from "../api/fantasypros.js";
 import { propsToPoints, SCORING, parseProps } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
 import { extractScoring, matchupSideScore } from "../api/espn.js";
@@ -2804,6 +2806,48 @@ check(
     od.mean > 10 && od.source !== "vegas props",
     `${od.source} ${od.mean}`
   );
+}
+
+// ---- FantasyPros API replaces the weekly CSV (Sept 23) ----
+// Fixtures are verbatim fragments of Kyle's own terminal run, week 3.
+{
+  const rankRaw = { players: [{ player_id: 22968, player_name: "Jahmyr Gibbs", player_team_id: "DET", player_position_id: "RB", player_opponent: "vs. NYJ", rank_ecr: 1, pos_rank: "RB1", start_sit_grade: "A+", r2p_pts: "25.9" }] };
+  const projRaw = { scoring: "STD", players: [{ fpid: 22968, name: "Jahmyr Gibbs", position_id: "RB", team_id: "DET", stats: { points: 20.19, points_ppr: 24.41, rush_att: 20.03, rush_yds: 98.17, rush_tds: 0.91, rec_rec: 4.23, rec_yds: 33.92, rec_tds: 0.29, fumbles: 0.12 } }] };
+  const rk = trimRankings(rankRaw);
+  const pj = trimProjections(projRaw);
+  check("FantasyPros ranks trim to name/team/pos/rank", rk.length === 1 && rk[0].rank === 1 && rk[0].pos === "RB" && rk[0].grade === "A+", JSON.stringify(rk[0]));
+  check("FantasyPros projections keep the numeric stat line", pj.length === 1 && pj[0].stats.rush_att === 20.03, JSON.stringify(pj[0]));
+  // Kyle's rule: every scoring stat, league scoring — 0.2/rush attempt included.
+  const g = scoreFpStats(pj[0].stats, "RB", SCORING);
+  check("a FantasyPros stat line is scored with the league's rules (Gibbs 28.6, not PPR 24.4)", g === 28.6, `got ${g}`);
+  check("K and D/ST use FantasyPros' own total", scoreFpStats({ points: 8.4 }, "K", SCORING) === 8.4);
+  check("a QB line without passing yards falls back to FP's total, not ~0", scoreFpStats({ points_ppr: 19.2, rush_yds: 20 }, "QB", SCORING) === 19.2);
+
+  const base = {
+    week: "3",
+    players: { g: { id: "g", name: "Jahmyr Gibbs", team: "DET", pos: "RB", ecr: "RB4" }, b: { id: "b", name: "Bijan Robinson", team: "ATL", pos: "RB", ecr: "RB2" } },
+    analytics: {},
+    fpProjIndex: {},
+    ecrIndex: {},
+  };
+  const data = { rank: rk, proj: pj };
+  const out = applyFantasyPros(base, "3", data, SCORING).state;
+  check("the automatic fill sets my player's fpProj", out.analytics.g && out.analytics.g["3"].fpProj === 28.6, JSON.stringify(out.analytics.g));
+  check("the automatic fill indexes every player by name for the opponent side", out.fpProjIndex["3"].jahmyrgibbs && out.fpProjIndex["3"].jahmyrgibbs.src === "api");
+  check("the automatic fill updates my player's rank", out.players.g.ecr === "RB1" && out.ecrSource === "api", out.players.g.ecr);
+
+  // A paste wins its week.
+  const pasted = {
+    ...base,
+    analytics: { g: { 3: { fpProj: 21, fpSource: "fantasypros", matchupStars: 4 } } },
+    fpProjIndex: { 3: { jahmyrgibbs: { proj: 21, stars: 4 } } },
+    ecrWeek: "3",
+    ecrSource: "paste",
+  };
+  const kept = applyFantasyPros(pasted, "3", data, SCORING).state;
+  check("a pasted projection is not overwritten by the automatic fill", kept.analytics.g["3"].fpProj === 21 && kept.fpProjIndex["3"].jahmyrgibbs.proj === 21);
+  check("pasted matchup stars survive the automatic fill", kept.analytics.g["3"].matchupStars === 4 && kept.fpProjIndex["3"].jahmyrgibbs.stars === 4);
+  check("pasted ranks for the week are not overwritten", kept.players.g.ecr === "RB4");
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
