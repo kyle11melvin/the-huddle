@@ -335,8 +335,11 @@ export default function DataPanel({
                     safe; share the code freely, never this.
                   </p>
                   <div className="code-box">
-                    <span className="team-code">
-                      {showKey ? syncLink.key : "•".repeat(Math.min((syncLink.key || "").length, 32))}
+                    {/* 8 dots, not 32: the count says nothing, and 32 wide dots
+                        pushed Reveal and Copy key out of the modal on a phone —
+                        the one backup of an unrecoverable key, unreachable. */}
+                    <span className={`team-code ${showKey ? "key-shown" : "key-masked"}`}>
+                      {showKey ? syncLink.key : "•".repeat(Math.min((syncLink.key || "").length, 8))}
                     </span>
                     <button className="btn-secondary" onClick={() => setShowKey((v) => !v)}>
                       {showKey ? "Hide" : "Reveal"}

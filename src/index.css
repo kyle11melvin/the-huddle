@@ -2811,9 +2811,13 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 .code-box { display: flex; gap: 9px; align-items: center; }
 .code-box input { flex: 1; min-width: 0; font-family: var(--font-mono); letter-spacing: 1px; }
 .code-box .btn-secondary { flex-shrink: 0; }
+.team-code.key-masked { overflow: hidden; white-space: nowrap; font-size: 15px; letter-spacing: 1px; }
+/* A revealed key wraps rather than clipping — every character must be readable. */
+.team-code.key-shown { font-size: 15px; letter-spacing: 1px; word-break: break-all; }
 
 .team-code {
   flex: 1;
+  min-width: 0; /* lets the box shrink so the buttons beside it stay on screen */
   font-family: var(--font-mono);
   font-size: 20px;
   font-weight: 700;
@@ -4283,6 +4287,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   gap: 13px;
   align-items: center;
 }
+
 
 /* Gold hairline, dark spacer ring, and a wash of the player's own team colour
    behind the cutout — `--team` is set inline from teams.js. */
