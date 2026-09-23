@@ -204,6 +204,7 @@ export function buildInitialState() {
     // captures from week 1 whether or not anything reads it yet.
     calibration: {},
     ecrIndex: {}, // normalized name -> rank, from pasted ranking sets
+    ecrSource: null, // "paste" | "api": who wrote ecrIndex for ecrWeek; a paste wins its week
     ecrWeek: null, // the week whose paste last wrote ecrIndex. Rendered in the
     // import panel: ranks are weekly, a paste replaces the names it carries,
     // and there is no clear button — so "which week is this" has to be
@@ -319,6 +320,7 @@ export function migrate(raw) {
       byesManual: normalizeByes(raw.byesManual && typeof raw.byesManual === "object" ? raw.byesManual : {}),
       ecrIndex: raw.ecrIndex && typeof raw.ecrIndex === "object" ? raw.ecrIndex : {},
       ecrWeek: WEEKS.includes(raw.ecrWeek) ? raw.ecrWeek : null,
+      ecrSource: raw.ecrSource === "paste" || raw.ecrSource === "api" ? raw.ecrSource : null,
       fpProjIndex: raw.fpProjIndex && typeof raw.fpProjIndex === "object" ? raw.fpProjIndex : {},
       propsIndex: raw.propsIndex && typeof raw.propsIndex === "object" ? raw.propsIndex : {},
       analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
@@ -400,6 +402,7 @@ export function migrate(raw) {
     byesManual: normalizeByes(raw.byesManual && typeof raw.byesManual === "object" ? raw.byesManual : {}),
     ecrIndex: raw.ecrIndex && typeof raw.ecrIndex === "object" ? raw.ecrIndex : {},
     ecrWeek: WEEKS.includes(raw.ecrWeek) ? raw.ecrWeek : null,
+    ecrSource: raw.ecrSource === "paste" || raw.ecrSource === "api" ? raw.ecrSource : null,
     fpProjIndex: raw.fpProjIndex && typeof raw.fpProjIndex === "object" ? raw.fpProjIndex : {},
     propsIndex: raw.propsIndex && typeof raw.propsIndex === "object" ? raw.propsIndex : {},
     analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
