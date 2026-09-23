@@ -45,6 +45,7 @@ import {
   DEFAULT_PROJ_WEIGHTS,
 } from "./analytics.js";
 import { normName } from "./espnSync.js";
+import { propsCoverPosition } from "./props.js";
 
 /** Kickoff state for a player's NFL team: 'pre' | 'in' | 'post' | null. */
 const gameStateFor = (state, team) => {
@@ -146,7 +147,9 @@ export function captureCalibration(state, week) {
               espn: Number.isFinite(a.proj) ? a.proj : null,
               espnBasis: a.projBasis || null,
               fp: Number.isFinite(a.fpProj) ? a.fpProj : null,
-              props: Number.isFinite(a.propsProj) ? a.propsProj : null,
+              // A partial line set (TD-only midweek) is not a props
+              // projection; grading it would blame the market for our gap.
+              props: Number.isFinite(a.propsProj) && propsCoverPosition(a.props, p.pos) ? a.propsProj : null,
             },
             stars: Number.isFinite(a.matchupStars) ? a.matchupStars : null,
             status: p.status || "",
@@ -230,7 +233,7 @@ export function captureCalibration(state, week) {
               espn: Number.isFinite(e.proj) ? e.proj : null,
               espnBasis: e.projBasis || null,
               fp: fp ? fp.proj : null,
-              props: pr ? pr.proj : null,
+              props: pr && propsCoverPosition(pr.props, e.pos) ? pr.proj : null,
             },
             // ESPN's raw designation, stored as-is and never rendered: this is
             // the string whose first letter became an "A" badge on every

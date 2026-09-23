@@ -11,7 +11,7 @@ import { propsToPoints, SCORING, parseProps } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
 import { extractScoring, matchupSideScore } from "../api/espn.js";
 import { isGameday } from "../api/odds.js";
-import { pointDistribution, floorCeiling, fpProjFor, propsSweptFor } from "../src/analytics.js";
+import { pointDistribution, floorCeiling, fpProjFor, propsSweptFor, blendProjection } from "../src/analytics.js";
 import {
   simulateMatchup,
   simulateSwap,
@@ -739,10 +739,10 @@ const a5State = {
   players: { mine: { id: "mine", name: "Mirror Guy", team: "KC", pos: "WR", ecr: "WR5", status: "" } },
   lineup: { QB: [null], RB: [null, null], WR: ["mine", null, null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
   bench: [null, null, null, null, null, null],
-  analytics: { mine: { 1: { proj: 10, projSource: "espn", fpProj: 20, propsProj: 17 } } },
+  analytics: { mine: { 1: { proj: 10, projSource: "espn", fpProj: 20, propsProj: 17, props: { receptions: 7.5, recYds: 82.5, anytimeTdOdds: 150 } } } },
   matchups: { 1: { oppTeam: "Them" } },
   fpProjIndex: { 1: { oppguy: { proj: 20, stars: null } } },
-  propsIndex: { 1: { oppguy: { proj: 17, parts: ["7.5 rec", "82.5 rec yds"] } } },
+  propsIndex: { 1: { oppguy: { proj: 17, parts: ["7.5 rec", "82.5 rec yds"], props: { receptions: 7.5, recYds: 82.5, anytimeTdOdds: 150 } } } },
   espn: {
     myTeamId: 7, fetchedAt: Date.now(),
     teams: [{ id: 9, name: "Them", mapped: "Them", roster: [
@@ -1369,7 +1369,7 @@ const leagueState = (gameState, actual) => ({
   byes: {},
   calibration: {},
   // normName strips everything but letters: "Star Back" -> "starback"
-  propsIndex: { 1: { starback: { proj: 19.5 } } },
+  propsIndex: { 1: { starback: { proj: 19.5, props: { rushYds: 85.5, receptions: 2.5, recYds: 18.5, anytimeTdOdds: -120 } } } },
   fpProjIndex: { 1: { starback: { proj: 17 } } },
   espn: {
     myTeamId: 7,
@@ -2759,6 +2759,52 @@ check(
   orphans.size === 0,
   orphans.size ? `orphaned: ${[...orphans].sort().join(", ")}` : ""
 );
+
+// ---- partial props must not replace a real projection (Skattebo, Sept 23) ----
+// Midweek the books post anytime-TD lines before yardage. /api/odds counts a
+// player with ANY line as priced, propsToPoints scores missing markets as 0,
+// and props outrank everything — so a starting RB with only a TD line was
+// projected 3.6 (his TD chance x 6) over ESPN's ~12. Props win only when the
+// position's core yardage market is present.
+{
+  const st = { projWeights: undefined };
+  const tdOnly = { anytimeTdOdds: 110 };
+  const tdPts = propsToPoints(tdOnly).points;
+  const partial = blendProjection({ proj: 12.5, propsProj: tdPts, props: tdOnly }, "RB", "NYG", st);
+  check(
+    "an RB with only an anytime-TD line is NOT priced off props",
+    partial && partial.source !== "vegas props" && partial.mu > 10,
+    partial ? `${partial.source} ${partial.mu}` : "null"
+  );
+  const full = { rushYds: 62.5, receptions: 2.5, recYds: 17.5, anytimeTdOdds: 110 };
+  const fullPts = propsToPoints(full).points;
+  const whole = blendProjection({ proj: 12.5, propsProj: fullPts, props: full }, "RB", "NYG", st);
+  check(
+    "an RB with his rushing line still prices off props",
+    whole && whole.source === "vegas props",
+    whole ? whole.source : "null"
+  );
+  const noRec = { rushYds: 62.5, anytimeTdOdds: 110 };
+  const noRecRes = blendProjection({ proj: 12.5, propsProj: propsToPoints(noRec).points, props: noRec }, "RB", "NYG", st);
+  check(
+    "an RB with rushing + TD lines but no receiving lines is NOT priced off props",
+    noRecRes && noRecRes.source !== "vegas props",
+    noRecRes ? noRecRes.source : "null"
+  );
+  const wrNoTd = { receptions: 5.5, recYds: 64.5 };
+  const wrRes = blendProjection({ proj: 12, propsProj: propsToPoints(wrNoTd).points, props: wrNoTd }, "WR", "KC", st);
+  check("a WR without a TD line is NOT priced off props", wrRes && wrRes.source !== "vegas props", wrRes ? wrRes.source : "null");
+  const qb = { passYds: 245.5, passTds: 1.5 };
+  const qbRes = blendProjection({ proj: 17, propsProj: propsToPoints(qb).points, props: qb }, "QB", "PIT", st);
+  check("a pocket QB with passing yards + TDs (no rushing line) IS priced off props", qbRes && qbRes.source === "vegas props", qbRes ? qbRes.source : "null");
+  const oppState = { propsIndex: { 3: { camskattebo: { proj: tdPts, parts: [], props: tdOnly } } } };
+  const od = opponentDist(oppState, 3, { name: "Cam Skattebo", pos: "RB", team: "NYG", proj: 12.5 });
+  check(
+    "an opponent RB with only a TD line keeps his ESPN projection",
+    od.mean > 10 && od.source !== "vegas props",
+    `${od.source} ${od.mean}`
+  );
+}
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");
 process.exit(failures ? 1 : 0);

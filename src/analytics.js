@@ -1,4 +1,5 @@
 import { normName } from "./espnSync.js";
+import { propsCoverPosition } from "./props.js";
 
 // ============================================================================
 // Per-player, per-week analytics — the inputs a projection needs.
@@ -228,7 +229,9 @@ export function blendProjection(a, pos, team, state) {
   // agreement is signal, and on the sixth the DISAGREEMENT is the finding.
   // Blending keeps the mean and widens sd by the gap, so a contested player
   // is correctly modelled as a less certain bet rather than a confident one.
-  if (a && Number.isFinite(a.propsProj) && a.propsProj > 0) {
+  // Props win only when they cover the position's core market — see
+  // propsCoverPosition. A TD-only line is not a projection.
+  if (a && Number.isFinite(a.propsProj) && a.propsProj > 0 && propsCoverPosition(a.props, pos)) {
     mu = a.propsProj;
     source = "vegas props";
   } else if (espnProj != null && fpProj != null && (espnProj > 0 || fpProj > 0)) {
@@ -277,7 +280,7 @@ export function blendProjection(a, pos, team, state) {
   let uncertainty = disp ? 1 + disp.spread * 0.5 : 1;
   // Two projections disagreeing IS uncertainty — widen rather than pretend.
   if (blendGap > 0) uncertainty = Math.max(uncertainty, 1 + Math.min(0.5, blendGap));
-  if (a && Number.isFinite(a.propsProj) && Number.isFinite(a.proj) && a.proj > 0 && a.propsProj > 0) {
+  if (a && Number.isFinite(a.propsProj) && Number.isFinite(a.proj) && a.proj > 0 && a.propsProj > 0 && propsCoverPosition(a.props, pos)) {
     const gap = Math.abs(a.propsProj - a.proj) / ((a.propsProj + a.proj) / 2);
     uncertainty = Math.max(uncertainty, 1 + Math.min(0.5, gap));
   }

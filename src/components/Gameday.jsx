@@ -306,6 +306,10 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
             espnId: e.espnId || "",
             proj: d ? d.mean : null,
             simProj: d ? d.condMean : null,
+            // ESPN's own number, before any pricing. The opponent card needs it
+            // as the baseline: simProj is already the props number when a line
+            // prices him, so "props vs consensus" compared 3.6 with itself.
+            espnProj: Number.isFinite(e.proj) ? e.proj : null,
             playProb: d ? d.playProb : PLAY_PROB[e.injuryStatus] ?? 1,
             // The blend's own spread, not a position constant — a contested
             // opponent is a less certain bet and the sim should know.

@@ -1473,7 +1473,9 @@ export default function App({ initialTab } = {}) {
             if (!k) continue;
             const computed = propsToPoints(pl.props, scoring);
             if (!(computed.points > 0)) continue;
-            forWeek[k] = { proj: computed.points, parts: computed.parts };
+            // The raw lines travel with the total: blendProjection needs them
+            // to tell a full set from a TD-only line (propsCoverPosition).
+            forWeek[k] = { proj: computed.points, parts: computed.parts, props: pl.props };
             opp++;
           }
           next = { ...next, propsIndex: { ...(next.propsIndex || {}), [s.week]: forWeek } };
