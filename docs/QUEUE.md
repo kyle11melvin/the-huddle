@@ -95,6 +95,39 @@ file replaces it.
 **Watch:** the ledger is now the largest thing in the team document (247 bytes a
 league row, ~390 KB a season at 10 teams) and it re-serialises on every save.
 
+## Impeccable review — Sept 23
+
+Design critique (22/40) plus the deterministic detector. See
+`docs/HANDOFF-TOMORROW.md` for how it was run.
+
+**Shipped:** league strip side, hero margin pill, NOT LOADED opponent state,
+gauge caption halo, the 5-item bottom tab bar, compact header off Today.
+
+**Open, roughly in priority order:**
+
+- **Apply writes to ESPN in one tap, no undo.** Relabel to name the player and
+  ESPN ("Start Q. Johnston on ESPN") is UI-only. An undo would go through
+  `src/espnWrite.js` — **ask Kyle first**.
+- **Preseason / no opponent: the board still shows EMPTY and EVEN** on the
+  right. The NOT LOADED fix only fires when the opponent is KNOWN but his
+  roster is missing; with no opponent at all `missingName` is empty.
+- **Board rows print the kickoff time twice** (meta line and chip), and names
+  still truncate at phone width (`T. LAWRE…`). Ten rows run ~2,000px.
+- **Unexplained shorthand:** `imp 21`, `EVEN`, the one-letter injury badge
+  (`D`, and `O` next to a `0.0`), the gold crescents on Start/Sit Lab chips.
+- **Small, dim text:** ~33 rules at 9px or under, several in `--text-dim`
+  (~3.8:1). DESIGN.md locks low-contrast micro-labels AND names sunlight
+  legibility — a real tension to put to Kyle, not to resolve silently.
+- **Minor:** write-key dots overflow the Data modal; the opponent card's close
+  button overlaps a long name; Bowers' FLOOR 6.0 tile has no "if he plays";
+  `00` count badges read as decoration; the opponent card says Vegas lines
+  "haven't loaded — sync ESPN" when there is never a line for opponents;
+  League tab says "your full roster is right below" above an empty screen
+  (may be the harness — check on a device).
+- **Detector findings not acted on:** 14 one-side stripes (several carry
+  meaning — call colour, good/bad), gradient text on the hero title and FAAB
+  amount, two `transition: width` bars. Style calls for Kyle.
+
 ## Game-script projections
 
 Design written up separately in **`docs/GAME_SCRIPT.md`** — write/refine that
@@ -188,7 +221,7 @@ and should be kept. But it means the card is least useful for exactly
 the players where a decision is hardest. Consider what a depth player
 card should show instead of three empty tiles.
 
-### F4 — Hero number sizing (small, do anytime)
+### F4 — Hero number sizing — ✅ DONE (39px, `.gg-hero`); caption halo added Sept 23
 
 The projected-points number now overlaps the gauge arc, crosses the
 needle, and crowds the word PROJECTED. Reduce roughly 25% and re-check
