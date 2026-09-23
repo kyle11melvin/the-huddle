@@ -56,7 +56,7 @@ export default function OpponentCard({ row, week, state, onClose }) {
     raw == null || row.estimated
       ? null
       : blendProjection(
-          { proj: raw, fpProj: fp ? fp.proj : null, propsProj: book ? book.proj : null, props: book ? book.props : null },
+          { proj: raw, fpProj: fp ? fp.proj : null, propsProj: book ? book.proj : null, props: book ? book.props : null, fpInts: fp ? fp.ints : null },
           row.pos,
           row.team,
           state
@@ -64,7 +64,7 @@ export default function OpponentCard({ row, week, state, onClose }) {
   const condMean = blend ? Math.round(blend.mu * 10) / 10 : raw;
   // Did the book actually price him? A line can exist without covering his
   // core market (TD-only midweek), in which case blendProjection ignored it.
-  const pricedByBook = !!(blend && blend.source === "vegas props");
+  const pricedByBook = !!(blend && blend.source.startsWith("vegas props"));
   // What the projection would be WITHOUT the book — the honest baseline.
   const noBook =
     raw == null || row.estimated
@@ -112,7 +112,13 @@ export default function OpponentCard({ row, week, state, onClose }) {
             // those lines.
             propsEdge={
               pricedByBook && noBook
-                ? { delta: Math.round((book.proj - noBook.mu) * 10) / 10, parts: posted, source: "odds-api" }
+                ? {
+                    delta: Math.round((blend.mu - noBook.mu) * 10) / 10,
+                    // blend.mu is the Vegas number INCLUDING a QB's FantasyPros
+                    // INT correction; say so, since it is not a Vegas line.
+                    parts: blend.source.includes("FP INTs") && fp && Number.isFinite(fp.ints) ? [...posted, `${fp.ints} INT (FantasyPros)`] : posted,
+                    source: "odds-api",
+                  }
                 : book
                   ? { partial: true, delta: null, parts: posted, source: "odds-api" }
                   : null

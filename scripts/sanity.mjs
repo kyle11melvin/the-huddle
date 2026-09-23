@@ -7,6 +7,7 @@
 //   5. ESPN sync seats every player it can and REPORTS the ones it can't
 //   6. one failed week fetch must not fabricate a league-wide bye
 import fsMod from "node:fs";
+import { playerCardData } from "../src/playerCardData.js";
 import { scoreFpStats, applyFantasyPros } from "../src/fantasyprosSync.js";
 import { trimRankings, trimProjections } from "../api/fantasypros.js";
 import { propsToPoints, SCORING, parseProps } from "../src/props.js";
@@ -2799,6 +2800,19 @@ check(
   const qb = { passYds: 245.5, passTds: 1.5 };
   const qbRes = blendProjection({ proj: 17, propsProj: propsToPoints(qb).points, props: qb }, "QB", "PIT", st);
   check("a pocket QB with passing yards + TDs (no rushing line) IS priced off props", qbRes && qbRes.source === "vegas props", qbRes ? qbRes.source : "null");
+  // QB props carry no INT line (the sweep never asks for one), so every QB's
+  // Vegas number ignored -3/INT. Kyle's call: take FantasyPros' projected
+  // INTs rather than pay for another market. Allen, week 3: 0.8 INT = -2.4.
+  const qbFull = { passYds: 243.5, passTds: 1.5, rushYds: 35.5, rushAtt: 7.5, anytimeTdOdds: -155 };
+  const qbPts = propsToPoints(qbFull).points;
+  const withInts = blendProjection({ proj: 25, propsProj: qbPts, props: qbFull, fpInts: 0.8 }, "QB", "BUF", st);
+  check(
+    "a QB's Vegas number subtracts FantasyPros' projected INTs (Allen 0.8 x -3)",
+    withInts && withInts.source.startsWith("vegas props") && Math.abs(withInts.mu - (qbPts - 2.4)) < 0.05,
+    withInts ? `${withInts.source} ${withInts.mu} vs props ${qbPts}` : "null"
+  );
+  const noFp = blendProjection({ proj: 25, propsProj: qbPts, props: qbFull }, "QB", "BUF", st);
+  check("with no FantasyPros INT estimate the QB's Vegas number is unchanged", noFp && Math.abs(noFp.mu - qbPts) < 0.05, noFp ? `${noFp.mu}` : "null");
   const oppState = { propsIndex: { 3: { camskattebo: { proj: tdPts, parts: [], props: tdOnly } } } };
   const od = opponentDist(oppState, 3, { name: "Cam Skattebo", pos: "RB", team: "NYG", proj: 12.5 });
   check(
@@ -2840,6 +2854,8 @@ check(
   check("the automatic fill indexes every player by name for the opponent side", out.fpProjIndex["3"].jahmyrgibbs && out.fpProjIndex["3"].jahmyrgibbs.src === "api");
   check("the automatic fill updates my player's rank", out.players.g.ecr === "RB1" && out.ecrSource === "api", out.players.g.ecr);
 
+  const qbOut = applyFantasyPros(base, "3", { rank: [], proj: [{ name: "Josh Allen", team: "BUF", pos: "QB", stats: allen }] }, SCORING).state;
+  check("the automatic fill stores a QB's projected INTs for the Vegas number", qbOut.fpProjIndex["3"].joshallen && qbOut.fpProjIndex["3"].joshallen.ints === 0.8, JSON.stringify(qbOut.fpProjIndex["3"].joshallen));
   // A paste wins its week.
   const pasted = {
     ...base,
@@ -2852,6 +2868,16 @@ check(
   check("a pasted projection is not overwritten by the automatic fill", kept.analytics.g["3"].fpProj === 21 && kept.fpProjIndex["3"].jahmyrgibbs.proj === 21);
   check("pasted matchup stars survive the automatic fill", kept.analytics.g["3"].matchupStars === 4 && kept.fpProjIndex["3"].jahmyrgibbs.stars === 4);
   check("pasted ranks for the week are not overwritten", kept.players.g.ecr === "RB4");
+}
+
+// ---- the card names his opponent from the schedule (Shough, Sept 23) ----
+{
+  const st = { week: "3", players: {}, analytics: {}, schedule: { opps: { 3: { NO: "@SEA" } } } };
+  const shough = { id: "s", name: "Tyler Shough", team: "NO", pos: "QB", weeks: {} };
+  const cd = playerCardData(st, shough, "3");
+  check("a synced player's card takes his opponent from the schedule", cd && cd.player.opp === "@SEA", cd && cd.player.opp);
+  const typed = playerCardData(st, { ...shough, weeks: { 3: { opp: "vs ATL" } } }, "3");
+  check("a typed-in opponent still wins over the schedule", typed && typed.player.opp === "vs ATL", typed && typed.player.opp);
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

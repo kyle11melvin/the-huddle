@@ -218,7 +218,7 @@ export const opponentDist = (state, week, e) => {
   // The SAME record shape pointDistribution builds for my own players, so the
   // same ladder runs: props first, then the ESPN+FP blend, then ESPN alone.
   const blend = blendProjection(
-    { proj: e.proj, fpProj: fp ? fp.proj : null, propsProj: book ? book.proj : null, props: book ? book.props : null },
+    { proj: e.proj, fpProj: fp ? fp.proj : null, propsProj: book ? book.proj : null, props: book ? book.props : null, fpInts: fp ? fp.ints : null },
     e.pos,
     e.team,
     state

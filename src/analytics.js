@@ -1,5 +1,5 @@
 import { normName } from "./espnSync.js";
-import { propsCoverPosition } from "./props.js";
+import { propsCoverPosition, leagueScoring } from "./props.js";
 
 // ============================================================================
 // Per-player, per-week analytics — the inputs a projection needs.
@@ -210,6 +210,29 @@ export const isOnByeWeek = (player, week, state) => {
  * @param {string} team NFL team, for the Vegas implied-total tilt
  * @returns {{mu, sd, source, dispersion}|null} null when there is no number at all
  */
+/**
+ * The Vegas number for a player, or null when his lines can't price him.
+ *
+ * The ONE place a props total becomes a projection, so every reader — the
+ * blend, the card's edge, the Lab, the ledger — agrees on it.
+ *
+ * QBs: the odds sweep never requests an interception line, so a QB's props
+ * total counted his INTs as zero — about +2.4 for a 0.8-INT passer at -3/INT.
+ * Kyle chose FantasyPros' projected INTs over paying for another market;
+ * `intAdj` carries the correction so the card can say where it came from.
+ *
+ * @returns {{pts:number, intAdj:number, fpInts:number|null}|null}
+ */
+export function propsProjection(a, pos, state) {
+  if (!a || !Number.isFinite(a.propsProj) || a.propsProj <= 0) return null;
+  if (!propsCoverPosition(a.props, pos)) return null;
+  let intAdj = 0;
+  if (pos === "QB" && !Number.isFinite(a.props && a.props.ints) && Number.isFinite(a.fpInts) && a.fpInts > 0) {
+    intAdj = Math.round(a.fpInts * leagueScoring(state).int * 10) / 10;
+  }
+  return { pts: Math.round((a.propsProj + intAdj) * 10) / 10, intAdj, fpInts: intAdj ? a.fpInts : null };
+}
+
 export function blendProjection(a, pos, team, state) {
   const cv = BASE_CV[pos] ?? 0.55;
   const implied = state.espn && state.espn.impliedTotals;
@@ -231,9 +254,10 @@ export function blendProjection(a, pos, team, state) {
   // is correctly modelled as a less certain bet rather than a confident one.
   // Props win only when they cover the position's core market — see
   // propsCoverPosition. A TD-only line is not a projection.
-  if (a && Number.isFinite(a.propsProj) && a.propsProj > 0 && propsCoverPosition(a.props, pos)) {
-    mu = a.propsProj;
-    source = "vegas props";
+  const vegas = propsProjection(a, pos, state);
+  if (vegas) {
+    mu = vegas.pts;
+    source = vegas.intAdj ? "vegas props + FP INTs" : "vegas props";
   } else if (espnProj != null && fpProj != null && (espnProj > 0 || fpProj > 0)) {
     const w = state.projWeights || DEFAULT_PROJ_WEIGHTS;
     mu = espnProj * w.espn + fpProj * w.fp;
@@ -260,7 +284,7 @@ export function blendProjection(a, pos, team, state) {
   // high-total games get nudged up, low-total down. Capped ±12% — the line
   // prices the game environment, not the player's share of it. Props are
   // already the market, so they're never re-adjusted.
-  if (source !== "vegas props" && implied && Number.isFinite(implied[team])) {
+  if (!vegas && implied && Number.isFinite(implied[team])) {
     const vals = Object.values(implied).filter(Number.isFinite);
     if (vals.length >= 4) {
       const avg = vals.reduce((n, v) => n + v, 0) / vals.length;
@@ -280,8 +304,8 @@ export function blendProjection(a, pos, team, state) {
   let uncertainty = disp ? 1 + disp.spread * 0.5 : 1;
   // Two projections disagreeing IS uncertainty — widen rather than pretend.
   if (blendGap > 0) uncertainty = Math.max(uncertainty, 1 + Math.min(0.5, blendGap));
-  if (a && Number.isFinite(a.propsProj) && Number.isFinite(a.proj) && a.proj > 0 && a.propsProj > 0 && propsCoverPosition(a.props, pos)) {
-    const gap = Math.abs(a.propsProj - a.proj) / ((a.propsProj + a.proj) / 2);
+  if (vegas && Number.isFinite(a.proj) && a.proj > 0) {
+    const gap = Math.abs(vegas.pts - a.proj) / ((vegas.pts + a.proj) / 2);
     uncertainty = Math.max(uncertainty, 1 + Math.min(0.5, gap));
   }
   const sd = mu * cv * uncertainty;
