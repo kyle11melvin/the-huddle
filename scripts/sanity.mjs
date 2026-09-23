@@ -2820,6 +2820,10 @@ check(
   // Kyle's rule: every scoring stat, league scoring — 0.2/rush attempt included.
   const g = scoreFpStats(pj[0].stats, "RB", SCORING);
   check("a FantasyPros stat line is scored with the league's rules (Gibbs 28.6, not PPR 24.4)", g === 28.6, `got ${g}`);
+  // Allen, week 3, verbatim from Kyle's QB run: pass_ints is the INT key.
+  const allen = { points_ppr: 23.68, pass_yds: 248.26, pass_tds: 1.76, pass_ints: 0.8, rush_att: 7.4, rush_yds: 35, rush_tds: 0.74, fumbles: 0.22 };
+  const a = scoreFpStats(allen, "QB", SCORING);
+  check("a FantasyPros QB line scores 6/pass TD, -3/INT and rushing (Allen 27.5)", a === 27.5, `got ${a}`);
   check("K and D/ST use FantasyPros' own total", scoreFpStats({ points: 8.4 }, "K", SCORING) === 8.4);
   check("a QB line without passing yards falls back to FP's total, not ~0", scoreFpStats({ points_ppr: 19.2, rush_yds: 20 }, "QB", SCORING) === 19.2);
 
