@@ -4288,6 +4288,18 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   align-items: center;
 }
 
+/* Inside a modal the close button floats over the card's top-right corner;
+   keep the name clear of it rather than ellipsing underneath it. */
+.modal .pc-head {
+  padding-right: 50px;
+}
+
+/* …and let a long name take a second line there instead of ellipsing to
+   "DE'VON …" — the card is about one player; his name should be readable. */
+.modal .pc-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 
 /* Gold hairline, dark spacer ring, and a wash of the player's own team colour
    behind the cutout — `--team` is set inline from teams.js. */
