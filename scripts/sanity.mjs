@@ -8,8 +8,8 @@
 //   6. one failed week fetch must not fabricate a league-wide bye
 import fsMod from "node:fs";
 import { playerCardData } from "../src/playerCardData.js";
-import { scoreFpStats, applyFantasyPros } from "../src/fantasyprosSync.js";
-import { trimRankings, trimProjections } from "../api/fantasypros.js";
+import { scoreFpStats, applyFantasyPros, groupNews, newsWhen } from "../src/fantasyprosSync.js";
+import { trimRankings, trimProjections, trimNews } from "../api/fantasypros.js";
 import { propsToPoints, SCORING, parseProps, leagueScoring } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
 import { extractScoring, matchupSideScore } from "../api/espn.js";
@@ -2912,6 +2912,25 @@ check(
     adj && Math.abs(adj.mu - (rbPts - 0.2)) < 0.05,
     adj ? `${adj.source} ${adj.mu} vs props ${rbPts}` : "null"
   );
+}
+
+// ---- FantasyPros news into the Scouting Report (handoff Step 4) ----
+// Verbatim fragment of Kyle's own terminal run, Sept 23: items carry only
+// player_id, never a name.
+{
+  const raw = { items: [
+    { id: 610136, created: "2026-09-23 21:31:49", author: "Leo Sells", player_id: 22955, team_id: "LV", title: "Brock Bowers (knee) limited at practice Wednesday", categories: ["Commentary", "News", "Injury"], desc: "Brock Bowers (knee) was officially limited at practice on Wednesday.", impact: "Bowers has been sidelined for the first two weeks…" },
+    { id: 610138, created: "2026-09-23 21:33:32", author: "Leo Sells", player_id: 24570, team_id: "LV", title: "Dareke Young (hamstring) limited Wednesday", categories: ["Injury"], desc: "", impact: "" },
+    { id: 600001, created: "2026-09-20 15:00:00", author: "X", player_id: 22955, team_id: "LV", title: "Bowers had knee procedure", categories: ["Injury"], desc: "", impact: "" },
+  ] };
+  const items = trimNews(raw);
+  check("news items trim with their FantasyPros player id", items.length === 3 && items[0].fpid === 22955, JSON.stringify(items[0]).slice(0, 120));
+  const rankRows = trimRankings({ players: [{ player_id: 22955, player_name: "Brock Bowers", player_team_id: "LV", player_position_id: "TE", pos_rank: "TE3" }] });
+  const byName = groupNews([...items, items[0]], rankRows);
+  check("news resolves to a player through the rankings' id → name", byName.brockbowers && byName.brockbowers.length === 2, JSON.stringify(Object.keys(byName)));
+  check("a player's news is newest first and de-duplicated", byName.brockbowers[0].id === 610136 && byName.brockbowers[1].id === 600001);
+  check("news for a player no ranking names is dropped, not guessed", !Object.keys(byName).some((k) => k.includes("young")));
+  check("every news item renders its date", /9\/2[34]/.test(newsWhen("2026-09-23 21:31:49")), newsWhen("2026-09-23 21:31:49"));
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

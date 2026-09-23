@@ -19,6 +19,8 @@ import { searchFreeAgents } from "../../data/freeAgents.js";
 import Autocomplete from "../Autocomplete.jsx";
 import { SLOT_COLOR, STATUS_LABEL, destKey, zoneLabel } from "../../constants.js";
 import { Avatar, StatusPill, Stars, StarPicker, TeamChip, SectionHeader, EmptyState, initials } from "../ui/index.jsx";
+import { newsWhen } from "../../fantasyprosSync.js";
+import { normName } from "../../espnSync.js";
 
 export function MoveSheet({ state, playerId, onClose, onMove, coarse }) {
   const player = state.players[playerId];
@@ -92,7 +94,7 @@ export function MoveSheet({ state, playerId, onClose, onMove, coarse }) {
   );
 }
 
-export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, onMoveOpen, onDrop, onEdit }) {
+export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, onMoveOpen, onDrop, onEdit, fpNews }) {
   const player = state.players[playerId];
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -120,6 +122,7 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
   const owner = whoRosters(player.name);
   const cardData = playerCardData(state, player, week);
   const wkA = playerAnalytics(state, playerId, week);
+  const news = (fpNews && fpNews[normName(player.name)]) || [];
 
   const startEdit = () => {
     setForm({ name: player.name, team: player.team, pos: player.pos, ecr: player.ecr || "", espnId: player.espnId || "" });
@@ -281,10 +284,27 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
             </div>
           </div>
 
-          {player.notes && (
+          {/* FantasyPros news first, newest first, every item dated and
+              credited (handoff Step 4: intel carries the date it was true).
+              The seed note stays beneath, labelled for what it is — some are
+              more useful than a transaction blurb, so it is not replaced. */}
+          {(news.length > 0 || player.notes) && (
             <>
               <div className="modal-section-label">Scouting report</div>
-              <div className="modal-scout">{player.notes}</div>
+              {news.slice(0, 4).map((n) => (
+                <div key={n.id} className="scout-news">
+                  <div className="scout-news-when">{newsWhen(n.created)}</div>
+                  <div className="scout-news-title">{n.title}</div>
+                  {(n.impact || n.desc) && <div className="scout-news-body">{n.impact || n.desc}</div>}
+                  <div className="scout-news-src">FantasyPros{n.author ? ` · ${n.author}` : ""}</div>
+                </div>
+              ))}
+              {player.notes && (
+                <div className="modal-scout">
+                  {news.length > 0 && <span className="scout-note-k">Preseason note · </span>}
+                  {player.notes}
+                </div>
+              )}
             </>
           )}
 

@@ -136,8 +136,9 @@ now carries `fumble` and `twoPt`; 0 when a synced league doesn't score them).
 
 Projections and ranks load automatically — see the status banner in
 `docs/handoff-fantasypros-api.md`. Next steps there: news (4), canonical ids
-(5), player-points for the ledger (6). Next up: news (Step 4) and
-player-points for the ledger (Step 6).
+(5), player-points for the ledger (6). News (Step 4) shipped Sept 23
+into the Scouting Report. Step 6 is superseded by the ESPN actuals the
+ledger already records; Step 5 (canonical ids) remains, optional.
 
 ## Game-script projections
 

@@ -2,6 +2,7 @@
 // /api/fantasypros — weekly consensus ranks and projected stats, server-side.
 //
 //   GET /api/fantasypros?kind=rank|proj&pos=QB|RB|WR|TE|K|DST&week=1..18
+//   GET /api/fantasypros?kind=news&cat=injury|breaking|transaction
 //
 // Replaces the weekly CSV paste (docs/handoff-fantasypros-api.md, Step 2).
 // ONE position and ONE kind per request, on purpose: the plan allows 1
@@ -27,7 +28,9 @@ import { applyCors, rejectUnknownParams, TIMEOUT_MS, isAbort } from "./_auth.js"
 const BASE = "https://api.fantasypros.com/public/v2/json/nfl";
 const SEASON = process.env.FANTASYPROS_SEASON || "2026";
 const POSITIONS = new Set(["QB", "RB", "WR", "TE", "K", "DST"]);
-const KINDS = new Set(["rank", "proj"]);
+const KINDS = new Set(["rank", "proj", "news"]);
+// Decision-relevant news only (handoff Step 4): recaps are not intel.
+const NEWS_CATS = new Set(["injury", "breaking", "transaction"]);
 
 const num = (v) => {
   const n = typeof v === "number" ? v : parseFloat(v);
@@ -42,6 +45,8 @@ export function trimRankings(data) {
       // "RB12" → 12. The position-rank is what the app's ECR strings hold.
       const m = /(\d+)$/.exec(String(p.pos_rank || ""));
       return {
+        // FantasyPros' own id — the ONLY player reference a news item carries.
+        fpid: Number.isFinite(p.player_id) ? p.player_id : null,
         name: p.player_name || "",
         team: p.player_team_id || "",
         pos: p.player_position_id || "",
@@ -68,6 +73,28 @@ export function trimProjections(data) {
     .filter((r) => r.name && Object.keys(r.stats).length);
 }
 
+/**
+ * News → dated items keyed by FantasyPros player id. The API sends no player
+ * NAME, so the client resolves `fpid` through the rankings it already holds.
+ */
+export function trimNews(data) {
+  const items = Array.isArray(data && data.items) ? data.items : [];
+  return items
+    .map((it) => ({
+      id: it.id,
+      fpid: Number.isFinite(it.player_id) ? it.player_id : null,
+      team: it.team_id || "",
+      title: it.title || "",
+      desc: it.desc || "",
+      impact: it.impact || "",
+      created: it.created || "", // "2026-09-23 21:33:32", UTC
+      author: it.author || "",
+      link: it.link || "",
+      categories: Array.isArray(it.categories) ? it.categories : [],
+    }))
+    .filter((it) => it.id != null && it.fpid != null && it.title && it.created);
+}
+
 function send(res, status, body, cache) {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", cache || "no-store");
@@ -79,10 +106,11 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(204).end();
   // Unknown params would fork the CDN cache key and cost real API calls —
   // the Odds API tier was nearly drained that way once.
-  if (!rejectUnknownParams(req, res, ["kind", "pos", "week"])) return;
+  if (!rejectUnknownParams(req, res, ["kind", "pos", "week", "cat"])) return;
 
   const q = req.query || {};
   const kind = String(q.kind || "");
+  if (kind === "news") return newsHandler(res, String(q.cat || ""));
   const pos = String(q.pos || "").toUpperCase();
   const week = Number(q.week);
   if (!KINDS.has(kind) || !POSITIONS.has(pos) || !Number.isInteger(week) || week < 1 || week > 18) {
@@ -110,6 +138,26 @@ export default async function handler(req, res) {
       { ok: true, configured: true, kind, pos, week, rows, fetchedAt: Date.now(), updated: data.last_updated || null },
       "s-maxage=10800, stale-while-revalidate=86400"
     );
+  } catch (e) {
+    return send(res, 504, { ok: false, error: isAbort(e) ? "FantasyPros timed out" : "FantasyPros fetch failed" });
+  }
+}
+
+async function newsHandler(res, cat) {
+  if (!NEWS_CATS.has(cat)) {
+    return send(res, 400, { ok: false, error: "Need cat=injury|breaking|transaction" });
+  }
+  const key = process.env.FANTASYPROS_API_KEY;
+  if (!key) return send(res, 200, { configured: false, reason: "FANTASYPROS_API_KEY is not set in Vercel." });
+  try {
+    const r = await fetch(`${BASE}/news?limit=100&category=${cat}`, {
+      headers: { "x-api-key": key },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!r.ok) return send(res, 502, { ok: false, error: `FantasyPros answered ${r.status}`, status: r.status });
+    const items = trimNews(await r.json());
+    // News moves faster than ranks: 30 minutes at the edge.
+    return send(res, 200, { ok: true, configured: true, kind: "news", cat, items, fetchedAt: Date.now() }, "s-maxage=1800, stale-while-revalidate=7200");
   } catch (e) {
     return send(res, 504, { ok: false, error: isAbort(e) ? "FantasyPros timed out" : "FantasyPros fetch failed" });
   }
