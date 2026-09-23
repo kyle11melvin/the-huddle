@@ -13,7 +13,7 @@
   --border-hi: #2e3b58;
   --text: #eef2f8;
   --text-muted: #9aa5b8;
-  --text-dim: #64708a;
+  --text-dim: #808ca6;
   /* --accent was a second accent colour (iOS-adjacent blue) living alongside
      the gold. One accent means one accent, so these now derive from it — 56
      usages across the stylesheet redirect from this one block rather than
@@ -4229,7 +4229,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   --g-bad: #ff5c6c;
   --g-ink: #eef2f8;
   --g-muted: #9aa5b8;
-  --g-dim: #64708a;
+  --g-dim: #808ca6;
   --g-card-top: #16243c;
   --g-card-mid: #101b2e;
   --g-card-bot: #0a1321;
