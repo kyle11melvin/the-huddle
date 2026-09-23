@@ -22,7 +22,7 @@ import StartSitLab from "./components/StartSitLab.jsx";
 import { setPlayerAnalytics, playerAnalytics, pointDistribution } from "./analytics.js";
 import { rowGameState, opponentDistributions } from "./simulate.js";
 import { propsToPoints, leagueScoring } from "./props.js";
-import { applyFantasyPros, FP_POSITIONS } from "./fantasyprosSync.js";
+import { applyFantasyPros, FP_POSITIONS, groupNews } from "./fantasyprosSync.js";
 import { writeLineupMove } from "./espnWrite.js";
 import {
   effectiveStatus,
@@ -1415,6 +1415,9 @@ export default function App({ initialTab } = {}) {
   // FantasyPros; edge-cached answers (x-vercel-cache HIT/STALE) cost nothing
   // and don't wait. Once per week per session, like the odds fetch below.
   const fpWeek = useRef(null);
+  // FantasyPros news by normalized player name — session-only, never saved:
+  // news is only true for its moment and every open refetches it.
+  const [fpNews, setFpNews] = useState({});
   useEffect(() => {
     if (!loaded || viewingShared) return;
     const wk = Number(state.week);
@@ -1453,6 +1456,26 @@ export default function App({ initialTab } = {}) {
         return;
       }
       setState((s) => (s.week !== week ? s : applyFantasyPros(s, week, data, leagueScoring(s)).state));
+
+      // News for the Scouting Report. Items carry only FantasyPros' player id,
+      // resolved through the ranks just fetched. Quiet on failure: the seed
+      // note still shows, and nothing else depends on this.
+      if (data.rank.length) {
+        const items = [];
+        for (const cat of ["injury", "breaking", "transaction"]) {
+          try {
+            const r = await fetch(`${base}/api/fantasypros?kind=news&cat=${cat}`, { signal: AbortSignal.timeout(15000) });
+            const cached = /HIT|STALE/i.test(r.headers.get("x-vercel-cache") || "");
+            const d = await r.json().catch(() => null);
+            if (r.ok && d && d.ok) items.push(...d.items);
+            if (!cached) await new Promise((res) => setTimeout(res, 1100));
+          } catch {
+            /* news is additive — a miss changes nothing else */
+          }
+          if (!aliveRef.current) return;
+        }
+        setFpNews(groupNews(items, data.rank));
+      }
       flash(
         `FantasyPros: ${data.proj.length} projections and ${data.rank.length} ranks for week ${wk}` +
           (failed ? ` (${failed} request${failed === 1 ? "" : "s"} failed)` : "") +
@@ -3087,6 +3110,7 @@ export default function App({ initialTab } = {}) {
             setMoveId(id);
           }}
           onDrop={onDropPlayer}
+          fpNews={fpNews}
         />
       )}
       {moveId && (

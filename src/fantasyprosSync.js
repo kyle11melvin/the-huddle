@@ -158,3 +158,38 @@ export function applyFantasyPros(state, week, data, scoring) {
 
   return { state: next, projected, ranked, skippedForPaste: pastedRanks };
 }
+
+/**
+ * FantasyPros news → items per player, newest first, by normalized name.
+ *
+ * A news item carries only FantasyPros' player id, so it is resolved through
+ * the rankings rows the app already fetched (which carry id AND name).
+ * Deliberately name-keyed rather than a new matcher (handoff Step 4: the app
+ * already has too many). Items for players no ranking row names are dropped.
+ *
+ * Not persisted: news is only true for its moment, and every open refetches.
+ */
+export function groupNews(items, rankRows) {
+  const nameById = new Map();
+  for (const r of rankRows || []) if (r.fpid != null && r.name) nameById.set(r.fpid, normName(r.name));
+  const seen = new Set();
+  const out = {};
+  for (const it of items || []) {
+    if (seen.has(it.id)) continue; // the same item can sit in two categories
+    seen.add(it.id);
+    const k = nameById.get(it.fpid);
+    if (!k) continue;
+    (out[k] = out[k] || []).push(it);
+  }
+  for (const k of Object.keys(out)) out[k].sort((a, b) => (a.created < b.created ? 1 : a.created > b.created ? -1 : 0));
+  return out;
+}
+
+/** "2026-09-23 21:33:32" (UTC) → "Wed 9/23 · 5:33 PM" in the device's zone. */
+export function newsWhen(created) {
+  const d = new Date(String(created || "").replace(" ", "T") + "Z");
+  if (Number.isNaN(d.getTime())) return "";
+  const day = d.toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return `${day.replace(",", "")} · ${time}`;
+}
