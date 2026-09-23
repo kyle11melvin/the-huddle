@@ -13,7 +13,7 @@
   --border-hi: #2e3b58;
   --text: #eef2f8;
   --text-muted: #9aa5b8;
-  --text-dim: #64708a;
+  --text-dim: #808ca6;
   /* --accent was a second accent colour (iOS-adjacent blue) living alongside
      the gold. One accent means one accent, so these now derive from it — 56
      usages across the stylesheet redirect from this one block rather than
@@ -2811,9 +2811,13 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 .code-box { display: flex; gap: 9px; align-items: center; }
 .code-box input { flex: 1; min-width: 0; font-family: var(--font-mono); letter-spacing: 1px; }
 .code-box .btn-secondary { flex-shrink: 0; }
+.team-code.key-masked { overflow: hidden; white-space: nowrap; font-size: 15px; letter-spacing: 1px; }
+/* A revealed key wraps rather than clipping — every character must be readable. */
+.team-code.key-shown { font-size: 15px; letter-spacing: 1px; word-break: break-all; }
 
 .team-code {
   flex: 1;
+  min-width: 0; /* lets the box shrink so the buttons beside it stay on screen */
   font-family: var(--font-mono);
   font-size: 20px;
   font-weight: 700;
@@ -4229,7 +4233,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   --g-bad: #ff5c6c;
   --g-ink: #eef2f8;
   --g-muted: #9aa5b8;
-  --g-dim: #64708a;
+  --g-dim: #808ca6;
   --g-card-top: #16243c;
   --g-card-mid: #101b2e;
   --g-card-bot: #0a1321;
@@ -4282,6 +4286,19 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   grid-template-columns: 66px 1fr auto;
   gap: 13px;
   align-items: center;
+}
+
+/* Inside a modal the close button floats over the card's top-right corner;
+   keep the name clear of it rather than ellipsing underneath it. */
+.modal .pc-head {
+  padding-right: 50px;
+}
+
+/* …and let a long name take a second line there instead of ellipsing to
+   "DE'VON …" — the card is about one player; his name should be readable. */
+.modal .pc-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* Gold hairline, dark spacer ring, and a wash of the player's own team colour
@@ -4367,6 +4384,11 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   color: #9aacc4;
   background: rgba(255, 255, 255, 0.045);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07) inset;
+}
+
+.fp-grade {
+  color: var(--gold-hi);
+  font-weight: 800;
 }
 
 .modal-sub .pc-opp {

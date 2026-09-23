@@ -206,6 +206,11 @@ colour-blind reader entirely.
 
 - **Oversized hero numbers** — the projection is the loudest thing on a card
 - **Uppercase micro-labels** — small, wide-tracked, low-contrast against the navy
+  - *Floor set Sept 23, at Kyle's direction:* the dimmest text token
+    (`--text-dim`, also `--g-dim`) is `#808ca6`, ~5.1:1 on the card surface.
+    It was `#64708a` at 3.5:1 — below the 4.5:1 small-text bar, and this app
+    is read at a glance in sunlight (see "Every state carries a WORD"). Still
+    low-contrast relative to `--text-muted` and `--text`; don't dim it back.
 - **5-item bottom tab bar**
 
 ## Icon and logo

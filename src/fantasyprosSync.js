@@ -127,6 +127,17 @@ export function applyFantasyPros(state, week, data, scoring) {
     next = setPlayerAnalytics(next, match.id, week, { fpProj: pts, fpSource: "fantasypros-api" });
   }
 
+  // ---- start/sit grades ----
+  // The API carries no matchup stars (those only come from the CSV), but its
+  // weekly rankings carry a start/sit grade ("A+"). Stored per player for
+  // the modal, which shows it when no stars are set. Not a projection input.
+  for (const r of data.rank || []) {
+    if (!r.grade) continue;
+    const pos = APP_POS[r.pos] || r.pos;
+    const { match } = matchPlayer(r.name, roster, { team: canonTeam(r.team) || r.team, pos });
+    if (match) next = setPlayerAnalytics(next, match.id, week, { fpGrade: r.grade });
+  }
+
   // ---- ranks ----
   let ranked = 0;
   const pastedRanks = state.ecrWeek === week && state.ecrSource === "paste";

@@ -2855,6 +2855,8 @@ check(
   check("the automatic fill sets my player's fpProj", out.analytics.g && out.analytics.g["3"].fpProj === 28.4, JSON.stringify(out.analytics.g));
   check("the automatic fill indexes every player by name for the opponent side", out.fpProjIndex["3"].jahmyrgibbs && out.fpProjIndex["3"].jahmyrgibbs.src === "api");
   check("the automatic fill updates my player's rank", out.players.g.ecr === "RB1" && out.ecrSource === "api", out.players.g.ecr);
+  // The API has no matchup stars; its start/sit grade stands in on the modal.
+  check("the automatic fill stores my player's FantasyPros start/sit grade", out.analytics.g["3"].fpGrade === "A+", JSON.stringify(out.analytics.g["3"]));
 
   const qbOut = applyFantasyPros(base, "3", { rank: [], proj: [{ name: "Josh Allen", team: "BUF", pos: "QB", stats: allen }] }, SCORING).state;
   check("the automatic fill stores a QB's projected INTs for the Vegas number", qbOut.fpProjIndex["3"].joshallen && qbOut.fpProjIndex["3"].joshallen.ints === 0.8, JSON.stringify(qbOut.fpProjIndex["3"].joshallen));
