@@ -190,10 +190,8 @@ select option {
   letter-spacing: 1.5px;
   line-height: 0.95;
   text-transform: uppercase;
-  background: linear-gradient(180deg, #ffffff 30%, #b9c8e8 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  /* Solid, not a white-to-blue fade (Kyle, Sept 23). */
+  color: #ffffff;
   text-shadow: 0 20px 60px rgba(79, 127, 255, 0.25);
 }
 
@@ -908,10 +906,8 @@ select option {
   font-weight: 700;
   letter-spacing: 1px;
   line-height: 1;
-  background: linear-gradient(135deg, var(--gold-hi), var(--gold));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  /* Solid gold, not a gold fade (Kyle, Sept 23). */
+  color: var(--gold-hi);
 }
 
 .faab-spent-label {
@@ -1188,12 +1184,14 @@ select option {
   color: var(--text-muted);
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--gold);
   border-radius: 12px;
   padding: 14px 16px;
 }
 
-.modal-scout.none { border-left-color: var(--border-hi); color: var(--text-dim); font-style: italic; }
+/* No gold stripe: it was decoration, and the note now sits under dated
+   FantasyPros items that carry none — a stripe on the OLDEST text read as
+   the most important thing in the block. */
+.modal-scout.none { color: var(--text-dim); font-style: italic; }
 
 .status-editor { display: flex; gap: 6px; flex-wrap: wrap; }
 
@@ -2023,8 +2021,9 @@ select option {
   z-index: 200;
   max-width: calc(100vw - 32px);
   background: var(--surface-hi);
+  /* Plain border. The 3px --accent stripe was decorative, and --accent is
+     not a brand colour here — gold is the only accent (DESIGN.md). */
   border: 1px solid var(--border-hi);
-  border-left: 3px solid var(--accent);
   border-radius: 12px;
   padding: 13px 18px;
   font-size: 13px;

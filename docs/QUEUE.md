@@ -116,8 +116,10 @@ start/sit grade when no stars are set; card opponents from the schedule.
 **Open:**
 
 - **Undo for the ESPN write** — needs `src/espnWrite.js`. Kyle: hold off.
-- **Detector style findings not acted on:** remaining side stripes, gradient
-  text on the hero title and FAAB amount, two `transition: width` bars.
+- **Detector findings — resolved Sept 23:** two decorative stripes removed
+  (seed note, toast), gradient text made solid (wordmark, FAAB amount). The
+  other 11 stripes carry meaning and stay; `transition: width` left on
+  purpose (scaleX would squash the rounded bars; animates only on change).
 - League tab copy above an empty screen (check on a device).
 
 ## Vegas props — partial lines (Sept 23, shipped)
