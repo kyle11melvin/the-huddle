@@ -3198,7 +3198,14 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 
 .lab-chip:hover { color: var(--text); border-color: var(--border-hi); }
-.lab-chip.starter { border-left: 3px solid var(--accent); }
+.lab-group { margin-top: 10px; }
+.lab-group-k {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 .lab-chip.on { color: #16120a; background: var(--accent); border-color: var(--accent); }
 
 .lab-grid {
