@@ -134,7 +134,7 @@ export default function OpponentCard({ row, week, state, onClose }) {
               : pricedByBook
                 ? "Opponent player — priced off the Vegas line, exactly as your own roster is. Money-backed lines outrank every expert projection on both sides of this matchup."
                 : book
-                  ? `Opponent player — only part of his Vegas lines are posted, so he is priced on ${fpOnFile ? "ESPN blended with your FantasyPros projection" : "ESPN's projection"} until his yardage line is up. Same rule as your own roster.`
+                  ? `Opponent player — only part of his Vegas lines are posted, so he is priced on ${fpOnFile ? "ESPN blended with your FantasyPros projection" : "ESPN's projection"} until his full set of lines is up. Same rule as your own roster.`
                   : fpOnFile
                   ? "Opponent player — ESPN blended with your pasted FantasyPros projection, the same pricing your own roster gets. No book line for him this week."
                   : "Opponent player — ESPN projection only. No Vegas line and no pasted expert projection for him this week."}

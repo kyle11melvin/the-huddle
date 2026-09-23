@@ -739,10 +739,10 @@ const a5State = {
   players: { mine: { id: "mine", name: "Mirror Guy", team: "KC", pos: "WR", ecr: "WR5", status: "" } },
   lineup: { QB: [null], RB: [null, null], WR: ["mine", null, null], TE: [null], FLEX: [null], "D/ST": [null], K: [null] },
   bench: [null, null, null, null, null, null],
-  analytics: { mine: { 1: { proj: 10, projSource: "espn", fpProj: 20, propsProj: 17, props: { receptions: 7.5, recYds: 82.5 } } } },
+  analytics: { mine: { 1: { proj: 10, projSource: "espn", fpProj: 20, propsProj: 17, props: { receptions: 7.5, recYds: 82.5, anytimeTdOdds: 150 } } } },
   matchups: { 1: { oppTeam: "Them" } },
   fpProjIndex: { 1: { oppguy: { proj: 20, stars: null } } },
-  propsIndex: { 1: { oppguy: { proj: 17, parts: ["7.5 rec", "82.5 rec yds"], props: { receptions: 7.5, recYds: 82.5 } } } },
+  propsIndex: { 1: { oppguy: { proj: 17, parts: ["7.5 rec", "82.5 rec yds"], props: { receptions: 7.5, recYds: 82.5, anytimeTdOdds: 150 } } } },
   espn: {
     myTeamId: 7, fetchedAt: Date.now(),
     teams: [{ id: 9, name: "Them", mapped: "Them", roster: [
@@ -1369,7 +1369,7 @@ const leagueState = (gameState, actual) => ({
   byes: {},
   calibration: {},
   // normName strips everything but letters: "Star Back" -> "starback"
-  propsIndex: { 1: { starback: { proj: 19.5, props: { rushYds: 85.5, receptions: 2.5, recYds: 18.5 } } } },
+  propsIndex: { 1: { starback: { proj: 19.5, props: { rushYds: 85.5, receptions: 2.5, recYds: 18.5, anytimeTdOdds: -120 } } } },
   fpProjIndex: { 1: { starback: { proj: 17 } } },
   espn: {
     myTeamId: 7,
@@ -2784,6 +2784,19 @@ check(
     whole && whole.source === "vegas props",
     whole ? whole.source : "null"
   );
+  const noRec = { rushYds: 62.5, anytimeTdOdds: 110 };
+  const noRecRes = blendProjection({ proj: 12.5, propsProj: propsToPoints(noRec).points, props: noRec }, "RB", "NYG", st);
+  check(
+    "an RB with rushing + TD lines but no receiving lines is NOT priced off props",
+    noRecRes && noRecRes.source !== "vegas props",
+    noRecRes ? noRecRes.source : "null"
+  );
+  const wrNoTd = { receptions: 5.5, recYds: 64.5 };
+  const wrRes = blendProjection({ proj: 12, propsProj: propsToPoints(wrNoTd).points, props: wrNoTd }, "WR", "KC", st);
+  check("a WR without a TD line is NOT priced off props", wrRes && wrRes.source !== "vegas props", wrRes ? wrRes.source : "null");
+  const qb = { passYds: 245.5, passTds: 1.5 };
+  const qbRes = blendProjection({ proj: 17, propsProj: propsToPoints(qb).points, props: qb }, "QB", "PIT", st);
+  check("a pocket QB with passing yards + TDs (no rushing line) IS priced off props", qbRes && qbRes.source === "vegas props", qbRes ? qbRes.source : "null");
   const oppState = { propsIndex: { 3: { camskattebo: { proj: tdPts, parts: [], props: tdOnly } } } };
   const od = opponentDist(oppState, 3, { name: "Cam Skattebo", pos: "RB", team: "NYG", proj: 12.5 });
   check(

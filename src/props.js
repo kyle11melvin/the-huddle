@@ -108,18 +108,32 @@ export function propsToPoints(props, scoring = SCORING) {
 }
 
 /**
- * Do these lines cover the player's actual workload? Props REPLACE every other
- * projection, and propsToPoints scores a missing market as zero, so a partial
- * set is not a cheaper projection — it is a wrong one. Midweek the books post
- * anytime-TD lines before yardage, and a starting RB priced on his TD line
- * alone came out at 3.6 (Cam Skattebo, Sept 23). The core yardage market for
- * the position must be present; without it the player falls back to the
- * ESPN / FantasyPros blend.
+ * Do these lines cover everything the player scores from? Props REPLACE every
+ * other projection, and propsToPoints scores a missing market as zero, so a
+ * partial set is not a cheaper projection — it is a wrong one. Midweek the
+ * books post anytime-TD lines before yardage, and a starting RB priced on his
+ * TD line alone came out at 3.6 (Cam Skattebo, Sept 23).
+ *
+ * Kyle's rule: count everything that gets the player points, so EVERY market
+ * his position scores from must be posted — an RB with rushing and TD lines
+ * but no receiving lines would otherwise score his receiving as zero. Until
+ * the full set is up he stays on the ESPN / FantasyPros blend.
+ *
+ * QB rushing counts when posted but is not required: books don't post it for
+ * pocket passers, so requiring it would bar most QBs from props for good.
  */
-const CORE_MARKET = { QB: "passYds", RB: "rushYds", WR: "recYds", TE: "recYds" };
+const REQUIRED = {
+  QB: ["passYds", "passTds"],
+  RB: ["rushYds", "receptions", "recYds", "td"],
+  WR: ["receptions", "recYds", "td"],
+  TE: ["receptions", "recYds", "td"],
+};
+const hasMarket = (props, key) =>
+  key === "td" ? Number.isFinite(props.anytimeTdOdds) || Number.isFinite(props.tds) : Number.isFinite(props[key]);
+
 export function propsCoverPosition(props, pos) {
-  const key = CORE_MARKET[pos];
-  return !!(key && props && Number.isFinite(props[key]));
+  const need = REQUIRED[pos];
+  return !!(need && props && need.every((k) => hasMarket(props, k)));
 }
 
 // ------------------------------------------------------------------ parser ---

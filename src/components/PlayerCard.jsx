@@ -155,7 +155,7 @@ export default function PlayerCard({
         </div>
         <div className="pc-edge-line">
           {propsEdge && propsEdge.partial
-            ? `Only ${propsEdge.parts.length ? propsEdge.parts.join("  ·  ") : "part of his lines"} posted so far — not enough to price him, so the expert projection is used until his yardage lines are up`
+            ? `Only ${propsEdge.parts.length ? propsEdge.parts.join("  ·  ") : "part of his lines"} posted so far — not enough to price him, so the expert projection is used until his full set of lines is up`
             : propsEdge
             ? propsEdge.parts.length
               ? propsEdge.parts.join("  ·  ")
