@@ -198,6 +198,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
         homeScore: Math.round((m.homeScore || 0) * 10) / 10,
         awayScore: Math.round((m.awayScore || 0) * 10) / 10,
         isMine: m.home === state.espn.myTeamId || m.away === state.espn.myTeamId,
+        iAmHome: m.home === state.espn.myTeamId,
       };
     });
   }, [state.espn]);
@@ -376,6 +377,18 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
   );
   const leftName = viewingMine ? MY_TEAM : selected.awayName;
   const rightName = viewingMine ? oppTeam || (selected && selected.homeName) || "" : selected.homeName;
+
+  // One side has a lineup and the other has none at all — the other team's
+  // roster never arrived (a sync without it, or no sync yet). That is missing
+  // DATA, not an empty lineup: every slot used to read "EMPTY", every edge chip
+  // handed over the whole projection, and with no sim the hero — the only
+  // place the NOT SYNCED / STALE warnings live — was not rendered to say so.
+  const missingName =
+    leftRows.length > 0 && rightRows.length === 0
+      ? rightName
+      : rightRows.length > 0 && leftRows.length === 0
+      ? leftName
+      : null;
 
   // Resolve each row's live entry ONCE per data change, then sort on it.
   // sortRows used to call resolveLive inside the comparator (O(n log n) live
@@ -621,11 +634,17 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               )}
             </div>
 
+            {/* Coloured by the same certainty rule as the hero totals, not by
+                sign: a −0.3 on a 52% coin flip was the loudest red on the card,
+                reading "losing" under a total that said otherwise. Labelled,
+                because an unlabelled signed number between two scores gets
+                read as the score gap. */}
             <div className="gd-vs">
-              <span className={`gd-margin ${projMargin >= 0 ? "up" : "down"}`}>
+              <span className="gd-margin" style={myTone ? { color: myTone } : undefined}>
                 {projMargin >= 0 ? "+" : "−"}
                 {Math.abs(projMargin).toFixed(1)}
               </span>
+              <span className="gd-margin-k">proj margin</span>
             </div>
 
             <div className="gd-team right">
@@ -669,11 +688,11 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               something when you can see who still holds a QB. */}
           <div className="gd-ytp">
             <div className="gd-ytp-box">
-              <b>{leftYtp.count} players</b>
+              <b>{leftYtp.count} yet to play</b>
               <span>{yetToPlayLabel(leftYtp) || "none left"}</span>
             </div>
             <div className="gd-ytp-box r">
-              <b>{rightYtp.count} players</b>
+              <b>{rightYtp.count} yet to play</b>
               <span>{yetToPlayLabel(rightYtp) || "none left"}</span>
             </div>
           </div>
@@ -689,6 +708,15 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
               <span>{oppProvenance.warn}</span>
             </div>
           )}
+        </div>
+      )}
+
+      {!sim && missingName && (
+        <div className="data-warn">
+          <span className="data-warn-tag">NOT LOADED</span>
+          <span>
+            The lineup for {missingName} hasn't loaded, so there is nothing to compare against yet. Tap ⟳ ESPN to sync it.
+          </span>
         </div>
       )}
 
@@ -727,10 +755,16 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                     aria-label={A ? `Open ${A.row.name}` : "Empty slot"}
                   >
                     <Face row={A && A.row} />
-                    <span className="h2h-nm">{A ? shortName(A.row.name) : "Empty"}</span>
+                    <span className={`h2h-nm ${!A && missingName ? "unknown" : ""}`}>
+                      {A ? shortName(A.row.name) : missingName ? "—" : "Empty"}
+                    </span>
                   </button>
                   <Proj d={A} />
                   {(() => {
+                    // No edge against a side that hasn't loaded: it would be
+                    // this player's entire projection, presented as a lead.
+                    // The empty span keeps the five-column grid aligned.
+                    if (missingName) return <span />;
                     const e = pairingEdge(A && A.worth, B && B.worth);
                     return (
                       <span className={`h2h-edge ${e.lead}`}>
@@ -747,7 +781,9 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                     aria-label={B ? `Open ${B.row.name}` : "Empty slot"}
                   >
                     <Face row={B && B.row} />
-                    <span className="h2h-nm">{B ? shortName(B.row.name) : "Empty"}</span>
+                    <span className={`h2h-nm ${!B && missingName ? "unknown" : ""}`}>
+                      {B ? shortName(B.row.name) : missingName ? "—" : "Empty"}
+                    </span>
                   </button>
                 </div>
 
@@ -805,19 +841,25 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
       {leagueBoard.length > 0 && (
         <div className="gd-league">
           <div className="gd-league-k">Around the league</div>
-          {leagueBoard.map((m, i) => (
-            <button
-              key={i}
-              className={`gd-mini ${m.isMine ? "mine" : ""} ${viewIdx === i ? "active" : ""}`}
-              onClick={() => setViewIdx(i)}
-            >
-              <span className="gd-mini-t">{m.awayName}</span>
-              <span className="gd-mini-s">{m.awayScore}</span>
-              <span className="gd-mini-d">–</span>
-              <span className="gd-mini-s">{m.homeScore}</span>
-              <span className="gd-mini-t r">{m.homeName}</span>
-            </button>
-          ))}
+          {leagueBoard.map((m, i) => {
+            // ESPN lists away-then-home. On my own matchup that put me on the
+            // right whenever I was at home — the one strip breaking "myTeam is
+            // ALWAYS the left column". Other matchups keep ESPN's order.
+            const flip = m.iAmHome;
+            return (
+              <button
+                key={i}
+                className={`gd-mini ${m.isMine ? "mine" : ""} ${viewIdx === i ? "active" : ""}`}
+                onClick={() => setViewIdx(i)}
+              >
+                <span className="gd-mini-t">{flip ? m.homeName : m.awayName}</span>
+                <span className="gd-mini-s">{flip ? m.homeScore : m.awayScore}</span>
+                <span className="gd-mini-d">–</span>
+                <span className="gd-mini-s">{flip ? m.awayScore : m.homeScore}</span>
+                <span className="gd-mini-t r">{flip ? m.awayName : m.homeName}</span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

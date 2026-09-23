@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from "react";
+import TabBar from "./components/TabBar.jsx";
 import { storage, HUDDLE_KEY, probeStorage, STORAGE_MESSAGE } from "./storage.js";
 import { beginDragAutoScroll, stopDragAutoScroll } from "./dragScroll.js";
 import { useCoarsePointer } from "./useCoarsePointer.js";
@@ -2033,7 +2034,10 @@ export default function App({ initialTab } = {}) {
 
   return (
     <div>
-      <header className="hero">
+      {/* Full lockup on Today only — the landing tab. Everywhere else the
+          wordmark shrinks and the kicker and tagline go, handing ~140px of
+          phone height back to the content. The controls stay on every tab. */}
+      <header className={`hero ${tab === "today" ? "" : "compact"}`}>
         <div className="hero-inner">
           <div className="hero-top">
             <div>
@@ -2126,29 +2130,11 @@ export default function App({ initialTab } = {}) {
               </div>
             </div>
           </div>
-          <div style={{ height: 26 }} />
+          <div className="hero-foot" />
         </div>
       </header>
 
-      <nav className="tabs-wrap">
-        <div className="tabs">
-          {[
-            // Today is first and default: it answers the question that used to
-            // take three tabs. It absorbs Gameday rather than sitting beside it.
-            ["today", "Today"],
-            ["roster", "Roster"],
-            ["lab", "Start/Sit"],
-            ["intel", "Intel"],
-            ["watch", "Watchlist"],
-            ["waivers", "Waivers"],
-            ["log", "Game Log"],
-          ].map(([key, label]) => (
-            <button key={key} className={`tab-btn ${tab === key ? "active" : ""}`} onClick={() => setTab(key)}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </nav>
+      <TabBar tab={tab} onTab={setTab} />
 
       <main className="content">
         {/* Sample data must never pass for a real team. A browser with no
