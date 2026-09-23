@@ -107,6 +107,21 @@ export function propsToPoints(props, scoring = SCORING) {
   return { points: Math.round(points * 10) / 10, parts };
 }
 
+/**
+ * Do these lines cover the player's actual workload? Props REPLACE every other
+ * projection, and propsToPoints scores a missing market as zero, so a partial
+ * set is not a cheaper projection — it is a wrong one. Midweek the books post
+ * anytime-TD lines before yardage, and a starting RB priced on his TD line
+ * alone came out at 3.6 (Cam Skattebo, Sept 23). The core yardage market for
+ * the position must be present; without it the player falls back to the
+ * ESPN / FantasyPros blend.
+ */
+const CORE_MARKET = { QB: "passYds", RB: "rushYds", WR: "recYds", TE: "recYds" };
+export function propsCoverPosition(props, pos) {
+  const key = CORE_MARKET[pos];
+  return !!(key && props && Number.isFinite(props[key]));
+}
+
 // ------------------------------------------------------------------ parser ---
 
 // Market patterns → prop key. Ordered: more specific first.

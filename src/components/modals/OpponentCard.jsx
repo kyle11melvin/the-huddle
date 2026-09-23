@@ -47,7 +47,7 @@ export default function OpponentCard({ row, week, state, onClose }) {
     raw == null || row.estimated
       ? null
       : blendProjection(
-          { proj: raw, fpProj: fp ? fp.proj : null, propsProj: book ? book.proj : null },
+          { proj: raw, fpProj: fp ? fp.proj : null, propsProj: book ? book.proj : null, props: book ? book.props : null },
           row.pos,
           row.team,
           state
