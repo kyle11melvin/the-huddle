@@ -7,7 +7,10 @@
 > with LEAGUE scoring (Kyle's call) and fills the same fields the CSV paste did.
 > A paste still wins its week and is the only source of matchup stars (not in
 > the API). Kyle confirmed the "FantasyPros: … projections and … ranks" toast on
-> his phone. Steps 4–6 (news, canonical ids, player-points) are NOT started.
+> his phone. **Step 4 (news) shipped Sept 23** — `kind=news`, resolved to
+> players via the ranking rows' `player_id`, shown dated in the Scouting
+> Report. **Step 6 is superseded:** the ledger has taken actuals from the
+> ESPN sync since Sept 21. Step 5 (canonical ids) is not started.
 >
 > The cloud workspace's own "FantasyPros API" credential never worked (proxy
 > header), so test from Kyle's terminal or via the deployed `/api/fantasypros`.

@@ -60,8 +60,11 @@ After the six above, all merged and live: the ESPN-naming fix button, the
 shorthand fixes (Book tile, Lab groups, injury badges, edge key), the
 partial-Vegas-lines fix (Skattebo 3.6 → ESPN's ~12.5; Kyle confirmed), and
 the **FantasyPros API** replacing the weekly CSV (Kyle confirmed the toast).
-QUEUE.md has the details and what's still open. A text-contrast change is
-parked uncommitted — nothing is stranded in git.
+Then in the evening: QB INTs and everyone's fumbles / 2-pt folded into Vegas
+numbers from FantasyPros, card opponents from the schedule, the `--text-dim`
+contrast floor, the start/sit grade, two layout fixes, and FantasyPros news
+in the Scouting Report. QUEUE.md has the details and what's still open.
+Nothing is stranded on a branch.
 
 ## Still to watch from Sept 21
 
