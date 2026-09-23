@@ -724,6 +724,16 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
         <EmptyBox>Your matchup appears automatically once the ESPN sync runs — nothing to set up.</EmptyBox>
       )}
 
+      {/* The edge chip, explained once instead of labelled per row — a word
+          inside every chip would widen the centre column and cut the names
+          off again. worth = projected finish, or the score once final. */}
+      {pairs.length > 0 && !sideMissing && (
+        <div className="h2h-key">
+          Middle chip: who is projected to score more in that slot, and by how much.{" "}
+          <b className="mine">◀</b> your player, <b>▶</b> his, <b>EVEN</b> within a point.
+        </div>
+      )}
+
       {(leftRows.length > 0 || rightRows.length > 0) && (
         <div className="h2h">
           {pairs.map((p, idx) => {
