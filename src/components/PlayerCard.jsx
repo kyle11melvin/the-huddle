@@ -188,7 +188,24 @@ export default function PlayerCard({
         <Tile
           label="Book"
           value={book ? book.spread : null}
-          sub={book ? (book.total != null ? `O/U ${book.total} · imp ${book.implied}` : "implied team total") : ""}
+          // "imp 21" was the implied team total in shorthand nobody had
+          // defined; say it: the points Vegas expects his team to score. Two
+          // deliberate lines — one line wrapped and orphaned "pts".
+          sub={
+            book ? (
+              book.total != null ? (
+                <>
+                  O/U {book.total}
+                  <br />
+                  {team} ~{book.implied} pts
+                </>
+              ) : (
+                "implied team total"
+              )
+            ) : (
+              ""
+            )
+          }
         />
       </div>
 
