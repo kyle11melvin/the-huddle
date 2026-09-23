@@ -378,6 +378,18 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
   const leftName = viewingMine ? MY_TEAM : selected.awayName;
   const rightName = viewingMine ? oppTeam || (selected && selected.homeName) || "" : selected.homeName;
 
+  // One side has a lineup and the other has none at all — the other team's
+  // roster never arrived (a sync without it, or no sync yet). That is missing
+  // DATA, not an empty lineup: every slot used to read "EMPTY", every edge chip
+  // handed over the whole projection, and with no sim the hero — the only
+  // place the NOT SYNCED / STALE warnings live — was not rendered to say so.
+  const missingName =
+    leftRows.length > 0 && rightRows.length === 0
+      ? rightName
+      : rightRows.length > 0 && leftRows.length === 0
+      ? leftName
+      : null;
+
   // Resolve each row's live entry ONCE per data change, then sort on it.
   // sortRows used to call resolveLive inside the comparator (O(n log n) live
   // lookups per render), and the 20k-draw sim below ran on every render —
@@ -699,6 +711,15 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
         </div>
       )}
 
+      {!sim && missingName && (
+        <div className="data-warn">
+          <span className="data-warn-tag">NOT LOADED</span>
+          <span>
+            The lineup for {missingName} hasn't loaded, so there is nothing to compare against yet. Tap ⟳ ESPN to sync it.
+          </span>
+        </div>
+      )}
+
       {viewingMine && !oppTeam && !sim && (
         <EmptyBox>Your matchup appears automatically once the ESPN sync runs — nothing to set up.</EmptyBox>
       )}
@@ -734,10 +755,16 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                     aria-label={A ? `Open ${A.row.name}` : "Empty slot"}
                   >
                     <Face row={A && A.row} />
-                    <span className="h2h-nm">{A ? shortName(A.row.name) : "Empty"}</span>
+                    <span className={`h2h-nm ${!A && missingName ? "unknown" : ""}`}>
+                      {A ? shortName(A.row.name) : missingName ? "—" : "Empty"}
+                    </span>
                   </button>
                   <Proj d={A} />
                   {(() => {
+                    // No edge against a side that hasn't loaded: it would be
+                    // this player's entire projection, presented as a lead.
+                    // The empty span keeps the five-column grid aligned.
+                    if (missingName) return <span />;
                     const e = pairingEdge(A && A.worth, B && B.worth);
                     return (
                       <span className={`h2h-edge ${e.lead}`}>
@@ -754,7 +781,9 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
                     aria-label={B ? `Open ${B.row.name}` : "Empty slot"}
                   >
                     <Face row={B && B.row} />
-                    <span className="h2h-nm">{B ? shortName(B.row.name) : "Empty"}</span>
+                    <span className={`h2h-nm ${!B && missingName ? "unknown" : ""}`}>
+                      {B ? shortName(B.row.name) : missingName ? "—" : "Empty"}
+                    </span>
                   </button>
                 </div>
 

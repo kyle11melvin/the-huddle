@@ -3661,6 +3661,13 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   text-align: right;
 }
 
+/* A side whose roster never loaded: a dim dash, not "EMPTY" — which is a real
+   fantasy term for an unfilled slot and read as the opponent forgetting to
+   set a lineup. */
+.h2h-nm.unknown {
+  color: var(--text-dim);
+}
+
 .h2h-pr {
   font-size: 14px;
   font-weight: 700;
