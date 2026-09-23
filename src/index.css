@@ -3839,8 +3839,25 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 
 .h2h-inj {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.4;
+  vertical-align: 1px;
+}
+.h2h-inj.q {
   color: var(--gold-hi);
-  font-weight: 700;
+  background: rgba(var(--gold-rgb), 0.14);
+  box-shadow: 0 0 0 1px rgba(var(--gold-rgb), 0.4) inset;
+}
+.h2h-inj.bad {
+  color: #ff6b6b;
+  background: rgba(255, 93, 93, 0.14);
+  box-shadow: 0 0 0 1px rgba(255, 93, 93, 0.4) inset;
 }
 
 /* LINE 3 — the game */

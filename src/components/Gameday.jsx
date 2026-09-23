@@ -952,7 +952,10 @@ const Ident = ({ d, right }) => {
   const { row } = d;
   return (
     <span className={right ? "r" : ""}>
-      {row.status && <span className="h2h-inj">{row.status} · </span>}
+      {/* A badge in the body face, matching the player card. As gold mono
+          text it read "O · DET" beside a 0.0 — an O indistinguishable from a
+          zero. */}
+      {row.status && <span className={`h2h-inj ${row.status === "Q" ? "q" : "bad"}`}>{row.status}</span>}
       <span>{row.team}</span>
       {/* Labelled. "JAX (7)" gave no way to know 7 was the bye week — it reads
           as a rank, a jersey number or a projection. An unlabelled number on a
