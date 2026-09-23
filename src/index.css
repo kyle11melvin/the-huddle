@@ -3710,7 +3710,13 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 .h2h-nm {
   font-family: var(--font-display);
-  font-size: 14.5px;
+  /* 13px, down from 14.5: board v3 put the edge chip in the centre column,
+     about twice the width of the slot badge the approved reference had
+     there, and at phone width that cost every name its last 3-4 letters
+     (T. LAWRE…). Kyle chose smaller names over moving the chip. 12.5px
+     bought one more letter, not a whole name, so 13 is where it stops:
+     names up to ~11 characters fit, P. WASHINGTON still ellipses. */
+  font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
   line-height: 1;
