@@ -280,7 +280,7 @@ export function blendProjection(a, pos, team, state) {
   let uncertainty = disp ? 1 + disp.spread * 0.5 : 1;
   // Two projections disagreeing IS uncertainty — widen rather than pretend.
   if (blendGap > 0) uncertainty = Math.max(uncertainty, 1 + Math.min(0.5, blendGap));
-  if (a && Number.isFinite(a.propsProj) && Number.isFinite(a.proj) && a.proj > 0 && a.propsProj > 0) {
+  if (a && Number.isFinite(a.propsProj) && Number.isFinite(a.proj) && a.proj > 0 && a.propsProj > 0 && propsCoverPosition(a.props, pos)) {
     const gap = Math.abs(a.propsProj - a.proj) / ((a.propsProj + a.proj) / 2);
     uncertainty = Math.max(uncertainty, 1 + Math.min(0.5, gap));
   }

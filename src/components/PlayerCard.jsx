@@ -145,7 +145,7 @@ export default function PlayerCard({
         <div className="pc-edge-top">
           <span className="pc-edge-k">Vegas props</span>
           <span className="pc-edge-v">
-            <b>{propsEdge ? signed(propsEdge.delta) : "—"}</b>
+            <b>{propsEdge && !propsEdge.partial ? signed(propsEdge.delta) : "—"}</b>
             <em>
               vs expert
               <br />
@@ -154,7 +154,9 @@ export default function PlayerCard({
           </span>
         </div>
         <div className="pc-edge-line">
-          {propsEdge
+          {propsEdge && propsEdge.partial
+            ? `Only ${propsEdge.parts.length ? propsEdge.parts.join("  ·  ") : "part of his lines"} posted so far — not enough to price him, so the expert projection is used until his yardage lines are up`
+            : propsEdge
             ? propsEdge.parts.length
               ? propsEdge.parts.join("  ·  ")
               : "Market lines priced in"

@@ -15,6 +15,7 @@
 
 import { propsSweptFor, pointDistribution, playerAnalytics } from "./analytics.js";
 import { DEFAULT_PROJ_WEIGHTS } from "./analytics.js";
+import { propsCoverPosition } from "./props.js";
 
 /** Statuses meaning "may not take the field" — a season rank stops applying. */
 const DOUBTFUL = new Set(["D", "O", "IR"]);
@@ -71,8 +72,15 @@ const MATCHUP_WORD = { 1: "BRUTAL", 2: "TOUGH", 3: "NEUTRAL", 4: "GOOD", 5: "SMA
  * blend is what the projection WOULD have been. A props number that merely
  * agrees with consensus is not an edge, and should read near zero.
  */
-function propsEdgeFrom(a, weights) {
+function propsEdgeFrom(a, weights, pos) {
   if (!a || !Number.isFinite(a.propsProj) || a.propsProj <= 0) return null;
+  // Lines are posted but not his core yardage market (TD-only midweek). The
+  // projection ignores them — say so and show what IS posted, rather than an
+  // "edge" measured from a fragment.
+  if (!propsCoverPosition(a.props, pos)) {
+    const posted = Array.isArray(a.propsParts) ? a.propsParts.map(([label]) => label) : [];
+    return { partial: true, delta: null, parts: posted, source: a.propsSource || null };
+  }
   const espn = Number.isFinite(a.proj) ? a.proj : null;
   const fp = Number.isFinite(a.fpProj) ? a.fpProj : null;
   let baseline = null;
@@ -137,7 +145,7 @@ export function playerCardData(state, player, week) {
     dist: dist
       ? { mean: dist.mean, condMean: dist.condMean, sd: dist.sd, playProb: dist.playProb }
       : null,
-    propsEdge: propsEdgeFrom(a, state.projWeights),
+    propsEdge: propsEdgeFrom(a, state.projWeights, player.pos),
     propsSwept: propsSweptFor(state, week),
     source: sourceOf(dist),
     matchup,

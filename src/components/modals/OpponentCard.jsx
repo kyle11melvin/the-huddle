@@ -42,7 +42,16 @@ export default function OpponentCard({ row, week, state, onClose }) {
   // claimed "blended with your pasted FantasyPros projection" under a gauge
   // still showing ESPN's raw number. A card and the sim behind it disagreeing
   // is the exact split this whole group of fixes exists to close.
-  const raw = Number.isFinite(row.simProj) ? row.simProj : Number.isFinite(row.proj) ? row.proj : null;
+  // ESPN's own number first. simProj is the row's PRICED number — already the
+  // props total when a line prices him — so feeding it back in here priced him
+  // twice and made "props vs consensus" compare the book with itself (0.0).
+  const raw = Number.isFinite(row.espnProj)
+    ? row.espnProj
+    : Number.isFinite(row.simProj)
+      ? row.simProj
+      : Number.isFinite(row.proj)
+        ? row.proj
+        : null;
   const blend =
     raw == null || row.estimated
       ? null
@@ -53,6 +62,15 @@ export default function OpponentCard({ row, week, state, onClose }) {
           state
         );
   const condMean = blend ? Math.round(blend.mu * 10) / 10 : raw;
+  // Did the book actually price him? A line can exist without covering his
+  // core market (TD-only midweek), in which case blendProjection ignored it.
+  const pricedByBook = !!(blend && blend.source === "vegas props");
+  // What the projection would be WITHOUT the book — the honest baseline.
+  const noBook =
+    raw == null || row.estimated
+      ? null
+      : blendProjection({ proj: raw, fpProj: fp ? fp.proj : null }, row.pos, row.team, state);
+  const posted = book && Array.isArray(book.parts) ? book.parts.map((x) => (Array.isArray(x) ? x[0] : x)) : [];
   const playProb = row.playProb ?? 1;
   const dist =
     condMean == null
@@ -93,9 +111,11 @@ export default function OpponentCard({ row, week, state, onClose }) {
             // player this week" over a projection that came from exactly
             // those lines.
             propsEdge={
-              book && Number.isFinite(raw)
-                ? { delta: Math.round((book.proj - raw) * 10) / 10, parts: [], source: "odds-api" }
-                : null
+              pricedByBook && noBook
+                ? { delta: Math.round((book.proj - noBook.mu) * 10) / 10, parts: posted, source: "odds-api" }
+                : book
+                  ? { partial: true, delta: null, parts: posted, source: "odds-api" }
+                  : null
             }
             propsSwept={propsSweptFor(state, week)}
             matchup={null}
@@ -111,9 +131,11 @@ export default function OpponentCard({ row, week, state, onClose }) {
           <p className="panel-note" style={{ marginTop: 14 }}>
             {row.estimated
               ? "Opponent player — projection estimated from expert rank, not an ESPN projection."
-              : book
+              : pricedByBook
                 ? "Opponent player — priced off the Vegas line, exactly as your own roster is. Money-backed lines outrank every expert projection on both sides of this matchup."
-                : fpOnFile
+                : book
+                  ? `Opponent player — only part of his Vegas lines are posted, so he is priced on ${fpOnFile ? "ESPN blended with your FantasyPros projection" : "ESPN's projection"} until his yardage line is up. Same rule as your own roster.`
+                  : fpOnFile
                   ? "Opponent player — ESPN blended with your pasted FantasyPros projection, the same pricing your own roster gets. No book line for him this week."
                   : "Opponent player — ESPN projection only. No Vegas line and no pasted expert projection for him this week."}
           </p>

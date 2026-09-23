@@ -1369,7 +1369,7 @@ const leagueState = (gameState, actual) => ({
   byes: {},
   calibration: {},
   // normName strips everything but letters: "Star Back" -> "starback"
-  propsIndex: { 1: { starback: { proj: 19.5 } } },
+  propsIndex: { 1: { starback: { proj: 19.5, props: { rushYds: 85.5, receptions: 2.5, recYds: 18.5 } } } },
   fpProjIndex: { 1: { starback: { proj: 17 } } },
   espn: {
     myTeamId: 7,
