@@ -10,11 +10,11 @@ import fsMod from "node:fs";
 import { playerCardData } from "../src/playerCardData.js";
 import { scoreFpStats, applyFantasyPros } from "../src/fantasyprosSync.js";
 import { trimRankings, trimProjections } from "../api/fantasypros.js";
-import { propsToPoints, SCORING, parseProps } from "../src/props.js";
+import { propsToPoints, SCORING, parseProps, leagueScoring } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
 import { extractScoring, matchupSideScore } from "../api/espn.js";
 import { isGameday } from "../api/odds.js";
-import { pointDistribution, floorCeiling, fpProjFor, propsSweptFor, blendProjection } from "../src/analytics.js";
+import { pointDistribution, floorCeiling, fpProjFor, propsSweptFor, blendProjection, propsProjection } from "../src/analytics.js";
 import {
   simulateMatchup,
   simulateSwap,
@@ -2833,11 +2833,13 @@ check(
   check("FantasyPros projections keep the numeric stat line", pj.length === 1 && pj[0].stats.rush_att === 20.03, JSON.stringify(pj[0]));
   // Kyle's rule: every scoring stat, league scoring — 0.2/rush attempt included.
   const g = scoreFpStats(pj[0].stats, "RB", SCORING);
-  check("a FantasyPros stat line is scored with the league's rules (Gibbs 28.6, not PPR 24.4)", g === 28.6, `got ${g}`);
+  // 28.645 before fumbles; 0.12 fumbles lost x -2 = -0.24 -> 28.4.
+  check("a FantasyPros stat line is scored with the league's rules (Gibbs 28.4, not PPR 24.4)", g === 28.4, `got ${g}`);
   // Allen, week 3, verbatim from Kyle's QB run: pass_ints is the INT key.
   const allen = { points_ppr: 23.68, pass_yds: 248.26, pass_tds: 1.76, pass_ints: 0.8, rush_att: 7.4, rush_yds: 35, rush_tds: 0.74, fumbles: 0.22 };
   const a = scoreFpStats(allen, "QB", SCORING);
-  check("a FantasyPros QB line scores 6/pass TD, -3/INT and rushing (Allen 27.5)", a === 27.5, `got ${a}`);
+  // 27.51 before fumbles; 0.22 fumbles lost x -2 = -0.44 -> 27.1.
+  check("a FantasyPros QB line scores 6/pass TD, -3/INT, rushing and fumbles (Allen 27.1)", a === 27.1, `got ${a}`);
   check("K and D/ST use FantasyPros' own total", scoreFpStats({ points: 8.4 }, "K", SCORING) === 8.4);
   check("a QB line without passing yards falls back to FP's total, not ~0", scoreFpStats({ points_ppr: 19.2, rush_yds: 20 }, "QB", SCORING) === 19.2);
 
@@ -2850,7 +2852,7 @@ check(
   };
   const data = { rank: rk, proj: pj };
   const out = applyFantasyPros(base, "3", data, SCORING).state;
-  check("the automatic fill sets my player's fpProj", out.analytics.g && out.analytics.g["3"].fpProj === 28.6, JSON.stringify(out.analytics.g));
+  check("the automatic fill sets my player's fpProj", out.analytics.g && out.analytics.g["3"].fpProj === 28.4, JSON.stringify(out.analytics.g));
   check("the automatic fill indexes every player by name for the opponent side", out.fpProjIndex["3"].jahmyrgibbs && out.fpProjIndex["3"].jahmyrgibbs.src === "api");
   check("the automatic fill updates my player's rank", out.players.g.ecr === "RB1" && out.ecrSource === "api", out.players.g.ecr);
 
@@ -2878,6 +2880,36 @@ check(
   check("a synced player's card takes his opponent from the schedule", cd && cd.player.opp === "@SEA", cd && cd.player.opp);
   const typed = playerCardData(st, { ...shough, weeks: { 3: { opp: "vs ATL" } } }, "3");
   check("a typed-in opponent still wins over the schedule", typed && typed.player.opp === "vs ATL", typed && typed.player.opp);
+}
+
+// ---- fumbles and two-point conversions count too (Kyle, Sept 23) ----
+// The ESPN sync already extracts stat 72 (fumbles lost) and the 2-pt stats
+// into state.espn.scoring; leagueScoring dropped them, so no Vegas or
+// FantasyPros number included either. Books post no fumble line, so props
+// take FantasyPros' projected fumbles and 2-pt, like INTs.
+{
+  const synced = leagueScoring({ espn: { scoring: { fumble: -2, rushTwoPt: 2, recTwoPt: 2 } } });
+  check("leagueScoring carries the league's fumble and 2-pt values", synced.fumble === -2 && synced.twoPt === 2, JSON.stringify(synced));
+  const noFum = leagueScoring({ espn: { scoring: { reception: 1 } } });
+  check("a synced league that doesn't score fumbles scores them 0, not a guessed -2", noFum.fumble === 0 && noFum.twoPt === 0, JSON.stringify(noFum));
+  const g = scoreFpStats({ rush_att: 20.03, rush_yds: 98.17, rush_tds: 0.91, rec_rec: 4.23, rec_yds: 33.92, rec_tds: 0.29, fumbles: 0.5, "2pt_tds": 0.25 }, "RB", SCORING);
+  check("a FantasyPros line counts fumbles and 2-pt (28.645 - 1.0 + 0.5 = 28.1)", g === 28.1, `got ${g}`);
+  const stF = {};
+  const rbFull = { rushYds: 62.5, receptions: 2.5, recYds: 17.5, anytimeTdOdds: 110 };
+  const rbPts = propsToPoints(rbFull).points;
+  const adj = blendProjection({ proj: 12.5, propsProj: rbPts, props: rbFull, fpFumbles: 0.15, fpTwoPt: 0.05 }, "RB", "NYG", stF);
+  const noFumLeague = { espn: { scoring: { reception: 1 } } };
+  const notScored = propsProjection({ propsProj: rbPts, props: rbFull, fpFumbles: 0.15, fpTwoPt: 0.05 }, "RB", noFumLeague);
+  check(
+    "a league that doesn't score fumbles neither subtracts nor names them",
+    notScored && notScored.pts === rbPts && notScored.fpFumbles === null && notScored.fpTwoPt === null,
+    JSON.stringify(notScored)
+  );
+  check(
+    "an RB's Vegas number takes FantasyPros' fumbles and 2-pt (-0.3 + 0.1)",
+    adj && Math.abs(adj.mu - (rbPts - 0.2)) < 0.05,
+    adj ? `${adj.source} ${adj.mu} vs props ${rbPts}` : "null"
+  );
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nAll sanity checks passed.");

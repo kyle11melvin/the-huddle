@@ -216,21 +216,47 @@ export const isOnByeWeek = (player, week, state) => {
  * The ONE place a props total becomes a projection, so every reader — the
  * blend, the card's edge, the Lab, the ledger — agrees on it.
  *
- * QBs: the odds sweep never requests an interception line, so a QB's props
- * total counted his INTs as zero — about +2.4 for a 0.8-INT passer at -3/INT.
- * Kyle chose FantasyPros' projected INTs over paying for another market;
- * `intAdj` carries the correction so the card can say where it came from.
+ * Stats the books never price, taken from FantasyPros instead (Kyle's call:
+ * count everything that earns or costs points, without paying for more
+ * markets):
+ *   - QB interceptions — no INT market is requested (Allen: 0.8 x -3 = -2.4)
+ *   - fumbles lost, every position — no book posts one
+ *   - two-point conversions, every position — ditto
+ * `intAdj` / `extraAdj` carry the corrections so the card can name them.
  *
- * @returns {{pts:number, intAdj:number, fpInts:number|null}|null}
+ * @returns {{pts:number, intAdj:number, fpInts:number|null, extraAdj:number, fpFumbles:number|null, fpTwoPt:number|null}|null}
  */
 export function propsProjection(a, pos, state) {
   if (!a || !Number.isFinite(a.propsProj) || a.propsProj <= 0) return null;
   if (!propsCoverPosition(a.props, pos)) return null;
+  const sc = leagueScoring(state);
   let intAdj = 0;
   if (pos === "QB" && !Number.isFinite(a.props && a.props.ints) && Number.isFinite(a.fpInts) && a.fpInts > 0) {
-    intAdj = Math.round(a.fpInts * leagueScoring(state).int * 10) / 10;
+    intAdj = Math.round(a.fpInts * sc.int * 10) / 10;
   }
-  return { pts: Math.round((a.propsProj + intAdj) * 10) / 10, intAdj, fpInts: intAdj ? a.fpInts : null };
+  const fum = Number.isFinite(a.fpFumbles) && a.fpFumbles > 0 ? a.fpFumbles : 0;
+  const two = Number.isFinite(a.fpTwoPt) && a.fpTwoPt > 0 ? a.fpTwoPt : 0;
+  const extraAdj = Math.round((fum * (sc.fumble || 0) + two * (sc.twoPt || 0)) * 10) / 10;
+  return {
+    pts: Math.round((a.propsProj + intAdj + extraAdj) * 10) / 10,
+    intAdj,
+    fpInts: intAdj ? a.fpInts : null,
+    extraAdj,
+    // Named on the card only when the league actually scores the stat — a
+    // league with no fumble scoring adds nothing, so the card mustn't list it.
+    fpFumbles: fum && sc.fumble ? fum : null,
+    fpTwoPt: two && sc.twoPt ? two : null,
+  };
+}
+
+/** Card lines naming the FantasyPros stats folded into a Vegas number. */
+export function vegasExtraLabels(vegas) {
+  if (!vegas) return [];
+  const out = [];
+  if (vegas.intAdj && vegas.fpInts) out.push(`${vegas.fpInts} INT (FantasyPros)`);
+  if (vegas.fpFumbles) out.push(`${vegas.fpFumbles} fumbles (FantasyPros)`);
+  if (vegas.fpTwoPt) out.push(`${vegas.fpTwoPt} 2-pt (FantasyPros)`);
+  return out;
 }
 
 export function blendProjection(a, pos, team, state) {
@@ -257,7 +283,7 @@ export function blendProjection(a, pos, team, state) {
   const vegas = propsProjection(a, pos, state);
   if (vegas) {
     mu = vegas.pts;
-    source = vegas.intAdj ? "vegas props + FP INTs" : "vegas props";
+    source = vegas.intAdj || vegas.extraAdj ? "vegas props + FP extras" : "vegas props";
   } else if (espnProj != null && fpProj != null && (espnProj > 0 || fpProj > 0)) {
     const w = state.projWeights || DEFAULT_PROJ_WEIGHTS;
     mu = espnProj * w.espn + fpProj * w.fp;
