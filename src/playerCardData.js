@@ -13,7 +13,7 @@
 // running into.
 // ============================================================================
 
-import { propsSweptFor, pointDistribution, playerAnalytics, propsProjection } from "./analytics.js";
+import { propsSweptFor, pointDistribution, playerAnalytics, propsProjection, vegasExtraLabels } from "./analytics.js";
 import { DEFAULT_PROJ_WEIGHTS } from "./analytics.js";
 import { propsCoverPosition } from "./props.js";
 import { scheduleOpp } from "./scheduleSync.js";
@@ -95,7 +95,7 @@ function propsEdgeFrom(a, weights, pos, state) {
   const vegas = propsProjection(a, pos, state);
   const parts = Array.isArray(a.propsParts) ? a.propsParts.map(([label]) => label) : [];
   // Say where a QB's INT correction came from — it is not a Vegas line.
-  if (vegas && vegas.intAdj) parts.push(`${vegas.fpInts} INT (FantasyPros)`);
+  parts.push(...vegasExtraLabels(vegas));
   return {
     delta: Math.round(((vegas ? vegas.pts : a.propsProj) - baseline) * 10) / 10,
     parts,

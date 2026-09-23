@@ -34,6 +34,8 @@ export const SCORING = {
   passTd: 6,
   int: -3,
   rushRecTd: 6,
+  fumble: -2, // fumbles lost — ESPN's default; the league's own value wins
+  twoPt: 2,
 };
 
 /**
@@ -42,6 +44,7 @@ export const SCORING = {
  */
 export function leagueScoring(state) {
   const live = (state && state.espn && state.espn.scoring) || {};
+  const synced = !!(state && state.espn && state.espn.scoring);
   const pick = (k, fb) => (Number.isFinite(live[k]) ? live[k] : fb);
   return {
     reception: pick("reception", SCORING.reception),
@@ -54,6 +57,12 @@ export function leagueScoring(state) {
     // rushing and receiving TDs score identically in this league; prefer
     // whichever ESPN reports, defaulting to 6
     rushRecTd: pick("rushTd", pick("recTd", SCORING.rushRecTd)),
+    // Extracted by the ESPN sync all along (stat 72, and 19/26/44) and
+    // dropped here, so no Vegas or FantasyPros number counted them. A synced
+    // league that doesn't score a stat scores it 0 — the default is only for
+    // a device that has never synced.
+    fumble: pick("fumble", synced ? 0 : SCORING.fumble),
+    twoPt: pick("rushTwoPt", pick("recTwoPt", pick("passTwoPt", synced ? 0 : SCORING.twoPt))),
   };
 }
 

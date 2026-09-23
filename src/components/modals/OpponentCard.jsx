@@ -13,7 +13,7 @@
 import { useEffect } from "react";
 import PlayerCard from "../PlayerCard.jsx";
 import { teamOf } from "../../data/teams.js";
-import { fpProjFor, propsFor, propsSweptFor, blendProjection } from "../../analytics.js";
+import { fpProjFor, propsFor, propsSweptFor, blendProjection, propsProjection, vegasExtraLabels } from "../../analytics.js";
 
 /**
  * @param {object} row a Gameday opponent row
@@ -45,6 +45,15 @@ export default function OpponentCard({ row, week, state, onClose }) {
   // ESPN's own number first. simProj is the row's PRICED number — already the
   // props total when a line prices him — so feeding it back in here priced him
   // twice and made "props vs consensus" compare the book with itself (0.0).
+  // The book's lines plus the FantasyPros stats books never price (a QB's
+  // INTs; everyone's fumbles and 2-pt) — the same input simulate.js builds.
+  const bookInput = {
+    propsProj: book ? book.proj : null,
+    props: book ? book.props : null,
+    fpInts: fp ? fp.ints : null,
+    fpFumbles: fp ? fp.fumbles : null,
+    fpTwoPt: fp ? fp.twoPt : null,
+  };
   const raw = Number.isFinite(row.espnProj)
     ? row.espnProj
     : Number.isFinite(row.simProj)
@@ -56,7 +65,7 @@ export default function OpponentCard({ row, week, state, onClose }) {
     raw == null || row.estimated
       ? null
       : blendProjection(
-          { proj: raw, fpProj: fp ? fp.proj : null, propsProj: book ? book.proj : null, props: book ? book.props : null, fpInts: fp ? fp.ints : null },
+          { proj: raw, fpProj: fp ? fp.proj : null, ...bookInput },
           row.pos,
           row.team,
           state
@@ -116,7 +125,7 @@ export default function OpponentCard({ row, week, state, onClose }) {
                     delta: Math.round((blend.mu - noBook.mu) * 10) / 10,
                     // blend.mu is the Vegas number INCLUDING a QB's FantasyPros
                     // INT correction; say so, since it is not a Vegas line.
-                    parts: blend.source.includes("FP INTs") && fp && Number.isFinite(fp.ints) ? [...posted, `${fp.ints} INT (FantasyPros)`] : posted,
+                    parts: [...posted, ...vegasExtraLabels(propsProjection(bookInput, row.pos, state))],
                     source: "odds-api",
                   }
                 : book

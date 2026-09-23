@@ -55,14 +55,29 @@ export function scoreFpStats(stats, pos, scoring) {
     n(stats.pass_yds) * scoring.passYd +
     n(stats.pass_tds) * scoring.passTd +
     n(ints) * scoring.int +
-    (n(stats.rush_tds) + n(stats.rec_tds)) * scoring.rushRecTd;
+    (n(stats.rush_tds) + n(stats.rec_tds)) * scoring.rushRecTd +
+    n(stats.fumbles) * (scoring.fumble || 0) +
+    n(stats["2pt_tds"]) * (scoring.twoPt || 0);
   return Math.round(pts * 10) / 10;
 }
 
-// Projected interceptions for a QB. The odds sweep carries no INT line, so
-// the Vegas number takes these instead (analytics.propsProjection).
-const qbInts = (r) =>
-  r.pos === "QB" && r.stats && Number.isFinite(r.stats.pass_ints) ? { ints: r.stats.pass_ints } : {};
+// The stats no sportsbook prices, which the Vegas number takes from
+// FantasyPros instead (analytics.propsProjection): a QB's interceptions (no
+// INT market is requested) and everyone's fumbles lost and 2-pt conversions
+// (no book posts them).
+const extras = (r) => {
+  const s = r.stats || {};
+  const out = {};
+  if (r.pos === "QB" && Number.isFinite(s.pass_ints)) out.ints = s.pass_ints;
+  if (Number.isFinite(s.fumbles)) out.fumbles = s.fumbles;
+  if (Number.isFinite(s["2pt_tds"])) out.twoPt = s["2pt_tds"];
+  return out;
+};
+const toAnalytics = (x) => ({
+  ...(x.ints != null ? { fpInts: x.ints } : {}),
+  ...(x.fumbles != null ? { fpFumbles: x.fumbles } : {}),
+  ...(x.twoPt != null ? { fpTwoPt: x.twoPt } : {}),
+});
 
 /**
  * Fold one week's FantasyPros data into state.
@@ -90,10 +105,10 @@ export function applyFantasyPros(state, week, data, scoring) {
     // A pasted row carries no `src`; leave its projection alone — but add a
     // QB's INTs, which the CSV has no column for.
     if (existing[k] && existing[k].src !== "api") {
-      if (qbInts(r).ints != null) forWeek[k] = { ...existing[k], ...qbInts(r) };
+      if (Object.keys(extras(r)).length) forWeek[k] = { ...existing[k], ...extras(r) };
       continue;
     }
-    forWeek[k] = { proj: pts, stars: existing[k] ? existing[k].stars ?? null : null, src: "api", ...qbInts(r) };
+    forWeek[k] = { proj: pts, stars: existing[k] ? existing[k].stars ?? null : null, src: "api", ...extras(r) };
     projected++;
   }
   next = { ...next, fpProjIndex: { ...(next.fpProjIndex || {}), [week]: forWeek } };
@@ -104,10 +119,10 @@ export function applyFantasyPros(state, week, data, scoring) {
     const { match } = matchPlayer(r.name, roster, { team: canonTeam(r.team) || r.team, pos: r.pos });
     if (!match) continue;
     const a = playerAnalytics(next, match.id, week);
-    const ints = qbInts(r).ints;
-    // Written even under a paste: the CSV has no INT column, and the Vegas
-    // number needs this whether or not the projection came from a paste.
-    if (Number.isFinite(ints)) next = setPlayerAnalytics(next, match.id, week, { fpInts: ints });
+    const x = toAnalytics(extras(r));
+    // Written even under a paste: the CSV has none of these columns, and the
+    // Vegas number needs them whether or not the projection came from a paste.
+    if (Object.keys(x).length) next = setPlayerAnalytics(next, match.id, week, x);
     if (a && a.fpSource === "fantasypros") continue; // pasted this week — paste wins
     next = setPlayerAnalytics(next, match.id, week, { fpProj: pts, fpSource: "fantasypros-api" });
   }

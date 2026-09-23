@@ -234,7 +234,7 @@ export function captureCalibration(state, week) {
               espnBasis: e.projBasis || null,
               fp: fp ? fp.proj : null,
               props: pr
-                ? propsProjection({ propsProj: pr.proj, props: pr.props, fpInts: fp ? fp.ints : null }, e.pos, state)?.pts ?? null
+                ? propsProjection({ propsProj: pr.proj, props: pr.props, fpInts: fp ? fp.ints : null, fpFumbles: fp ? fp.fumbles : null, fpTwoPt: fp ? fp.twoPt : null }, e.pos, state)?.pts ?? null
                 : null,
             },
             // ESPN's raw designation, stored as-is and never rendered: this is
