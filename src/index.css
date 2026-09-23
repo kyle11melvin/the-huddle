@@ -269,46 +269,108 @@ select option {
 
 /* ---------------------------------------------------------------- tabs ---- */
 
-.tabs-wrap {
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  background: linear-gradient(180deg, rgba(10, 14, 23, 0.88), rgba(10, 14, 23, 0.96));
+/* 5-item bottom tab bar (DESIGN.md). Fixed to the bottom edge, where a thumb
+   is, and clear of the iPhone home indicator via the safe-area inset. */
+:root { --tabbar-h: 58px; }
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: linear-gradient(180deg, rgba(10, 14, 23, 0.9), rgba(10, 14, 23, 0.98));
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
 }
 
-.tabs {
+.tabbar-inner {
   max-width: 780px;
+  height: var(--tabbar-h);
   margin: 0 auto;
-  padding: 10px 20px;
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
 }
 
-.tabs::-webkit-scrollbar { display: none; }
-
-.tab-btn {
+.tabbar-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 10.5px;
   font-weight: 600;
-  font-size: 13px;
-  padding: 9px 18px;
-  border-radius: 999px;
+  letter-spacing: 0.2px;
   color: var(--text-muted);
   white-space: nowrap;
-  transition: color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.tab-btn:hover { color: var(--text); background: var(--surface-hi); }
-.tab-btn:active { transform: scale(0.96); }
+.tabbar-btn:active { transform: scale(0.95); }
 
-/* Gold, not iOS system blue. The app has one accent and this wasn't it. */
-.tab-btn.active {
-  color: #16120a;
-  background: linear-gradient(135deg, var(--gold-hi), var(--gold));
-  box-shadow: 0 4px 16px rgba(var(--gold-rgb), 0.35);
+.tabbar-ico {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Gold, the one accent — plus a short bar on the top edge, so the active tab
+   carries a shape and not colour alone. */
+.tabbar-btn.active { color: var(--gold-hi); }
+.tabbar-btn.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 26px;
+  height: 2px;
+  margin-left: -13px;
+  border-radius: 0 0 2px 2px;
+  background: var(--gold);
+}
+
+.tabbar-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 88;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.tabbar-more {
+  position: fixed;
+  right: max(12px, calc((100vw - 780px) / 2 + 12px));
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 8px);
+  z-index: 89;
+  min-width: 190px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-hi);
+  border: 1px solid var(--border-hi);
+  border-radius: 14px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
+}
+
+.tabbar-more-btn {
+  padding: 13px 14px;
+  border-radius: 10px;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tabbar-more-btn.active {
+  color: var(--gold-hi);
+  background: rgba(var(--gold-rgb), 0.1);
 }
 
 /* ------------------------------------------------------------- content ---- */
@@ -316,7 +378,8 @@ select option {
 .content {
   max-width: 780px;
   margin: 0 auto;
-  padding: 20px 20px 72px;
+  /* Room for the fixed tab bar and the home indicator beneath it. */
+  padding: 20px 20px calc(72px + var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
 }
 
 .tab-panel {
@@ -1172,8 +1235,7 @@ select option {
 @media (max-width: 560px) {
   .hero-inner { padding: 26px 16px 0; }
   .hero-badges { flex-direction: row; align-items: center; gap: 12px; width: 100%; justify-content: space-between; order: -1; }
-  .content { padding: 16px 12px 60px; }
-  .tabs { padding: 9px 12px; }
+  .content { padding: 16px 12px calc(60px + var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); }
 
   .player-main { gap: 12px; padding: 12px 13px 12px 15px; }
   .avatar-ring { width: 54px; height: 54px; }
@@ -1944,7 +2006,7 @@ select option {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 26px;
+  bottom: calc(14px + var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   z-index: 200;
   max-width: calc(100vw - 32px);
