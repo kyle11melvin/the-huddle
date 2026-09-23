@@ -2034,7 +2034,10 @@ export default function App({ initialTab } = {}) {
 
   return (
     <div>
-      <header className="hero">
+      {/* Full lockup on Today only — the landing tab. Everywhere else the
+          wordmark shrinks and the kicker and tagline go, handing ~140px of
+          phone height back to the content. The controls stay on every tab. */}
+      <header className={`hero ${tab === "today" ? "" : "compact"}`}>
         <div className="hero-inner">
           <div className="hero-top">
             <div>
@@ -2127,7 +2130,7 @@ export default function App({ initialTab } = {}) {
               </div>
             </div>
           </div>
-          <div style={{ height: 26 }} />
+          <div className="hero-foot" />
         </div>
       </header>
 

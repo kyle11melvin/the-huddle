@@ -269,6 +269,18 @@ select option {
 
 /* ---------------------------------------------------------------- tabs ---- */
 
+.hero-foot { height: 26px; }
+
+/* Every tab but Today: same header, same controls, a fraction of the height. */
+.hero.compact .hero-inner { padding-top: 14px; }
+.hero.compact .hero-kicker,
+.hero.compact .hero-sub { display: none; }
+.hero.compact .hero-title {
+  font-size: 26px;
+  letter-spacing: 1px;
+}
+.hero.compact .hero-foot { height: 14px; }
+
 /* 5-item bottom tab bar (DESIGN.md). Fixed to the bottom edge, where a thumb
    is, and clear of the iPhone home indicator via the safe-area inset. */
 :root { --tabbar-h: 58px; }
