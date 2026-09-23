@@ -3198,7 +3198,14 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 
 .lab-chip:hover { color: var(--text); border-color: var(--border-hi); }
-.lab-chip.starter { border-left: 3px solid var(--accent); }
+.lab-group { margin-top: 10px; }
+.lab-group-k {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 .lab-chip.on { color: #16120a; background: var(--accent); border-color: var(--accent); }
 
 .lab-grid {
@@ -3832,8 +3839,25 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 
 .h2h-inj {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.4;
+  vertical-align: 1px;
+}
+.h2h-inj.q {
   color: var(--gold-hi);
-  font-weight: 700;
+  background: rgba(var(--gold-rgb), 0.14);
+  box-shadow: 0 0 0 1px rgba(var(--gold-rgb), 0.4) inset;
+}
+.h2h-inj.bad {
+  color: #ff6b6b;
+  background: rgba(255, 93, 93, 0.14);
+  box-shadow: 0 0 0 1px rgba(255, 93, 93, 0.4) inset;
 }
 
 /* LINE 3 — the game */
@@ -3978,6 +4002,15 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 }
 
 /* The centre column carries the EDGE, not a third copy of the position. */
+.h2h-key {
+  margin: 14px 2px 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.h2h-key b { color: var(--text); font-weight: 700; }
+.h2h-key b.mine { color: var(--gold-hi); }
+
 .h2h-edge {
   font-family: var(--font-mono);
   font-size: 9.5px;

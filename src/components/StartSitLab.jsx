@@ -160,17 +160,30 @@ export default function StartSitLab({ state, week, onImport, onApplySwap, flash 
 
       <div className="lab-pick">
         <div className="field-label">Compare up to 4</div>
-        <div className="lab-chips">
-          {roster.map((p) => (
-            <button
-              key={p.id}
-              className={`lab-chip ${picked.includes(p.id) ? "on" : ""} ${starters.has(p.id) ? "starter" : ""}`}
-              onClick={() => toggle(p.id)}
-            >
-              {p.name}
-            </button>
-          ))}
-        </div>
+        {/* Grouped and labelled. Starters used to be marked by a 3px left
+            border, which on a fully rounded chip drew an unexplained gold
+            crescent on ten of twelve chips. */}
+        {[
+          ["Starters", roster.filter((p) => starters.has(p.id))],
+          ["Bench", roster.filter((p) => !starters.has(p.id))],
+        ].map(([label, group]) =>
+          group.length ? (
+            <div key={label} className="lab-group">
+              <div className="lab-group-k">{label}</div>
+              <div className="lab-chips">
+                {group.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`lab-chip ${picked.includes(p.id) ? "on" : ""}`}
+                    onClick={() => toggle(p.id)}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null
+        )}
       </div>
 
       {cards.length > 0 && (

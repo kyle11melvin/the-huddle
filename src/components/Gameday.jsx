@@ -724,6 +724,16 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
         <EmptyBox>Your matchup appears automatically once the ESPN sync runs — nothing to set up.</EmptyBox>
       )}
 
+      {/* The edge chip, explained once instead of labelled per row — a word
+          inside every chip would widen the centre column and cut the names
+          off again. worth = projected finish, or the score once final. */}
+      {pairs.length > 0 && !sideMissing && (
+        <div className="h2h-key">
+          Middle chip: who is projected to score more in that slot, and by how much.{" "}
+          <b className="mine">◀</b> your player, <b>▶</b> his, <b>EVEN</b> within a point.
+        </div>
+      )}
+
       {(leftRows.length > 0 || rightRows.length > 0) && (
         <div className="h2h">
           {pairs.map((p, idx) => {
@@ -952,7 +962,10 @@ const Ident = ({ d, right }) => {
   const { row } = d;
   return (
     <span className={right ? "r" : ""}>
-      {row.status && <span className="h2h-inj">{row.status} · </span>}
+      {/* A badge in the body face, matching the player card. As gold mono
+          text it read "O · DET" beside a 0.0 — an O indistinguishable from a
+          zero. */}
+      {row.status && <span className={`h2h-inj ${row.status === "Q" ? "q" : "bad"}`}>{row.status}</span>}
       <span>{row.team}</span>
       {/* Labelled. "JAX (7)" gave no way to know 7 was the bye week — it reads
           as a rank, a jersey number or a projection. An unlabelled number on a
