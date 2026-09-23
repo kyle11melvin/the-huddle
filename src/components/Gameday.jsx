@@ -198,6 +198,7 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
         homeScore: Math.round((m.homeScore || 0) * 10) / 10,
         awayScore: Math.round((m.awayScore || 0) * 10) / 10,
         isMine: m.home === state.espn.myTeamId || m.away === state.espn.myTeamId,
+        iAmHome: m.home === state.espn.myTeamId,
       };
     });
   }, [state.espn]);
@@ -805,19 +806,25 @@ export default function Gameday({ state, week, onSetLive, onSetOpponent, onRefre
       {leagueBoard.length > 0 && (
         <div className="gd-league">
           <div className="gd-league-k">Around the league</div>
-          {leagueBoard.map((m, i) => (
-            <button
-              key={i}
-              className={`gd-mini ${m.isMine ? "mine" : ""} ${viewIdx === i ? "active" : ""}`}
-              onClick={() => setViewIdx(i)}
-            >
-              <span className="gd-mini-t">{m.awayName}</span>
-              <span className="gd-mini-s">{m.awayScore}</span>
-              <span className="gd-mini-d">–</span>
-              <span className="gd-mini-s">{m.homeScore}</span>
-              <span className="gd-mini-t r">{m.homeName}</span>
-            </button>
-          ))}
+          {leagueBoard.map((m, i) => {
+            // ESPN lists away-then-home. On my own matchup that put me on the
+            // right whenever I was at home — the one strip breaking "myTeam is
+            // ALWAYS the left column". Other matchups keep ESPN's order.
+            const flip = m.iAmHome;
+            return (
+              <button
+                key={i}
+                className={`gd-mini ${m.isMine ? "mine" : ""} ${viewIdx === i ? "active" : ""}`}
+                onClick={() => setViewIdx(i)}
+              >
+                <span className="gd-mini-t">{flip ? m.homeName : m.awayName}</span>
+                <span className="gd-mini-s">{flip ? m.homeScore : m.awayScore}</span>
+                <span className="gd-mini-d">–</span>
+                <span className="gd-mini-s">{flip ? m.awayScore : m.homeScore}</span>
+                <span className="gd-mini-t r">{flip ? m.awayName : m.homeName}</span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
