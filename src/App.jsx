@@ -20,7 +20,7 @@ import DataPanel from "./components/DataPanel.jsx";
 import LeagueBrowser from "./components/LeagueBrowser.jsx";
 import StartSitLab from "./components/StartSitLab.jsx";
 import { setPlayerAnalytics, playerAnalytics, pointDistribution } from "./analytics.js";
-import { rowGameState, opponentDistributions } from "./simulate.js";
+import { rowGameState, opponentDistributions, callSnapshot } from "./simulate.js";
 import { propsToPoints, leagueScoring } from "./props.js";
 import { applyFantasyPros, FP_POSITIONS, groupNews } from "./fantasyprosSync.js";
 import { writeLineupMove } from "./espnWrite.js";
@@ -368,9 +368,41 @@ function WatchForm({ onAdd, onDone, search }) {
   );
 }
 
+// Call types that are a choice between two of your own players — the ones
+// where the app has an opinion to snapshot.
+const PAIRED_CALL = { Start: "Over", Flex: "Over", Sit: "Starting instead" };
+
+const playerIdByName = (state, name) => {
+  const n = (name || "").trim().toLowerCase();
+  if (!n) return null;
+  const hit = Object.values(state.players).find((p) => p.name.toLowerCase() === n);
+  return hit ? hit.id : null;
+};
+
+/** The player you actually put in: for a Sit call that's the alternative. */
+const calledStarter = (c) => (c.type === "Sit" ? c.over : c.player);
+
+/** One line on what the app said, from a frozen callSnapshot. */
+function appCallLine(app) {
+  if (!app) return null;
+  if (app.skipped) return `App: no pick — ${app.skipped}`;
+  // Under 1% win (the optimizer's own reporting threshold) or 1 point, the
+  // pick is inside the noise and saying so is the honest version.
+  const close = app.edge < 1;
+  const edge = app.basis === "win" ? `+${app.edge}% to win` : `+${app.edge} proj pts`;
+  return `App: start ${app.pick} · ${close ? "coin flip, " : ""}${edge}`;
+}
+
+/** Final ESPN points for a player from the calibration ledger, if graded. */
+function actualPoints(state, week, name) {
+  const id = playerIdByName(state, name);
+  const row = id && state.calibration && state.calibration[String(week)] && state.calibration[String(week)][id];
+  return row && Number.isFinite(row.actual) ? row.actual : null;
+}
+
 function CallForm({ state, week, onAdd }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ player: "", type: "Start", reasoning: "", confidence: 3 });
+  const [form, setForm] = useState({ player: "", over: "", type: "Start", reasoning: "", confidence: 3 });
   const [err, setErr] = useState("");
 
   const rosterSearch = useCallback(
@@ -385,6 +417,16 @@ function CallForm({ state, week, onAdd }) {
     [state.players]
   );
 
+  const paired = PAIRED_CALL[form.type];
+  const idA = paired ? playerIdByName(state, form.player) : null;
+  const idB = paired ? playerIdByName(state, form.over) : null;
+  // Computed while the form is open so you see the app's side before you
+  // save — and what's saved is exactly what was on screen.
+  const snapshot = useMemo(
+    () => (open && idA && idB ? callSnapshot(state, week, idA, idB) : null),
+    [open, state, week, idA, idB]
+  );
+
   if (!open) {
     return (
       <button className="log-cta" onClick={() => setOpen(true)}>
@@ -394,10 +436,10 @@ function CallForm({ state, week, onAdd }) {
   }
 
   const submit = () => {
-    const res = onAdd({ ...form, week });
+    const res = onAdd({ ...form, over: paired ? form.over : "", app: snapshot, week });
     if (res?.error) setErr(res.error);
     else {
-      setForm({ player: "", type: "Start", reasoning: "", confidence: 3 });
+      setForm({ player: "", over: "", type: "Start", reasoning: "", confidence: 3 });
       setOpen(false);
     }
   };
@@ -415,6 +457,19 @@ function CallForm({ state, week, onAdd }) {
           placeholder="Who was the call about?"
         />
       </label>
+      {paired && (
+        <label className="field">
+          <span className="field-label">{paired}</span>
+          <Autocomplete
+            value={form.over}
+            onChange={(v) => setForm((f) => ({ ...f, over: v }))}
+            onPick={(item) => setForm((f) => ({ ...f, over: item.name }))}
+            search={rosterSearch}
+            placeholder="The player you chose against"
+          />
+        </label>
+      )}
+      {snapshot && <div className="call-app-preview">{appCallLine(snapshot)}</div>}
       <div className="field-row">
         <label className="field" style={{ width: 130 }}>
           <span className="field-label">Type</span>
@@ -2567,6 +2622,31 @@ export default function App({ initialTab } = {}) {
                       </button>
                     </span>
                   </div>
+                  {c.over && (
+                    <div className="call-pair">
+                      {c.type === "Sit" ? "Starting" : "Over"} <strong>{c.over}</strong>
+                    </div>
+                  )}
+                  {c.app && (
+                    <div className="call-app">
+                      <span>{appCallLine(c.app)}</span>
+                      {!c.app.skipped && (
+                        <span className={`call-app-tag ${c.app.pick === calledStarter(c) ? "with" : "against"}`}>
+                          {c.app.pick === calledStarter(c) ? "With the app" : "Against the app"}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {c.over && (() => {
+                    const pa = actualPoints(state, c.week, c.player);
+                    const pb = actualPoints(state, c.week, c.over);
+                    if (pa == null || pb == null) return null;
+                    return (
+                      <div className="call-actual">
+                        Final: {c.player} {pa} · {c.over} {pb}
+                      </div>
+                    );
+                  })()}
                   {c.reasoning && <div className="call-reasoning">{c.reasoning}</div>}
                   <div className="call-outcome">
                     <span className="outcome-label">How'd it go?</span>

@@ -27,7 +27,7 @@ import {
   sumMeans,
 } from "../src/simulate.js";
 import { migrate, addCall, callCalibration, applyWin, revertWin, bestLineupFrom, isSeedRoster } from "../src/lineup.js";
-import { opponentLineups, opponentDistributions } from "../src/simulate.js";
+import { opponentLineups, opponentDistributions, callSnapshot } from "../src/simulate.js";
 import { matchPlayer, parseRankings, planEcrUpdates, parseProjections, buildEcrIndex, normKey } from "../src/importer.js";
 import { projWeights } from "../src/calibration.js";
 import { formatCountdown, untilKick } from "../src/timeUntil.js";
@@ -980,6 +980,34 @@ check(
   calib && calib.byConfidence.medium && calib.byConfidence.medium.n === 1,
   `buckets ${JSON.stringify(calib && calib.byConfidence)}`
 );
+
+// ---- 16b. a start/sit call records the alternative and the app's pick ----
+// Kyle, Sept 27: "Brock Bowers over Juwan Johnson" was only in free text, and
+// what the app recommended wasn't recorded at all — so nothing could later
+// say whether overruling the app paid off.
+{
+  const paired = addCall(callState, {
+    player: "Bijan Robinson", over: "Chase Brown", week: "1", type: "Start", confidence: 3,
+    app: { pick: "Chase Brown", other: "Bijan Robinson", basis: "proj", edge: 2, proj: {}, at: 1 },
+  });
+  const c = paired.state.calls[0];
+  check("addCall keeps the player you chose against", c.over === "Chase Brown", JSON.stringify(c));
+  check("addCall keeps the app's frozen pick", c.app && c.app.pick === "Chase Brown", JSON.stringify(c.app));
+  const same = addCall(callState, { player: "Bijan Robinson", over: "bijan robinson", week: "1", type: "Start" });
+  check("a call can't be a player over himself", !!same.error, JSON.stringify(same.error));
+  const solo = addCall(callState, { player: "Bijan Robinson", week: "1", type: "Waiver", app: { pick: "x" } });
+  check("a call with no alternative stores no app pick", !("over" in solo.state.calls[0]) && !("app" in solo.state.calls[0]));
+
+  // Both benched → no slot to swap, so the pick falls back to projection.
+  const snap = callSnapshot(legalState, "1", "wr", "wr2");
+  check("callSnapshot picks the higher projection when no swap applies", snap && snap.pick === "Starting WR" && snap.basis, JSON.stringify(snap));
+  // A game already under way — the sim would be using hindsight.
+  const kicked = callSnapshot(
+    { ...legalState, espn: { games: { CIN: { state: "in" } } } }, "1", "wr", "wr2"
+  );
+  check("callSnapshot refuses once either game has kicked off", kicked && kicked.skipped && !kicked.pick, JSON.stringify(kicked));
+  check("callSnapshot needs two different players", callSnapshot(legalState, "1", "wr", "wr") === null);
+}
 
 // ---- 17. revertWin is the exact inverse of applyWin (finding 12d) ----
 const claimState = (faab) => ({
