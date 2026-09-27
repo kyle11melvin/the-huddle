@@ -12,7 +12,8 @@ import { scoreFpStats, applyFantasyPros, groupNews, newsWhen } from "../src/fant
 import { trimRankings, trimProjections, trimNews } from "../api/fantasypros.js";
 import { propsToPoints, SCORING, parseProps, leagueScoring } from "../src/props.js";
 import { suggestLineup } from "../src/analysis.js";
-import { extractScoring, matchupSideScore } from "../api/espn.js";
+import { extractScoring, matchupSideScore, scoringBreakdown } from "../api/espn.js";
+import { espnStatLabel } from "../src/data/espnStats.js";
 import { isGameday } from "../api/odds.js";
 import { pointDistribution, floorCeiling, fpProjFor, propsSweptFor, blendProjection, propsProjection } from "../src/analytics.js";
 import {
@@ -32,7 +33,7 @@ import { matchPlayer, parseRankings, planEcrUpdates, parseProjections, buildEcrI
 import { projWeights } from "../src/calibration.js";
 import { formatCountdown, untilKick } from "../src/timeUntil.js";
 import { anyGameStarted, outcomeTone, outcomeColor } from "../src/headToHead.js";
-import { applyEspnSync } from "../src/espnSync.js";
+import { applyEspnSync, espnEntryFor } from "../src/espnSync.js";
 import { deriveSchedule } from "../api/schedule.js";
 import { gameStatesFrom } from "../api/espn-write.js";
 import { storage, probeStorage, STORAGE_MESSAGE } from "../src/storage.js";
@@ -1007,6 +1008,38 @@ check(
   );
   check("callSnapshot refuses once either game has kicked off", kicked && kicked.skipped && !kicked.pick, JSON.stringify(kicked));
   check("callSnapshot needs two different players", callSnapshot(legalState, "1", "wr", "wr") === null);
+}
+
+// ---- 16c. the player card's scoring breakdown is ESPN's own rows ----
+// Kyle, Sept 27, with ESPN's Tyler Shough card: TD Pass 4 × 6 = 24, every 25
+// passing yards 6, every 10 rushing yards 3, total 33. The breakdown must add
+// up to the board number, name each row the way ESPN does, and drop the
+// stats ESPN tracks but this league doesn't score.
+{
+  const shough = {
+    statSourceId: 0, scoringPeriodId: 3, appliedTotal: 33,
+    appliedStats: { 3: 0, 4: 24, 8: 6, 24: 0, 28: 3, 0: 0 },
+    stats: { 0: 31, 3: 161, 4: 4, 8: 6, 24: 34, 28: 3 },
+  };
+  const rows = scoringBreakdown(shough);
+  check("breakdown keeps only the categories that scored", rows.length === 3, JSON.stringify(rows));
+  check("breakdown is biggest contributor first", rows[0][0] === 4 && rows[0][1] === 4 && rows[0][2] === 24, JSON.stringify(rows[0]));
+  check("breakdown rows add up to ESPN's total", rows.reduce((t, r) => t + r[2], 0) === 33);
+  check("ESPN stat 4 reads as a TD pass", espnStatLabel(4) === "TD pass", espnStatLabel(4));
+  check("ESPN stat 8 reads as every 25 passing yards", espnStatLabel(8) === "Every 25 passing yards", espnStatLabel(8));
+  check("ESPN stat 28 reads as every 10 rushing yards", espnStatLabel(28) === "Every 10 rushing yards", espnStatLabel(28));
+  check("an unknown stat is labelled as unknown, not guessed", espnStatLabel(999) === "Other (stat 999)");
+  // The sync must carry the rows through to state, where the card reads them.
+  const withRows = migrate({ v: 2, week: "1", players: {}, lineup: emptyLineup, bench: [null], ir: [null] });
+  const synced = applyEspnSync(withRows, {
+    currentWeek: 3, rosterSlots: null, leagueFaab: 100, matchups: [], pool: [], games: {}, impliedTotals: {},
+    teams: [{ id: 7, name: "Test Team", faabSpent: 0, record: null, roster: [
+      { espnId: "4432577", name: "Tyler Shough", pos: "QB", proTeamId: 18, slot: "QB", injuryStatus: "", percentOwned: 1, proj: 15, actual: 33, breakdown: rows },
+    ] }],
+  }, "Test Team").state;
+  const e = espnEntryFor(synced, "Tyler Shough", "4432577");
+  check("the ESPN sync keeps the breakdown for the player card", e && Array.isArray(e.breakdown) && e.breakdown.length === 3, JSON.stringify(e && e.breakdown));
+  check("no stat record → no breakdown (pre-kickoff)", scoringBreakdown(null) === null && scoringBreakdown({}) === null);
 }
 
 // ---- 17. revertWin is the exact inverse of applyWin (finding 12d) ----

@@ -98,6 +98,9 @@ export default function PlayerCard({
   news = [],
   // The modal renders its own hero, so the card drops its header there.
   showHeader = true,
+  // Rendered under the header, above the gauge — the live scoring breakdown,
+  // which mid-game matters more than the projection.
+  lead = null,
 }) {
   const { name, pos, team, opp, status } = player;
   const stale = consensus && consensus.stale != null ? consensus.stale : DOUBTFUL.has(status);
@@ -124,6 +127,8 @@ export default function PlayerCard({
           {status && <div className={`pc-status pc-status-${status.toLowerCase()}`}>{status}</div>}
         </div>
       )}
+
+      {lead}
 
       {dist ? (
         <>

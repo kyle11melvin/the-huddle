@@ -12,6 +12,8 @@
 
 import { useEffect } from "react";
 import PlayerCard from "../PlayerCard.jsx";
+import ScoringBreakdown from "../ScoringBreakdown.jsx";
+import { espnEntryFor, liveEntryFor } from "../../espnSync.js";
 import { teamOf } from "../../data/teams.js";
 import { fpProjFor, propsFor, propsSweptFor, blendProjection, propsProjection, vegasExtraLabels } from "../../analytics.js";
 
@@ -141,6 +143,12 @@ export default function OpponentCard({ row, week, state, onClose }) {
                 : null
             }
             news={[]}
+            lead={
+              <ScoringBreakdown
+                entry={espnEntryFor(state, row.name, row.espnId)}
+                status={(liveEntryFor(state, row.name, row.team) || {}).status}
+              />
+            }
           />
 
           <p className="panel-note" style={{ marginTop: 14 }}>

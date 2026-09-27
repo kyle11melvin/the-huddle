@@ -1207,6 +1207,29 @@ select option {
   background: var(--border);
 }
 
+/* Scoring breakdown — ESPN's per-category points, top of the player card. */
+.sb { margin-bottom: 6px; }
+.sb .modal-section-label { margin-top: 4px; }
+.sb-tag { color: var(--text-muted); letter-spacing: 1.5px; }
+.sb-tag.live { color: var(--positive); }
+.sb-empty { font-size: 13px; color: var(--text-muted); }
+.sb-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.sb-table th {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: left;
+  padding: 0 0 6px;
+}
+.sb-table td { padding: 7px 0; border-top: 1px solid var(--border); color: var(--text); }
+.sb-table .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; width: 3.5em; }
+.sb-table .dim { color: var(--text-muted); }
+.sb-table .neg { color: var(--negative); }
+.sb-table tfoot td { font-weight: 700; border-top: 1px solid var(--border-hi); }
+
 .modal-scout {
   font-size: 13.5px;
   line-height: 1.7;

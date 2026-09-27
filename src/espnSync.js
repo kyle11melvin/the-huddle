@@ -250,6 +250,7 @@ export function applyEspnSync(state, data, myTeamName) {
         proj: e.proj,
         projBasis: e.projBasis || null,
         actual: e.actual,
+        breakdown: Array.isArray(e.breakdown) ? e.breakdown : null,
         espnId: e.espnId,
         injuryStatus: e.injuryStatus,
         percentOwned: e.percentOwned,
@@ -441,6 +442,26 @@ export function anyGameLive(state) {
  * plus their NFL game's state. Manual edits in the Gameday editor override
  * this — the human at the stadium beats a two-minute-old poll.
  */
+/**
+ * A player's row in the latest ESPN sync, any team's roster — by ESPN id
+ * first (names drift: "Kenneth Walker III"), then by normalised name.
+ */
+export function espnEntryFor(state, playerName, espnId) {
+  const teams = (state.espn && state.espn.teams) || [];
+  if (espnId) {
+    for (const t of teams) {
+      const hit = (t.roster || []).find((e) => e.espnId && String(e.espnId) === String(espnId));
+      if (hit) return hit;
+    }
+  }
+  const k = normName(playerName);
+  for (const t of teams) {
+    const hit = (t.roster || []).find((e) => normName(e.name) === k);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 export function liveEntryFor(state, playerName, teamAbbr) {
   if (!state.espn) return null;
   const k = normName(playerName);

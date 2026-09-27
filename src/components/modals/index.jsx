@@ -20,7 +20,8 @@ import Autocomplete from "../Autocomplete.jsx";
 import { SLOT_COLOR, STATUS_LABEL, destKey, zoneLabel } from "../../constants.js";
 import { Avatar, StatusPill, Stars, StarPicker, TeamChip, SectionHeader, EmptyState, initials } from "../ui/index.jsx";
 import { newsWhen } from "../../fantasyprosSync.js";
-import { normName } from "../../espnSync.js";
+import { normName, espnEntryFor, liveEntryFor } from "../../espnSync.js";
+import ScoringBreakdown from "../ScoringBreakdown.jsx";
 
 export function MoveSheet({ state, playerId, onClose, onMove, coarse }) {
   const player = state.players[playerId];
@@ -163,7 +164,18 @@ export function PlayerModal({ state, playerId, week, onClose, onStatus, onWeek, 
               Fed by playerCardData() so the modal and the screenshot harness
               read from one mapper — a card that renders differently in a PNG
               than in the app is worse than no screenshot at all. */}
-          {cardData && <PlayerCard {...cardData} showHeader={false} />}
+          {cardData && (
+            <PlayerCard
+              {...cardData}
+              showHeader={false}
+              lead={
+                <ScoringBreakdown
+                  entry={espnEntryFor(state, player.name, player.espnId)}
+                  status={(liveEntryFor(state, player.name, player.team) || {}).status}
+                />
+              }
+            />
+          )}
 
           <div className="modal-stat-grid">
             <div className="stat-tile">
