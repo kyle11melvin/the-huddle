@@ -8,6 +8,21 @@ game-script projection design. `docs/STATUS.md` is the session handoff.
 
 ## Near-term
 
+### Game Log: "over" player + the app's pick — ✅ SHIPPED (Sept 27)
+
+Start / Flex / Sit calls name the player you chose against. The app's pick
+is frozen when the call is logged (`callSnapshot` in simulate.js: win
+probability via `simulateSwap` when one starts and the other fits his slot,
+projected points otherwise; refused once either game has kicked off). Cards
+show With / Against the app and both final scores once the ledger grades them.
+
+**Still open:** Right/Wrong stays manual. Auto-grading needs Kyle's call on
+points vs win-probability-at-decision-time (see `callCalibration`). A "record
+when you overrule the app" summary is the natural next step once calls carry
+the pick. Also: the `app` case in `scripts/shots.mjs` server-renders App,
+whose saved state loads in an effect, so it always shoots the sample roster —
+`screen-ledger.png` has never shown graded data.
+
 ### 1. Gold swap — ✅ SHIPPED
 
 `#ffb612` → `#e8b95a` app-wide, deployed. Made it genuinely one value rather
