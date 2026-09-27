@@ -862,3 +862,71 @@ export function strategyAdvice(winProb) {
   }
   return { mode: "balanced", text: "Close matchup — start the highest projected points, variance barely matters here." };
 }
+
+// ------------------------------------------------------------ game log -----
+
+/**
+ * What the app would have done with a two-player start/sit call, frozen at
+ * the moment the call is logged.
+ *
+ * The Game Log can only teach anything if it knows what the alternative was
+ * and what the app said about it at the time. "Started Bowers" graded Right
+ * or Wrong says nothing; "started Bowers over Johnson when the app said
+ * Johnson by 1.2% win" is a data point on whether overruling the app pays.
+ *
+ * Frozen, not recomputed later: by Monday the projections have moved and the
+ * games are over, so a recomputed pick would be judging with hindsight.
+ * Refused once either game has kicked off for the same reason — the live sim
+ * counts finished players at what they scored, and a "pick" made from that is
+ * not advice the app could have given beforehand.
+ *
+ * Win probability when one of the two is starting and the other can take his
+ * slot (the same simulateSwap the Lab's Apply buttons use); projected points
+ * otherwise (both benched, both starting, no opponent, or an illegal slot).
+ *
+ * @returns {{pick: string, other: string, basis: "win"|"proj", edge: number,
+ *   proj: object, at: number} | {skipped: string} | null}
+ */
+export function callSnapshot(state, week, idA, idB) {
+  const a = state.players[idA];
+  const b = state.players[idB];
+  if (!a || !b || idA === idB) return null;
+  const games = (state.espn && state.espn.games) || {};
+  const started = [a, b].find((p) => p.team && games[p.team] && games[p.team].state && games[p.team].state !== "pre");
+  if (started) return { skipped: `${started.name}'s game had already kicked off` };
+
+  const dA = pointDistribution(a, week, state);
+  const dB = pointDistribution(b, week, state);
+  if (!dA || !dB) return { skipped: "no projection for one of them" };
+  const proj = { [a.name]: dA.mean, [b.name]: dB.mean };
+  const at = Date.now();
+
+  const zoneA = findLocation(state, idA)?.zone;
+  const zoneB = findLocation(state, idB)?.zone;
+  if ((zoneA === "lineup") !== (zoneB === "lineup")) {
+    const [startId, benchId] = zoneA === "lineup" ? [idA, idB] : [idB, idA];
+    const oppDists = opponentDistributions(state, week);
+    const r = oppDists.length ? simulateSwap(state, week, oppDists, startId, benchId) : null;
+    if (r && !r.illegal) {
+      // delta > 0: putting the bench player in raises win probability.
+      const [pick, other] = r.delta > 0 ? [benchId, startId] : [startId, benchId];
+      return {
+        pick: state.players[pick].name,
+        other: state.players[other].name,
+        basis: "win",
+        edge: Math.round(Math.abs(r.delta) * 1000) / 10,
+        proj,
+        at,
+      };
+    }
+  }
+  const [pick, other] = dA.mean >= dB.mean ? [a, b] : [b, a];
+  return {
+    pick: pick.name,
+    other: other.name,
+    basis: "proj",
+    edge: Math.round(Math.abs(dA.mean - dB.mean) * 10) / 10,
+    proj,
+    at,
+  };
+}

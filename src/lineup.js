@@ -742,9 +742,11 @@ export function updateWatch(state, id, patch) {
 // -------------------------------------------------------------- game log ---
 
 let callSeq = 0;
-export function addCall(state, { player, week, type, reasoning, confidence }) {
+export function addCall(state, { player, over, week, type, reasoning, confidence, app }) {
   const clean = (player || "").trim();
   if (!clean) return { state, error: "Player is required" };
+  const alt = (over || "").trim();
+  if (alt && alt.toLowerCase() === clean.toLowerCase()) return { state, error: "Pick two different players" };
   callSeq += 1;
   const entry = {
     id: `g${Date.now().toString(36)}${callSeq.toString(36)}`,
@@ -756,6 +758,11 @@ export function addCall(state, { player, week, type, reasoning, confidence }) {
     // addCall discarded it, so callCalibration bucketed every graded call as
     // "medium" and the high/low rows never rendered.
     confidence: Math.min(5, Math.max(1, parseInt(confidence, 10) || 3)),
+    // The alternative, and what the app said about the pair when the call
+    // was logged (callSnapshot in simulate.js). Both optional: waiver and
+    // trade calls, and every call logged before this, have neither.
+    ...(alt ? { over: alt } : {}),
+    ...(alt && app ? { app } : {}),
   };
   return { state: { ...state, calls: [entry, ...state.calls] } };
 }

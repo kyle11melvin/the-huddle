@@ -1012,6 +1012,35 @@ select option {
 .call-player { font-weight: 700; font-size: 15.5px; }
 .call-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 .call-reasoning { font-size: 13.5px; color: var(--text-muted); margin-top: 9px; line-height: 1.6; }
+.call-pair { font-size: 13.5px; color: var(--text-muted); margin-top: 6px; }
+.call-pair strong { color: var(--text); font-weight: 600; }
+.call-app {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.call-app-tag {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-hi);
+}
+.call-app-tag.with { color: var(--text-muted); }
+.call-app-tag.against { color: var(--gold); border-color: currentColor; }
+.call-actual { font-family: var(--font-mono); font-size: 11.5px; color: var(--text); margin-top: 6px; }
+.call-app-preview {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin: 2px 0 12px;
+}
 
 /* --------------------------------------------------------------- watch ---- */
 
