@@ -78,7 +78,14 @@ export default function Autocomplete({ value, onChange, onPick, search, placehol
               type="button"
               className={`ac-item ${i === active ? "active" : ""}`}
               onMouseEnter={() => setActive(i)}
-              onClick={() => choose(item)}
+              onClick={(e) => {
+                // Every caller wraps this in a <label>. Left alone, the click
+                // also runs the label's activation, which refocuses the input,
+                // and onFocus reopened the menu the pick had just closed —
+                // Kyle, Sept 27: "it doesn't let me select it, go away".
+                e.preventDefault();
+                choose(item);
+              }}
             >
               <span className="ac-name">{item.name}</span>
               <span className="ac-meta">
