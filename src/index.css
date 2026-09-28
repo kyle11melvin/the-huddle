@@ -1060,7 +1060,10 @@ select option {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  /* The page is viewport-fit=cover, so the screen's top 47–59px on an iPhone
+     is the status bar. A flat 20px let a full-height card start under it,
+     and iOS swallows taps there — the close button couldn't be pressed. */
+  padding: calc(env(safe-area-inset-top, 0px) + 20px) 20px calc(env(safe-area-inset-bottom, 0px) + 20px);
   animation: fadeIn 0.22s ease;
 }
 
@@ -1073,7 +1076,7 @@ select option {
   position: relative;
   width: 100%;
   max-width: 480px;
-  max-height: calc(100dvh - 40px);
+  max-height: calc(100dvh - 40px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   background: linear-gradient(170deg, var(--surface-hi) 0%, var(--surface) 30%, var(--bg-raised) 100%);
   border: 1px solid var(--border-hi);
@@ -1208,12 +1211,12 @@ select option {
 }
 
 /* Scoring breakdown — ESPN's per-category points, top of the player card. */
-.sb { margin-bottom: 6px; }
-.sb .modal-section-label { margin-top: 4px; }
+.sb { margin-bottom: 2px; }
+.sb .modal-section-label { margin: 0 0 6px; }
 .sb-tag { color: var(--text-muted); letter-spacing: 1.5px; }
 .sb-tag.live { color: var(--positive); }
 .sb-empty { font-size: 13px; color: var(--text-muted); }
-.sb-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.sb-table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.3; }
 .sb-table th {
   font-family: var(--font-mono);
   font-size: 9.5px;
@@ -1222,9 +1225,9 @@ select option {
   text-transform: uppercase;
   color: var(--text-dim);
   text-align: left;
-  padding: 0 0 6px;
+  padding: 0 0 3px;
 }
-.sb-table td { padding: 7px 0; border-top: 1px solid var(--border); color: var(--text); }
+.sb-table td { vertical-align: baseline; padding: 4px 0; border-top: 1px solid var(--border); color: var(--text); }
 .sb-table .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; width: 3.5em; }
 .sb-table .dim { color: var(--text-muted); }
 .sb-table .neg { color: var(--negative); }
