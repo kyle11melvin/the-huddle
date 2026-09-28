@@ -8,6 +8,18 @@ game-script projection design. `docs/STATUS.md` is the session handoff.
 
 ## Near-term
 
+### Player card: ESPN scoring breakdown — ✅ SHIPPED, Kyle confirmed (Sept 28)
+
+Tap any player (mine or the opponent's) once his game starts: ESPN's own
+per-category rows (category, count, points) above the gauge, Live / Final.
+Rows come from appliedStats/stats on the same stat record `actual` is read
+from; names from ESPN's stat-id table (src/data/espnStats.js). Unknown ids
+read "Other (stat N)" — if Kyle reports one, name it there.
+
+Same day: pop-ups pad by the safe-area insets so the ✕ is no longer under
+the iPhone status bar (confirmed), and the Autocomplete list closes on a
+tap instead of reopening via its wrapping <label>.
+
 ### Game Log: "over" player + the app's pick — ✅ SHIPPED (Sept 27)
 
 Start / Flex / Sit calls name the player you chose against. The app's pick
