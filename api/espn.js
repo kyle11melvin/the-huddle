@@ -104,6 +104,32 @@ const STAT_KEY = {
 };
 
 /**
+ * Why a player has the points he has: ESPN's own per-category scoring for
+ * the week, as [statId, count, points] rows, biggest contributors first.
+ *
+ * `appliedStats` is ESPN's points per scoring category under THIS league's
+ * rules; `stats` is the raw count behind each (4 TD passes, 6 "every 25
+ * passing yards" increments). Both come on the same stat record `actual` is
+ * read from, so the rows add up to the number on the board. Zero rows are
+ * dropped — ESPN lists every stat it tracks, scoring or not.
+ *
+ * @returns {Array<[number, number|null, number]> | null}
+ */
+export function scoringBreakdown(stat) {
+  const applied = stat && stat.appliedStats;
+  if (!applied) return null;
+  const raw = stat.stats || {};
+  const rows = [];
+  for (const [id, pts] of Object.entries(applied)) {
+    if (!Number.isFinite(pts) || pts === 0) continue;
+    const n = Number(raw[id]);
+    rows.push([Number(id), Number.isFinite(n) ? Math.round(n * 10) / 10 : null, Math.round(pts * 100) / 100]);
+  }
+  rows.sort((x, y) => Math.abs(y[2]) - Math.abs(x[2]));
+  return rows;
+}
+
+/**
  * ESPN's weekly projection AND where it came from.
  *
  * The BASIS matters. "ESPN's week-1 projection" and "ESPN's season projection
@@ -265,6 +291,7 @@ export default async function handler(req, res) {
           proj: weeklyProj(p, data.scoringPeriodId).value,
           projBasis: weeklyProj(p, data.scoringPeriodId).basis,
           actual: realStat ? Math.round((realStat.appliedTotal || 0) * 10) / 10 : null,
+          breakdown: realStat ? scoringBreakdown(realStat) : null,
         };
       }),
     }));

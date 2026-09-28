@@ -274,6 +274,40 @@ CASES.push({
   props: { state: gradedState(), tab: "log" },
 });
 
+// The scoring breakdown on both player cards, mid-game. Rows are ESPN's own
+// shape ([statId, count, points]) — Kyle's Sept 27 Shough card as the QB,
+// a PPR receiving line with a lost fumble as the opponent.
+{
+  const st = liveState();
+  const me = st.players[firstPlayerId];
+  const put = (name, team, espnId, pos, breakdown, actual) => {
+    const roster = st.espn.teams[0].roster;
+    const hit = st.espn.teams.flatMap((t) => t.roster).find((e) => e.name === name);
+    if (hit) Object.assign(hit, { breakdown, actual });
+    else roster.push({ name, team, espnId, pos, slot: "WR", proj: 12, actual, breakdown });
+    if (st.espn.games[team]) st.espn.games[team] = { ...st.espn.games[team], state: "in", detail: "3rd 5:04" };
+  };
+  put(me.name, me.team, me.espnId, me.pos, [[4, 4, 24], [8, 6, 6], [28, 3, 3], [20, 1, -2]], 31);
+  put("De'Von Achane", "MIA", "4429160", "RB", [[53, 6, 6], [48, 5, 5], [28, 4, 4], [72, 1, -2]], 13);
+  CASES.push({
+    file: "modal-breakdown.png",
+    component: "modal",
+    palette: "current",
+    props: { state: st, playerId: firstPlayerId, week: "1", onClose: noop, onStatus: noop, onWeek: noop, onMoveOpen: noop, onDrop: noop, onEdit: noop },
+  });
+  CASES.push({
+    file: "opponent-breakdown.png",
+    component: "oppcard",
+    palette: "current",
+    props: {
+      row: { name: "De'Von Achane", pos: "RB", team: "MIA", status: "", bye: 12, proj: 21.7, simProj: 21.7, playProb: 1, cv: 0.5, espnId: "4429160" },
+      week: "1",
+      state: st,
+      onClose: noop,
+    },
+  });
+}
+
 CASES.push({
   file: "roster-rows.png",
   component: "rosterrow",
