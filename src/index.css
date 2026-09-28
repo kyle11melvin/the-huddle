@@ -1060,7 +1060,10 @@ select option {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  /* The page is viewport-fit=cover, so the screen's top 47–59px on an iPhone
+     is the status bar. A flat 20px let a full-height card start under it,
+     and iOS swallows taps there — the close button couldn't be pressed. */
+  padding: calc(env(safe-area-inset-top, 0px) + 20px) 20px calc(env(safe-area-inset-bottom, 0px) + 20px);
   animation: fadeIn 0.22s ease;
 }
 
@@ -1073,7 +1076,7 @@ select option {
   position: relative;
   width: 100%;
   max-width: 480px;
-  max-height: calc(100dvh - 40px);
+  max-height: calc(100dvh - 40px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   background: linear-gradient(170deg, var(--surface-hi) 0%, var(--surface) 30%, var(--bg-raised) 100%);
   border: 1px solid var(--border-hi);
