@@ -2174,11 +2174,13 @@ export default function App({ initialTab } = {}) {
       <header className={`hero ${tab === "today" ? "" : "compact"}`}>
         <div className="hero-inner">
           <div className="hero-top">
-            <div>
-              <div className="hero-kicker">Team Headquarters</div>
-              <h1 className="hero-title">The Huddle</h1>
-              <div className="hero-sub">
-                <span className="hero-break">Ready…BREAK</span>
+            <div className="hero-lockup">
+              <img className="hero-mark" src="/brand/helmet.png" alt="" aria-hidden="true" />
+              <div>
+                <h1 className="hero-title">The Huddle</h1>
+                <div className="hero-sub">
+                  <span className="hero-break">Ready…BREAK</span>
+                </div>
               </div>
             </div>
             <div className="hero-badges">
