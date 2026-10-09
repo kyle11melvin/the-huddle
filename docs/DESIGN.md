@@ -220,10 +220,12 @@ wordmark **THE HUDDLE** in heavy condensed caps.
 
 Replaced an earlier crown mark — the crown is dead, don't reintroduce it.
 
-The asset is authored outside this repo. Never generate a placeholder or an
-approximation; use the real file. For the app icon at 180×180 the wordmark is
-unreadable, so the icon is helmet-only and the full lockup is for the app header
-and splash.
+The mark was generated 2026-10-09 (Kyle's direction, replacing the never-delivered
+external asset). Source files live in `docs/brand/`; the icon set is built from
+them per `docs/ICONS.md`. Never substitute a flat or hand-drawn approximation.
+For the app icon at 180×180 the wordmark is unreadable, so the icon is
+helmet-only; in the app header the helmet (`public/brand/helmet.png`) sits left
+of the live-text wordmark, which together form the lockup.
 
 ## What else the player card carries
 

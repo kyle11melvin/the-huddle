@@ -183,6 +183,28 @@ select option {
   border-radius: 2px;
 }
 
+/* The helmet mark (DESIGN.md "Icon and logo"). Sits left of the wordmark on
+   every tab; shrinks with the compact hero. Source: docs/brand/helmet-source.jpg,
+   background knocked out to public/brand/helmet.png. */
+.hero-lockup {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.hero-mark {
+  width: 64px;
+  height: 56px;
+  object-fit: contain;
+  flex-shrink: 0;
+  margin-right: 12px;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+}
+.hero.compact .hero-mark {
+  width: 36px;
+  height: 32px;
+  margin-right: 8px;
+}
+
 .hero-title {
   font-family: var(--font-display);
   font-size: clamp(44px, 9vw, 68px);
