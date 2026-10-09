@@ -2177,7 +2177,6 @@ export default function App({ initialTab } = {}) {
             <div className="hero-lockup">
               <img className="hero-mark" src="/brand/helmet.png" alt="" aria-hidden="true" />
               <div>
-                <div className="hero-kicker">Team Headquarters</div>
                 <h1 className="hero-title">The Huddle</h1>
                 <div className="hero-sub">
                   <span className="hero-break">Ready…BREAK</span>

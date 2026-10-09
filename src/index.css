@@ -162,27 +162,6 @@ select option {
   gap: 16px;
 }
 
-.hero-kicker {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 2.2px;
-  color: var(--gold);
-  text-transform: uppercase;
-  margin-bottom: 10px;
-}
-
-.hero-kicker::before {
-  content: "";
-  width: 22px;
-  height: 2px;
-  background: var(--gold);
-  border-radius: 2px;
-}
-
 /* The helmet mark (DESIGN.md "Icon and logo"). Sits left of the wordmark on
    every tab; shrinks with the compact hero. Source: docs/brand/helmet-source.jpg,
    background knocked out to public/brand/helmet.png. */
@@ -293,7 +272,6 @@ select option {
 
 /* Every tab but Today: same header, same controls, a fraction of the height. */
 .hero.compact .hero-inner { padding-top: 14px; }
-.hero.compact .hero-kicker,
 .hero.compact .hero-sub { display: none; }
 .hero.compact .hero-title {
   font-size: 26px;
